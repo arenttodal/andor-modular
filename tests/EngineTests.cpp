@@ -164,7 +164,7 @@ TEST_CASE ("Graph hot swap under held notes: no click, no NaN, notes continue", 
 
 TEST_CASE ("Latency: a latent branch is aligned with its dry neighbour (null test)", "[integration][engine][latency]")
 {
-    // VOICE MIX feeds a MIXER twice: once dry, once through GLOBAL MORPH at 0 % (A exactly, 2048
+    // VOICE MIX feeds a MIXER twice: once dry, once through GLOBAL MORPH at 0 % (A exactly, 2560
     // samples late) and an inverting GAIN. Aligned, they cancel.
     Document d = test::basicPatch();
     const auto mix = test::nodeOfType (d, "util.voicemix");
@@ -185,7 +185,7 @@ TEST_CASE ("Latency: a latent branch is aligned with its dry neighbour (null tes
     REQUIRE (edit::connect (d, reg(), mixerId, "out", out, "in").ok);
     OfflineRenderer r;
     const auto res = test::render (r, d, { { 60, 0.0, 1.0 } }, 1.2);
-    CHECK (res.graph->latencySamples == 2048);
+    CHECK (res.graph->latencySamples == 2560);
     CHECK (test::rms (res.left, 6000, 48000) < 1.0e-4);
 
     // Without the inversion the two add (no comb filter: the same signal, twice the level).

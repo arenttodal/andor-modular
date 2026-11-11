@@ -45,6 +45,7 @@ private:
     void textEditorTextChanged (juce::TextEditor&) override;
     void textEditorReturnKeyPressed (juce::TextEditor&) override;
     void textEditorEscapeKeyPressed (juce::TextEditor&) override;
+    using juce::Component::keyPressed;
     bool keyPressed (const juce::KeyPress&, juce::Component*) override;
     void update();
     void moveSelection (int delta);

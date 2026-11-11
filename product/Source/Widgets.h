@@ -58,6 +58,7 @@ public:
     void paintButton (juce::Graphics&, bool highlighted, bool down) override;
 
 private:
+    using juce::Button::clicked;
     void clicked() override;
     Session& session;
     std::string node, param;
@@ -92,7 +93,7 @@ private:
 class BarButton final : public juce::TextButton
 {
 public:
-    explicit BarButton (const juce::String& text, const juce::String& tip = {});
+    explicit BarButton (const juce::String& label, const juce::String& tip = {});
 };
 
 } // namespace andor::modular::ui

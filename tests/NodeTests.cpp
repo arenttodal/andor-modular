@@ -172,12 +172,12 @@ TEST_CASE ("GLOBAL MORPH: exact ends (delayed by its frame), imprint in between"
     OfflineRenderer rd;
     const auto a = test::render (rd, dry, { { 57, 0.0, 1.0 } }, 1.0);
     const auto zero = renderAt (0.0);
-    CHECK (zero.graph->latencySamples == 2048);
+    CHECK (zero.graph->latencySamples == 2560);
     double e = 0.0, ref = 0.0;
-    for (std::size_t i = 4096; i < 40000; ++i)
+    for (std::size_t i = 5120; i < 40000; ++i)
     {
-        e += std::pow (zero.left[i] - a.left[i - 2048], 2.0);
-        ref += std::pow (a.left[i - 2048], 2.0);
+        e += std::pow (zero.left[i] - a.left[i - 2560], 2.0);
+        ref += std::pow (a.left[i - 2560], 2.0);
     }
     CHECK (e / ref < 1.0e-8);
     const auto half = renderAt (0.5);

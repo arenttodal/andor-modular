@@ -307,6 +307,9 @@ namespace
     {
     public:
         static constexpr int order = 11, size = 1 << order, hop = size / 4;
+        /** A frame's four transforms are spread over the hop that follows it (one per quarter
+            hop), so no single audio block carries them all: one hop more latency. */
+        static constexpr int latencyTotal = size + hop;
         enum P { position, method, detail, levelMatch, mix };
 
         void prepare (const PrepareContext& pc) override
@@ -321,16 +324,16 @@ namespace
                 ch.inA.assign (size, 0.0f);
                 ch.inB.assign (size, 0.0f);
                 ch.out.assign (size, 0.0f);
-                ch.delayA.assign (size + 1, 0.0f);
-                ch.delayB.assign (size + 1, 0.0f);
+                ch.delayA.assign (latencyTotal + 1, 0.0f);
+                ch.delayB.assign (latencyTotal + 1, 0.0f);
+                ch.work.assign (size, {});
             }
-            spectrum.assign (size, {});
             magA.assign (size / 2 + 1, 0.0);
             magB.assign (size / 2 + 1, 0.0);
             prefixA.assign (size / 2 + 2, 0.0);
             prefixB.assign (size / 2 + 2, 0.0);
         }
-        int latency() const noexcept override { return size; }
+        int latency() const noexcept override { return latencyTotal; }
         void reset() noexcept override
         {
             for (auto& ch : chans)
@@ -393,8 +396,17 @@ namespace
                         gainB = 1.0f + presence * (std::min (8.0f, loud / lb) - 1.0f);
                     }
                     for (int c = 0; c < 2; ++c)
-                        frame (chans[static_cast<std::size_t> (c)]);
+                        snapshot (chans[static_cast<std::size_t> (c)]);
                 }
+                // The staged work of the last snapshot: L forward, L inverse, R forward, R inverse.
+                if (sinceHop == 1)
+                    analyse (chans[0]);
+                else if (sinceHop == hop / 4)
+                    synthesise (chans[0]);
+                else if (sinceHop == hop / 2)
+                    analyse (chans[1]);
+                else if (sinceHop == 3 * hop / 4)
+                    synthesise (chans[1]);
             }
         }
         void telemetry (Telemetry& t) const noexcept override
@@ -413,22 +425,29 @@ namespace
         struct Channel
         {
             std::vector<float> inA, inB, out, delayA, delayB;
-            int write = 0, read = 0, delayPos = 0;
+            std::vector<std::complex<double>> work;   ///< the snapshot frame, then its spectrum
+            int write = 0, read = 0, delayPos = 0, olaAt = 0;
         };
 
-        void frame (Channel& ch) noexcept
+        /** At the hop: the last `size` samples of both inputs, windowed, as one complex frame (A
+            real, B imaginary). Its output will land one hop from now. */
+        void snapshot (Channel& ch) noexcept
         {
-            // Both inputs in one complex transform (A real, B imaginary).
             for (int i = 0; i < size; ++i)
             {
                 const auto k = static_cast<std::size_t> ((ch.write + i) % size);   // oldest first
                 const double w = window[static_cast<std::size_t> (i)];
-                spectrum[static_cast<std::size_t> (i)] = { w * ch.inA[k] * gainA, w * ch.inB[k] * gainB };
+                ch.work[static_cast<std::size_t> (i)] = { w * ch.inA[k] * gainA, w * ch.inB[k] * gainB };
             }
+            ch.olaAt = (ch.read + hop) % size;
+        }
+
+        /** Forward transform and the morph of the spectra (in place in the channel's frame). */
+        void analyse (Channel& ch) noexcept
+        {
+            auto& spectrum = ch.work;
             fft->forward (spectrum.data());
             const int half = size / 2;
-            std::array<std::complex<double>, 1> unused {};
-            (void) unused;
             for (int k = 0; k <= half; ++k)
             {
                 const auto z = spectrum[static_cast<std::size_t> (k)];
@@ -474,15 +493,6 @@ namespace
             }
             spectrum[0] = { spectrum[0].real(), 0.0 };
             spectrum[static_cast<std::size_t> (half)] = { spectrum[static_cast<std::size_t> (half)].real(), 0.0 };
-            fft->inverse (spectrum.data());
-            // Overlap-add (Hann analysis and synthesis at 75 %: the windows sum to 1.5). With
-            // LEVEL MATCH both sides were brought to the louder one, so the fusion sits at its level.
-            const double norm = 1.0 / 1.5;
-            for (int i = 0; i < size; ++i)
-            {
-                const auto k = static_cast<std::size_t> ((ch.read + i) % size);
-                ch.out[k] += static_cast<float> (spectrum[static_cast<std::size_t> (i)].real() * window[static_cast<std::size_t> (i)] * norm);
-            }
             // display bands
             for (int band = 0; band < 7; ++band)
             {
@@ -498,11 +508,24 @@ namespace
             }
         }
 
+        /** Inverse transform and overlap-add (Hann analysis and synthesis at 75 %: the windows sum
+            to 1.5). With LEVEL MATCH both sides were brought to the louder one, so the fusion sits
+            at its level. */
+        void synthesise (Channel& ch) noexcept
+        {
+            fft->inverse (ch.work.data());
+            const double norm = 1.0 / 1.5;
+            for (int i = 0; i < size; ++i)
+            {
+                const auto k = static_cast<std::size_t> ((ch.olaAt + i) % size);
+                ch.out[k] += static_cast<float> (ch.work[static_cast<std::size_t> (i)].real() * window[static_cast<std::size_t> (i)] * norm);
+            }
+        }
+
         double rate = 48000.0;
         std::unique_ptr<osp::Fft> fft;
         std::vector<float> window;
         std::array<Channel, 2> chans;
-        std::vector<std::complex<double>> spectrum;
         std::array<std::complex<double>, size / 2 + 1> specA {}, specB {};
         std::vector<double> magA, magB, prefixA, prefixB;
         std::array<float, 7> bandsA {}, bandsB {};
@@ -908,7 +931,7 @@ void registerProcessorNodes (Registry& r)
                      toggle ("levelMatch", "LEVEL MATCH", true), num ("tuneA", "A PITCH", -24.0, 24.0, 0.0, "st"), num ("tuneB", "B PITCH", -24.0, 24.0, 0.0, "st"),
                      choice ("output", "OUTPUT", { "MORPH", "LAYERED" }, 0) };
         d.isMorph = true;
-        d.cost.units = 3.0f;
+        d.cost.units = 6.0f;   // measured: tools/modular-bench (docs/PERFORMANCE_BUDGET.md)
         d.cost.heavy = true;
         d.create = make<VoiceMorph>();
         d.createShared = [] (const PrepareContext&) { return std::make_unique<MorphShared>(); };
@@ -919,13 +942,13 @@ void registerProcessorNodes (Registry& r)
                             globalOnly, Domain::global);
         d.keywords = { "morph", "imprint", "spectral", "vocoder", "global", "bus", "external", "kontakt" };
         d.help = "For buses that have no single note (a polyphonic part, an external instrument). Not a note-by-note morph: WEAVE and the "
-                 "pitch glide belong to the per-voice MORPH. Adds one frame of latency (2048 samples), reported to the host.";
+                 "pitch glide belong to the per-voice MORPH. Adds 2560 samples of latency (a frame and a hop), reported to the host and aligned with parallel paths.";
         d.inputs = { in ("a", "A", PortKind::audioStereo), in ("b", "B", PortKind::audioStereo) };
         d.outputs = { out ("out", "OUT", PortKind::audioStereo) };
         d.params = { num ("position", "MORPH", 0.0, 1.0, 0.5, "%", true), choice ("method", "METHOD", { "IMPRINT", "FUSE" }, 0, true),
                      num ("detail", "DETAIL", 0.0, 1.0, 0.5, "%", true), toggle ("levelMatch", "LEVEL MATCH", true), num ("mix", "MIX", 0.0, 1.0, 1.0, "%") };
         d.isMorph = true;
-        d.latencySamples = GlobalMorph::size;
+        d.latencySamples = GlobalMorph::latencyTotal;
         d.cost.units = 3.0f;
         d.cost.heavy = true;
         d.create = make<GlobalMorph>();

@@ -116,7 +116,7 @@ edit::Result Session::perform (const juce::String& label, const std::function<ed
     recompile();
     bool macrosMoved = false;
     for (int m = 0; m < maxMacros; ++m)
-        macrosMoved = macrosMoved || doc.macros[static_cast<std::size_t> (m)].value != before.macros[static_cast<std::size_t> (m)].value;
+        macrosMoved = macrosMoved || ! juce::exactlyEqual (doc.macros[static_cast<std::size_t> (m)].value, before.macros[static_cast<std::size_t> (m)].value);
     if (macrosMoved)
         pushMacros();
     changed (structural);
@@ -201,7 +201,7 @@ void Session::tick()
     }
     // Scenes move the engine; the document follows (what a save keeps, what knobs show).
     const float scene = engine.scenePosition();
-    if (scene != lastScene)
+    if (! juce::exactlyEqual (scene, lastScene))
     {
         lastScene = scene;
         bool any = false;

@@ -21,7 +21,7 @@ struct Budgets
     int modulations = 32;
     int externals = 1;
     int groupDepth = 2;          ///< top level + one nested level
-    float costUnits = 160.0f;    ///< flattened cost x polyphony (see CostProfile)
+    float costUnits = 120.0f;    ///< flattened cost x polyphony (see CostProfile; calibrated by modular-bench)
 };
 
 struct Issue

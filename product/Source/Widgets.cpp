@@ -379,7 +379,7 @@ void Toast::timerCallback()
         setAlpha (static_cast<float> (ticks) / 15.0f);
 }
 
-BarButton::BarButton (const juce::String& text, const juce::String& tip) : juce::TextButton (text)
+BarButton::BarButton (const juce::String& label, const juce::String& tip) : juce::TextButton (label)
 {
     setTooltip (tip);
     setWantsKeyboardFocus (true);
