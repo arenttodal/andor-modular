@@ -163,8 +163,8 @@
     {
       "id": "g-0016",
       "name": "BOWED MACHINE",
-      "x": 129,
-      "y": 78,
+      "x": 256,
+      "y": -96,
       "collapsed": true,
       "ports": [
         {

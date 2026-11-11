@@ -875,7 +875,7 @@ void registerProcessorNodes (Registry& r)
         d.params = { choice ("mode", "MODE", { "LADDER 24", "OTA JUNO", "OTA JUPITER", "JUPITER 12", "LOW 12", "HIGH 12", "BAND 12", "NOTCH" }, 0, true),
                      logNum ("cutoff", "CUTOFF", 20.0, 20000.0, 2400.0, "Hz", true), num ("resonance", "RESONANCE", 0.0, 1.0, 0.2, "%", true),
                      num ("drive", "DRIVE", 0.0, 1.0, 0.1, "%"), num ("keytrack", "KEYTRACK", 0.0, 1.0, 0.5, "%"),
-                     num ("envAmount", "ENV AMOUNT", -1.0, 1.0, 0.3, "%", true), num ("comp", "BASS COMP", 0.0, 1.0, 0.5, "%") };
+                     num ("envAmount", "ENV AMOUNT", -1.0, 1.0, 0.3, "%", true), when (num ("comp", "BASS COMP", 0.0, 1.0, 0.5, "%"), "mode", { 0 }) };
         d.cost.units = 0.8f;
         d.create = make<Filter>();
         r.add (d);
@@ -961,7 +961,7 @@ void registerProcessorNodes (Registry& r)
                      num ("size", "SIZE", 0.0, 1.0, 0.5, "%"), num ("predelay", "PRE-DELAY", 0.0, 250.0, 8.0, "ms"), num ("damping", "DAMPING", 0.0, 1.0, 0.4, "%"),
                      num ("modulation", "MOTION", 0.0, 1.0, 0.4, "%"), num ("width", "WIDTH", 0.0, 1.0, 1.0, "%"),
                      logNum ("lowcut", "LOW CUT", 20.0, 1000.0, 100.0, "Hz"), logNum ("highcut", "HIGH CUT", 1000.0, 20000.0, 6000.0, "Hz"),
-                     num ("mix", "MIX", 0.0, 1.0, 0.3, "%", true), num ("gravity", "GRAVITY", -1.0, 1.0, 0.0, "%") };
+                     num ("mix", "MIX", 0.0, 1.0, 0.3, "%", true), when (num ("gravity", "GRAVITY", -1.0, 1.0, 0.0, "%"), "type", { 4 }) };
         d.params[2].modulatable = false;   // SIZE re-voices the network
         d.cost.units = 2.0f;
         d.create = make<Space>();
@@ -974,8 +974,8 @@ void registerProcessorNodes (Registry& r)
         d.inputs = { in ("in", "IN", PortKind::audioStereo) };
         d.outputs = { out ("out", "OUT", PortKind::audioStereo) };
         d.params = { choice ("type", "TYPE", { "TAPE", "BBD", "ASCEND" }, 0, true), toggle ("sync", "SYNC", true),
-                     choice ("division", "DIVISION", { "1/32", "1/16", "1/16D", "1/8T", "1/8", "1/8D", "1/4T", "1/4", "1/4D", "1/2", "1/2D", "1 BAR" }, 5),
-                     logNum ("time", "TIME", 20.0, 1500.0, 375.0, "ms"), num ("feedback", "FEEDBACK", 0.0, 1.0, 0.45, "%", true),
+                     when (choice ("division", "DIVISION", { "1/32", "1/16", "1/16D", "1/8T", "1/8", "1/8D", "1/4T", "1/4", "1/4D", "1/2", "1/2D", "1 BAR" }, 5), "sync", { 1 }),
+                     when (logNum ("time", "TIME", 20.0, 1500.0, 375.0, "ms"), "sync", { 0 }), num ("feedback", "FEEDBACK", 0.0, 1.0, 0.45, "%", true),
                      num ("tone", "TONE", 0.0, 1.0, 0.5, "%"), num ("age", "AGE", 0.0, 1.0, 0.35, "%"),
                      choice ("stereo", "STEREO", { "MONO", "PING PONG", "WIDE" }, 1), num ("mix", "MIX", 0.0, 1.0, 0.35, "%", true) };
         d.cost.units = 1.0f;

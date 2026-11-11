@@ -366,6 +366,8 @@ std::unique_ptr<CompiledGraph> compileGraph (const Document& doc, const Registry
         pc.seed = osp::Prng::deriveSeed (patchSeed, hashString (n.id));
         pc.strings = &n.strings;
         pc.params = n.baseNative.empty() ? nullptr : n.baseNative.data();
+        pc.nodeId = n.id;
+        pc.externals = options.externals ? &options.externals : nullptr;
         for (std::size_t s = 0; s < n.desc->strings.size(); ++s)
             if (n.desc->strings[s] == "sample" && ! n.strings[s].empty() && options.assets)
                 pc.asset = options.assets (n.strings[s]);

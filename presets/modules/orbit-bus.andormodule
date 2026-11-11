@@ -65,8 +65,8 @@
     {
       "id": "g-0010",
       "name": "ORBIT BUS",
-      "x": 622.5,
-      "y": 50,
+      "x": 590,
+      "y": 40,
       "collapsed": true,
       "ports": [
         {

@@ -8,6 +8,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -64,6 +65,10 @@ struct ParamDesc
     /** Changing it rebuilds the node (an impulse, a network size): the editor recompiles the
         patch instead of sending the value live. Never modulatable. */
     bool structural = false;
+    /** Progressive disclosure: shown only while choice/toggle parameter `showIf` has one of
+        the values in `showIfMask` (bit n = value n). Empty: always shown. */
+    std::string showIf;
+    std::uint32_t showIfMask = 0;
 
     double normalise (double v) const noexcept;
     double denormalise (double n) const noexcept;
@@ -90,6 +95,7 @@ enum class NodeRole : std::uint8_t
 };
 
 class Processor;
+class ExternalInstrument;
 class EventProcessor;
 struct NodeShared;
 struct PrepareContext;
@@ -122,6 +128,8 @@ struct NodeDesc
     /** Optional state shared by one node's voices (FFT tables, analysis), made at compile. */
     std::function<std::unique_ptr<NodeShared> (const PrepareContext&)> createShared;
 
+    /** Whether a parameter applies with the node's current settings (see ParamDesc::showIf). */
+    bool paramShown (const ParamDesc& p, const std::map<std::string, double>& values) const;
     int inputIndex (const std::string& id) const noexcept;
     int outputIndex (const std::string& id) const noexcept;
     int paramIndex (const std::string& id) const noexcept;
@@ -165,6 +173,9 @@ struct PrepareContext
     const std::vector<std::string>* strings = nullptr;   ///< the node's string state, in desc.strings order
     int voiceIndex = -1;               ///< -1 global
     const float* params = nullptr;     ///< the node's native parameter values at compile (structural ones)
+    std::string nodeId;                ///< the node's stable id
+    /** EXTERNAL INSTRUMENT: the owner's host (key -> instance); null: the global fallback. */
+    const std::function<std::shared_ptr<ExternalInstrument> (const std::string& nodeId, const std::vector<std::string>& strings)>* externals = nullptr;
 };
 
 /** What a voice knows about its note. */

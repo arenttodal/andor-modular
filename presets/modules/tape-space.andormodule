@@ -74,8 +74,8 @@
     {
       "id": "g-0010",
       "name": "TAPE SPACE",
-      "x": 622.5,
-      "y": 50,
+      "x": 590,
+      "y": 40,
       "collapsed": true,
       "ports": [
         {

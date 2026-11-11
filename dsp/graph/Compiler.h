@@ -1,6 +1,7 @@
 #pragma once
 
 #include "graph/CompiledGraph.h"
+#include "graph/External.h"
 
 #include <memory>
 
@@ -13,6 +14,8 @@ struct CompileOptions
     int maxBlock = 512;
     AssetResolver assets;        ///< resolves a node's "sample" key to its loaded asset (may be empty)
     Budgets budgets;
+    /** Hosted instruments (the plugin's ExternalHost); empty: the global factory. */
+    std::function<std::shared_ptr<ExternalInstrument> (const std::string& nodeId, const std::vector<std::string>& strings)> externals;
 };
 
 /**

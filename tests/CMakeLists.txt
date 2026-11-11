@@ -5,7 +5,8 @@ add_executable(modular_tests
     NodeTests.cpp
     EditTests.cpp
     FactoryTests.cpp
-    RealtimeTests.cpp)
+    RealtimeTests.cpp
+    ExternalTests.cpp)
 target_include_directories(modular_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(modular_tests PRIVATE andor_modular_dsp Catch2::Catch2WithMain)
 target_compile_definitions(modular_tests PRIVATE MODULAR_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

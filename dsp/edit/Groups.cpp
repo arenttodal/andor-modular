@@ -49,16 +49,17 @@ Result group (Document& doc, const Registry& reg, const std::vector<std::string>
     g.id = doc.makeId ("g");
     g.name = name.empty() ? "GROUP" : name;
     g.parent = doc.view.currentGroup;
-    float sx = 0.0f, sy = 0.0f;
+    // The card takes the place of its first (top-left) member.
+    float mx = 1.0e9f, my = 1.0e9f;
     for (const auto& id : members)
     {
         auto* n = doc.findNode (id);
         n->group = g.id;
-        sx += n->x;
-        sy += n->y;
+        mx = std::min (mx, n->x);
+        my = std::min (my, n->y);
     }
-    g.x = sx / static_cast<float> (members.size());
-    g.y = sy / static_cast<float> (members.size());
+    g.x = mx;
+    g.y = my;
     const std::set<std::string> inside (members.begin(), members.end());
     std::set<std::string> seen;
     for (const auto& c : doc.connections)

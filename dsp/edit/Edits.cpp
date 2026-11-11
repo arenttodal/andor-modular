@@ -741,11 +741,68 @@ void removeNodes (Document& doc, const std::vector<std::string>& nodes)
         doc.removeNode (id);
 }
 
+namespace
+{
+    /** A card's height on the canvas (the editor's NodeView layout: header, port rows, one mode
+        row, one knob row, the live strip), so arranged cards never overlap. */
+    float cardHeight (const Document& doc, const Registry& reg, const std::string& id)
+    {
+        int rows = 0, knobs = 0, choices = 0;
+        if (const auto* g = doc.findGroup (id))
+        {
+            int in = 0, out = 0;
+            for (const auto& p : g->ports)
+                (p.input ? in : out)++;
+            rows = std::max (in, out);
+            knobs = std::min<int> (4, static_cast<int> (g->controls.size()));
+        }
+        else if (const auto* n = doc.findNode (id))
+        {
+            const auto* d = reg.find (n->type);
+            if (d != nullptr)
+            {
+                rows = std::max<int> (static_cast<int> (d->inputs.size()), d->role == NodeRole::output ? 0 : static_cast<int> (d->outputs.size()));
+                for (const auto& p : d->params)
+                    if (p.quick && d->paramShown (p, n->params))
+                        (p.curve == ParamCurve::choice || p.curve == ParamCurve::toggle ? choices : knobs)++;
+                choices = std::min (choices, 1);
+                knobs = std::min (knobs, 4);
+            }
+        }
+        return 28.0f + 6.0f + 20.0f * static_cast<float> (rows) + (choices > 0 ? 28.0f : 0.0f) + (knobs > 0 ? 54.0f : 0.0f) + 30.0f;
+    }
+}
+
 void autoArrange (Document& doc, const Registry& reg, const std::vector<std::string>& keep)
 {
     const std::string group = doc.view.currentGroup;
+    // Units: the modules of this view and its collapsed child groups.
+    auto owner = [&] (const std::string& node) -> std::string {
+        const auto* n = doc.findNode (node);
+        if (n == nullptr)
+            return {};
+        if (n->group == group)
+            return node;
+        std::string g = n->group;
+        for (int guard = 0; guard < 8 && ! g.empty(); ++guard)
+        {
+            const auto* gm = doc.findGroup (g);
+            if (gm == nullptr)
+                return {};
+            if (gm->parent == group)
+                return g;
+            g = gm->parent;
+        }
+        return {};
+    };
     std::map<std::string, int> depth;
     std::vector<std::string> ids;
+    for (const auto& g : doc.groups)
+        if (g.parent == group)
+        {
+            ids.push_back (g.id);
+            depth[g.id] = 1;
+        }
     for (const auto& n : doc.nodes)
         if (n.group == group)
         {
@@ -753,21 +810,22 @@ void autoArrange (Document& doc, const Registry& reg, const std::vector<std::str
             const auto* d = reg.find (n.type);
             depth[n.id] = d != nullptr && d->role == NodeRole::event ? 0 : 1;
         }
-    // Longest path (bounded iterations: cycles through FEEDBACK DELAY settle).
+    // Longest path (bounded: cycles through FEEDBACK DELAY settle).
     for (int pass = 0; pass < 32; ++pass)
     {
         bool changed = false;
         for (const auto& c : doc.connections)
         {
-            if (depth.count (c.from) == 0 || depth.count (c.to) == 0)
+            const auto a = owner (c.from), b = owner (c.to);
+            if (a.empty() || b.empty() || a == b)
                 continue;
             const auto* dt = descOf (doc, reg, c.to);
             if (dt != nullptr && dt->role == NodeRole::feedback)
                 continue;
-            const int want = depth[c.from] + (c.toParam ? 0 : 1);
-            if (want > depth[c.to] && want < 40)
+            const int want = depth[a] + (c.toParam ? 0 : 1);
+            if (want > depth[b] && want < 40)
             {
-                depth[c.to] = want;
+                depth[b] = want;
                 changed = true;
             }
         }
@@ -776,26 +834,36 @@ void autoArrange (Document& doc, const Registry& reg, const std::vector<std::str
     }
     int last = 0;
     for (const auto& [id, d] : depth)
-        last = std::max (last, d);
+        if (const auto* desc = descOf (doc, reg, id); desc == nullptr || desc->role != NodeRole::output)
+            last = std::max (last, d);
     for (const auto& id : ids)
         if (const auto* d = descOf (doc, reg, id); d != nullptr && d->role == NodeRole::output)
             depth[id] = last + 1;
+    auto positionOf = [&] (const std::string& id) -> std::pair<float*, float*> {
+        if (auto* n = doc.findNode (id))
+            return { &n->x, &n->y };
+        auto* g = doc.findGroup (id);
+        return { &g->x, &g->y };
+    };
     std::map<int, std::vector<std::string>> columns;
     for (const auto& id : ids)
         columns[depth[id]].push_back (id);
     for (auto& [col, members] : columns)
     {
-        std::stable_sort (members.begin(), members.end(), [&] (const auto& a, const auto& b) { return doc.findNode (a)->y < doc.findNode (b)->y; });
-        float y = -static_cast<float> (members.size() - 1) * 75.0f;
+        std::stable_sort (members.begin(), members.end(), [&] (const auto& a, const auto& b) { return *positionOf (a).second < *positionOf (b).second; });
+        float total = 0.0f;
+        for (const auto& id : members)
+            total += cardHeight (doc, reg, id) + 32.0f;
+        float y = -0.5f * total;
         for (const auto& id : members)
         {
             if (std::find (keep.begin(), keep.end(), id) == keep.end())
             {
-                auto* n = doc.findNode (id);
-                n->x = static_cast<float> (col) * 250.0f;
-                n->y = y;
+                auto [x, yy] = positionOf (id);
+                *x = static_cast<float> (col) * 256.0f;
+                *yy = std::round (y / 8.0f) * 8.0f;
             }
-            y += 150.0f;
+            y += cardHeight (doc, reg, id) + 32.0f;
         }
     }
 }

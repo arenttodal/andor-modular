@@ -448,7 +448,8 @@ void registerControlNodes (Registry& r)
         d.inputs = {};
         d.outputs = { out ("out", "OUT", PortKind::control) };
         d.params = { choice ("shape", "SHAPE", { "SINE", "TRIANGLE", "SAW UP", "SAW DOWN", "SQUARE", "S&H", "SMOOTH" }, 0, true),
-                     logNum ("rate", "RATE", 0.01, 40.0, 1.0, "Hz", true), toggle ("sync", "SYNC", false, true), choice ("division", "DIVISION", divisions(), 6),
+                     when (logNum ("rate", "RATE", 0.01, 40.0, 1.0, "Hz", true), "sync", { 0 }), toggle ("sync", "SYNC", false, true),
+                     when (choice ("division", "DIVISION", divisions(), 6), "sync", { 1 }),
                      num ("depth", "DEPTH", 0.0, 1.0, 1.0, "%", true), num ("phase", "PHASE", 0.0, 1.0, 0.0, "%"), toggle ("retrigger", "RETRIGGER", false),
                      toggle ("unipolar", "UNIPOLAR", false) };
         d.create = make<Lfo>();
@@ -470,7 +471,8 @@ void registerControlNodes (Registry& r)
         d.keywords = { "random", "sample and hold", "s&h", "chance", "variation" };
         d.inputs = { in ("trig", "TRIGGER", PortKind::trigger) };
         d.outputs = { out ("out", "OUT", PortKind::control) };
-        d.params = { logNum ("rate", "RATE", 0.05, 30.0, 2.0, "Hz", true), toggle ("sync", "SYNC", false), choice ("division", "DIVISION", divisions(), 5),
+        d.params = { when (logNum ("rate", "RATE", 0.05, 30.0, 2.0, "Hz", true), "sync", { 0 }), toggle ("sync", "SYNC", false),
+                     when (choice ("division", "DIVISION", divisions(), 5), "sync", { 1 }),
                      logNum ("slew", "SLEW", 0.0005, 2.0, 0.0005, "s", true), integer ("steps", "STEPS", 0, 24, 0), choice ("distribution", "SHAPE", { "EVEN", "CENTRED" }, 0),
                      num ("depth", "DEPTH", 0.0, 1.0, 1.0, "%", true), toggle ("unipolar", "UNIPOLAR", false) };
         d.create = make<RandomSH>();

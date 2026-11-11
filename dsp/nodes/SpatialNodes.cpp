@@ -141,8 +141,8 @@ void registerSpatialNodes (Registry& r)
         std::vector<std::string> rates;
         for (int i = 0; i < osp::arp::rateCount; ++i)
             rates.push_back (std::string ("x8 ") + osp::arp::rateName (static_cast<osp::ArpRate> (i)));
-        d.params = { choice ("mode", "MODE", { "PAN", "ORBIT", "BOUNCE" }, 1, true), logNum ("rate", "SPEED", 0.02, 8.0, 0.25, "Hz", true),
-                     toggle ("sync", "SYNC", false), choice ("division", "DIVISION", rates, 0), num ("depth", "DEPTH", 0.0, 1.0, 0.8, "%", true),
+        d.params = { choice ("mode", "MODE", { "PAN", "ORBIT", "BOUNCE" }, 1, true), when (logNum ("rate", "SPEED", 0.02, 8.0, 0.25, "Hz", true), "sync", { 0 }),
+                     toggle ("sync", "SYNC", false), when (choice ("division", "DIVISION", rates, 0), "sync", { 1 }), num ("depth", "DEPTH", 0.0, 1.0, 0.8, "%", true),
                      num ("width", "WIDTH", 0.0, 1.0, 1.0, "%"), num ("phase", "PHASE", 0.0, 1.0, 0.0, "%"), num ("manual", "PAN", -1.0, 1.0, 0.0, "", true) };
         d.cost.units = 0.2f;
         d.create = make<Satellite>();

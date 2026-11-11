@@ -64,8 +64,8 @@
     {
       "id": "g-000f",
       "name": "RHYTHM GATE",
-      "x": 295,
-      "y": 120,
+      "x": 0,
+      "y": 40,
       "collapsed": true,
       "ports": [
         {

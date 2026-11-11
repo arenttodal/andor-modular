@@ -103,8 +103,8 @@
     {
       "id": "g-000d",
       "name": "SUB BASS VOICE",
-      "x": 115,
-      "y": 13.333333015441895,
+      "x": 0,
+      "y": 0,
       "collapsed": true,
       "ports": [
         {

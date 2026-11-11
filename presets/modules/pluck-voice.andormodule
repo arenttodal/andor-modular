@@ -129,8 +129,8 @@
     {
       "id": "g-000f",
       "name": "PLUCK VOICE",
-      "x": 86.25,
-      "y": 50,
+      "x": 0,
+      "y": 0,
       "collapsed": true,
       "ports": [
         {

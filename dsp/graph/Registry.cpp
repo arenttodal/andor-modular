@@ -71,6 +71,19 @@ std::string ParamDesc::format (double v) const
     return s;
 }
 
+bool NodeDesc::paramShown (const ParamDesc& p, const std::map<std::string, double>& values) const
+{
+    if (p.showIf.empty())
+        return true;
+    const int gate = paramIndex (p.showIf);
+    if (gate < 0)
+        return true;
+    const auto it = values.find (p.showIf);
+    const double v = it != values.end() ? it->second : params[static_cast<std::size_t> (gate)].def;
+    const auto bit = static_cast<int> (std::lround (v));
+    return bit >= 0 && bit < 32 && ((p.showIfMask >> bit) & 1u) != 0;
+}
+
 int NodeDesc::inputIndex (const std::string& id) const noexcept
 {
     for (std::size_t i = 0; i < inputs.size(); ++i)

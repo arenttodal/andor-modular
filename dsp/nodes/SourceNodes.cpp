@@ -507,7 +507,9 @@ namespace
     public:
         void prepare (const PrepareContext& pc) override
         {
-            if (pc.strings != nullptr && ! pc.strings->empty() && ! (*pc.strings)[0].empty())
+            if (pc.externals != nullptr && pc.strings != nullptr)
+                host = (*pc.externals) (pc.nodeId, *pc.strings);
+            else if (pc.strings != nullptr && ! pc.strings->empty() && ! (*pc.strings)[0].empty())
                 host = makeExternal ((*pc.strings)[0]);
             if (host != nullptr)
                 host->prepare (pc.sampleRate, maxChunk);
@@ -597,14 +599,15 @@ void registerSourceNodes (Registry& r)
         d.inputs = { modIn ("fm", "FM"), modIn ("sync", "SYNC"), in ("pitch", "PITCH", PortKind::pitch), notesIn() };
         d.outputs = { out ("out", "OUT", PortKind::audioMono) };
         d.params = { choice ("model", "MODEL", { "CLASSIC", "DCO", "WIDE" }, 0, true),
-                     choice ("wave", "WAVE", { "SAW", "TRI", "PULSE", "SAW+TRI", "SAW+PULSE", "TRI+PULSE", "ALL" }, 0, true),
-                     choice ("dcoWave", "DCO WAVE", { "SAW", "PULSE", "SAW+PULSE", "SUB ONLY" }, 0),
-                     choice ("wideWave", "WIDE WAVE", { "SAW", "PULSE", "TRIANGLE", "SQUARE", "SUPER SAW" }, 0),
+                     when (choice ("wave", "WAVE", { "SAW", "TRI", "PULSE", "SAW+TRI", "SAW+PULSE", "TRI+PULSE", "ALL" }, 0, true), "model", { 0 }),
+                     when (choice ("dcoWave", "DCO WAVE", { "SAW", "PULSE", "SAW+PULSE", "SUB ONLY" }, 0, true), "model", { 1 }),
+                     when (choice ("wideWave", "WIDE WAVE", { "SAW", "PULSE", "TRIANGLE", "SQUARE", "SUPER SAW" }, 0, true), "model", { 2 }),
                      integer ("octave", "OCTAVE", -3, 3, 0, "oct", true), num ("coarse", "COARSE", -12.0, 12.0, 0.0, "st"),
                      num ("fine", "FINE", -100.0, 100.0, 0.0, "ct", true), num ("level", "LEVEL", 0.0, 1.0, 0.5, "%", true),
                      num ("width", "WIDTH", 0.02, 0.98, 0.5, "%"), num ("keytrack", "KEYTRACK", 0.0, 1.0, 1.0, "%"),
-                     num ("drift", "DRIFT", 0.0, 1.0, 0.15, "%"), num ("sub", "SUB", 0.0, 1.0, 0.0, "%"), num ("spread", "SPREAD", 0.0, 1.0, 0.35, "%"),
-                     num ("shape", "SHAPE", 0.0, 1.0, 0.5, "%"), num ("fm", "FM DEPTH", 0.0, 1.0, 0.0, "%"), toggle ("phaseReset", "PHASE RESET", false) };
+                     num ("drift", "DRIFT", 0.0, 1.0, 0.15, "%"), when (num ("sub", "SUB", 0.0, 1.0, 0.0, "%"), "model", { 1 }),
+                     when (num ("spread", "SPREAD", 0.0, 1.0, 0.35, "%"), "model", { 2 }), when (num ("shape", "SHAPE", 0.0, 1.0, 0.5, "%"), "model", { 2 }),
+                     num ("fm", "FM DEPTH", 0.0, 1.0, 0.0, "%"), toggle ("phaseReset", "PHASE RESET", false) };
         d.cost.units = 1.0f;
         d.create = make<AnalogOsc>();
         r.add (d);

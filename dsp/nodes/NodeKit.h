@@ -99,6 +99,16 @@ inline ParamDesc toggle (std::string id, std::string name, bool def = false, boo
     return p;
 }
 
+/** Progressive disclosure: `p` is shown only while `gate` has one of `values`. */
+inline ParamDesc when (ParamDesc p, const std::string& gate, std::initializer_list<int> values)
+{
+    p.showIf = gate;
+    p.showIfMask = 0;
+    for (const int v : values)
+        p.showIfMask |= 1u << static_cast<unsigned> (v);
+    return p;
+}
+
 template <typename P>
 std::function<std::unique_ptr<Processor>()> make()
 {
