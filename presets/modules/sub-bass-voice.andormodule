@@ -1,0 +1,288 @@
+{
+  "format": "andormodule",
+  "schemaVersion": 1,
+  "name": "SUB BASS VOICE",
+  "author": "",
+  "description": "",
+  "settings": {
+    "polyphony": 8,
+    "voiceMode": 0,
+    "glide": 0,
+    "seed": "1",
+    "masterDb": 0,
+    "bendRange": 2,
+    "limiter": true
+  },
+  "nodes": [
+    {
+      "id": "n-0001",
+      "type": "osc.analog",
+      "version": 1,
+      "domain": "voice",
+      "x": 0,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "group": "g-000d",
+      "params": {
+        "coarse": 0,
+        "dcoWave": 0,
+        "drift": 0.15,
+        "fine": 0,
+        "fm": 0,
+        "keytrack": 1,
+        "level": 0.5,
+        "model": 1,
+        "octave": -1,
+        "phaseReset": 0,
+        "shape": 0.5,
+        "spread": 0.35,
+        "sub": 0.8,
+        "wave": 0,
+        "wideWave": 0,
+        "width": 0.5
+      }
+    },
+    {
+      "id": "n-0004",
+      "type": "proc.vca",
+      "version": 1,
+      "domain": "voice",
+      "x": 230,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "group": "g-000d",
+      "params": {
+        "attack": 0.005,
+        "decay": 0.4,
+        "level": 1,
+        "release": 0.35,
+        "sustain": 0.75,
+        "velocity": 0.6
+      }
+    },
+    {
+      "id": "n-000a",
+      "type": "proc.filter",
+      "version": 1,
+      "domain": "voice",
+      "x": 115,
+      "y": 40,
+      "size": 1,
+      "enabled": true,
+      "group": "g-000d",
+      "params": {
+        "comp": 0.5,
+        "cutoff": 400,
+        "drive": 0.1,
+        "envAmount": 0.3,
+        "keytrack": 0.5,
+        "mode": 0,
+        "resonance": 0.2
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "c-000b",
+      "from": "n-0001",
+      "fromPort": "out",
+      "to": "n-000a",
+      "toPort": "in"
+    },
+    {
+      "id": "c-000c",
+      "from": "n-000a",
+      "fromPort": "out",
+      "to": "n-0004",
+      "toPort": "in"
+    }
+  ],
+  "groups": [
+    {
+      "id": "g-000d",
+      "name": "SUB BASS VOICE",
+      "x": 115,
+      "y": 13.333333015441895,
+      "collapsed": true,
+      "ports": [
+        {
+          "name": "NOTES",
+          "node": "n-0001",
+          "port": "notes",
+          "input": true
+        },
+        {
+          "name": "OUT",
+          "node": "n-0004",
+          "port": "out",
+          "input": false
+        }
+      ],
+      "controls": [
+        {
+          "name": "TONE",
+          "value": 0.4336766652213271,
+          "default": 0.4336766652213271,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-000a",
+              "param": "cutoff",
+              "min": 0,
+              "max": 1,
+              "curve": "linear"
+            }
+          ]
+        },
+        {
+          "name": "SUB",
+          "value": 0.8,
+          "default": 0.8,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-0001",
+              "param": "sub",
+              "min": 0,
+              "max": 1,
+              "curve": "linear"
+            }
+          ]
+        },
+        {
+          "name": "PUNCH",
+          "value": 0.5765139939630113,
+          "default": 0.5765139939630113,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-0004",
+              "param": "decay",
+              "min": 0,
+              "max": 1,
+              "curve": "linear"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "macros": [
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    }
+  ],
+  "scenes": [
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    }
+  ],
+  "scenePosition": 0,
+  "currentScene": 0,
+  "hostBindings": [],
+  "view": {
+    "zoom": 1,
+    "panX": 0,
+    "panY": 0,
+    "group": "",
+    "play": false,
+    "panelLayout": 0,
+    "visualisation": "scope"
+  },
+  "evolve": {
+    "seed": "1",
+    "generation": 0
+  },
+  "idCounter": "1",
+  "dependencies": [],
+  "module": "SUB BASS VOICE",
+  "root": "g-000d",
+  "hash": "5606071e4c334f04"
+}

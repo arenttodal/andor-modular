@@ -1,0 +1,259 @@
+{
+  "format": "andormodule",
+  "schemaVersion": 1,
+  "name": "TAPE SPACE",
+  "author": "",
+  "description": "",
+  "settings": {
+    "polyphony": 8,
+    "voiceMode": 0,
+    "glide": 0,
+    "seed": "1",
+    "masterDb": 0,
+    "bendRange": 2,
+    "limiter": true
+  },
+  "nodes": [
+    {
+      "id": "n-000a",
+      "type": "fx.echo",
+      "version": 1,
+      "domain": "global",
+      "x": 590,
+      "y": 40,
+      "size": 1,
+      "enabled": true,
+      "group": "g-0010",
+      "params": {
+        "age": 0.35,
+        "division": 5,
+        "feedback": 0.45,
+        "mix": 0.35,
+        "stereo": 1,
+        "sync": 1,
+        "time": 375,
+        "tone": 0.5,
+        "type": 0
+      }
+    },
+    {
+      "id": "n-000d",
+      "type": "fx.space",
+      "version": 1,
+      "domain": "global",
+      "x": 655,
+      "y": 60,
+      "size": 1,
+      "enabled": true,
+      "group": "g-0010",
+      "params": {
+        "damping": 0.4,
+        "decay": 3,
+        "gravity": 0,
+        "highcut": 6000,
+        "lowcut": 100,
+        "mix": 0.3,
+        "modulation": 0.4,
+        "predelay": 8,
+        "size": 0.5,
+        "type": 1,
+        "width": 1
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "c-000e",
+      "from": "n-000a",
+      "fromPort": "out",
+      "to": "n-000d",
+      "toPort": "in"
+    }
+  ],
+  "groups": [
+    {
+      "id": "g-0010",
+      "name": "TAPE SPACE",
+      "x": 622.5,
+      "y": 50,
+      "collapsed": true,
+      "ports": [
+        {
+          "name": "IN",
+          "node": "n-000a",
+          "port": "in",
+          "input": true
+        },
+        {
+          "name": "OUT",
+          "node": "n-000d",
+          "port": "out",
+          "input": false
+        }
+      ],
+      "controls": [
+        {
+          "name": "ECHO",
+          "value": 0.35,
+          "default": 0.35,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-000a",
+              "param": "mix",
+              "min": 0,
+              "max": 1,
+              "curve": "linear"
+            }
+          ]
+        },
+        {
+          "name": "REPEATS",
+          "value": 0.45,
+          "default": 0.45,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-000a",
+              "param": "feedback",
+              "min": 0,
+              "max": 1,
+              "curve": "linear"
+            }
+          ]
+        },
+        {
+          "name": "ROOM",
+          "value": 0.3,
+          "default": 0.3,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-000d",
+              "param": "mix",
+              "min": 0,
+              "max": 1,
+              "curve": "linear"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "macros": [
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    }
+  ],
+  "scenes": [
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    }
+  ],
+  "scenePosition": 0,
+  "currentScene": 0,
+  "hostBindings": [],
+  "view": {
+    "zoom": 1,
+    "panX": 0,
+    "panY": 0,
+    "group": "",
+    "play": false,
+    "panelLayout": 0,
+    "visualisation": "scope"
+  },
+  "evolve": {
+    "seed": "1",
+    "generation": 0
+  },
+  "idCounter": "1",
+  "dependencies": [],
+  "module": "TAPE SPACE",
+  "root": "g-0010",
+  "hash": "63b8c975c74f6fe3"
+}

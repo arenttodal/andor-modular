@@ -1,0 +1,323 @@
+{
+  "format": "andormodular",
+  "schemaVersion": 1,
+  "name": "External Instrument Demo",
+  "author": "ANDOR",
+  "description": "An installed instrument plugin (e.g. Kontakt strings) imprinted onto an analog carrier by GLOBAL MORPH. Without the plugin the carrier plays alone (the module waits, its state kept).",
+  "settings": {
+    "polyphony": 8,
+    "voiceMode": 0,
+    "glide": 0,
+    "seed": "1",
+    "masterDb": 0,
+    "bendRange": 2,
+    "limiter": true
+  },
+  "nodes": [
+    {
+      "id": "n-0001",
+      "type": "osc.analog",
+      "version": 1,
+      "domain": "voice",
+      "x": 250,
+      "y": -75,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "coarse": 0,
+        "dcoWave": 0,
+        "drift": 0.15,
+        "fine": 0,
+        "fm": 0,
+        "keytrack": 1,
+        "level": 0.5,
+        "model": 2,
+        "octave": 0,
+        "phaseReset": 0,
+        "shape": 0.5,
+        "spread": 0.35,
+        "sub": 0,
+        "wave": 0,
+        "wideWave": 0,
+        "width": 0.5
+      }
+    },
+    {
+      "id": "n-0002",
+      "type": "event.keyboard",
+      "version": 1,
+      "domain": "event",
+      "x": 0,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "channel": 0,
+        "curve": 1,
+        "high": 127,
+        "low": 0,
+        "octave": 0
+      }
+    },
+    {
+      "id": "n-0004",
+      "type": "proc.vca",
+      "version": 1,
+      "domain": "voice",
+      "x": 500,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "attack": 0.2,
+        "decay": 0.4,
+        "level": 1,
+        "release": 1,
+        "sustain": 0.75,
+        "velocity": 0.6
+      }
+    },
+    {
+      "id": "n-0006",
+      "type": "util.voicemix",
+      "version": 1,
+      "domain": "global",
+      "x": 750,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0.5,
+        "pan": 0,
+        "spread": 0.3
+      }
+    },
+    {
+      "id": "n-0008",
+      "type": "util.output",
+      "version": 1,
+      "domain": "global",
+      "x": 1500,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0,
+        "mute": 0
+      }
+    },
+    {
+      "id": "n-000a",
+      "type": "src.external",
+      "version": 1,
+      "domain": "global",
+      "x": 250,
+      "y": 75,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0
+      },
+      "strings": {
+        "plugin": "Kontakt 7"
+      }
+    },
+    {
+      "id": "n-000c",
+      "type": "proc.morph.global",
+      "version": 1,
+      "domain": "global",
+      "x": 1000,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "detail": 0.5,
+        "levelMatch": 1,
+        "method": 0,
+        "mix": 1,
+        "position": 0.5
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "c-0003",
+      "from": "n-0002",
+      "fromPort": "notes",
+      "to": "n-0001",
+      "toPort": "notes"
+    },
+    {
+      "id": "c-0005",
+      "from": "n-0001",
+      "fromPort": "out",
+      "to": "n-0004",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0007",
+      "from": "n-0004",
+      "fromPort": "out",
+      "to": "n-0006",
+      "toPort": "in"
+    },
+    {
+      "id": "c-000b",
+      "from": "n-0002",
+      "fromPort": "notes",
+      "to": "n-000a",
+      "toPort": "notes"
+    },
+    {
+      "id": "c-000d",
+      "from": "n-0006",
+      "fromPort": "out",
+      "to": "n-000c",
+      "toPort": "a"
+    },
+    {
+      "id": "c-000e",
+      "from": "n-000c",
+      "fromPort": "out",
+      "to": "n-0008",
+      "toPort": "in"
+    },
+    {
+      "id": "c-000f",
+      "from": "n-000a",
+      "fromPort": "out",
+      "to": "n-000c",
+      "toPort": "b"
+    }
+  ],
+  "groups": [],
+  "macros": [
+    {
+      "name": "IMPRINT",
+      "value": 0.5,
+      "default": 0.5,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-000c",
+          "param": "position",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "DETAIL",
+      "value": 0.5,
+      "default": 0.5,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-000c",
+          "param": "detail",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    }
+  ],
+  "scenes": [
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    }
+  ],
+  "scenePosition": 0,
+  "currentScene": 0,
+  "hostBindings": [],
+  "view": {
+    "zoom": 1,
+    "panX": 0,
+    "panY": 0,
+    "group": "",
+    "play": false,
+    "panelLayout": 0,
+    "visualisation": "scope"
+  },
+  "evolve": {
+    "seed": "1",
+    "generation": 0
+  },
+  "idCounter": "16",
+  "dependencies": [
+    "Kontakt 7"
+  ]
+}

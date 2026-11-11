@@ -1,0 +1,425 @@
+{
+  "format": "andormodular",
+  "schemaVersion": 1,
+  "name": "Clockwork",
+  "author": "ANDOR",
+  "description": "A wide pad breathing with a ticking clock loop at the host tempo: the clock's envelope opens its filter and its level; mute the clock and the groove stays.",
+  "settings": {
+    "polyphony": 8,
+    "voiceMode": 0,
+    "glide": 0,
+    "seed": "1",
+    "masterDb": 0,
+    "bendRange": 2,
+    "limiter": true
+  },
+  "nodes": [
+    {
+      "id": "n-0001",
+      "type": "osc.analog",
+      "version": 1,
+      "domain": "voice",
+      "x": 250,
+      "y": -75,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "coarse": 0,
+        "dcoWave": 0,
+        "drift": 0.15,
+        "fine": 0,
+        "fm": 0,
+        "keytrack": 1,
+        "level": 0.5,
+        "model": 2,
+        "octave": 0,
+        "phaseReset": 0,
+        "shape": 0.5,
+        "spread": 0.5,
+        "sub": 0,
+        "wave": 0,
+        "wideWave": 4,
+        "width": 0.5
+      }
+    },
+    {
+      "id": "n-0002",
+      "type": "event.keyboard",
+      "version": 1,
+      "domain": "event",
+      "x": 0,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "channel": 0,
+        "curve": 1,
+        "high": 127,
+        "low": 0,
+        "octave": 0
+      }
+    },
+    {
+      "id": "n-0004",
+      "type": "proc.vca",
+      "version": 1,
+      "domain": "voice",
+      "x": 500,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "attack": 0.6,
+        "decay": 0.4,
+        "level": 1,
+        "release": 2,
+        "sustain": 1,
+        "velocity": 0.6
+      }
+    },
+    {
+      "id": "n-0006",
+      "type": "util.voicemix",
+      "version": 1,
+      "domain": "global",
+      "x": 750,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0.5,
+        "pan": 0,
+        "spread": 0.3
+      }
+    },
+    {
+      "id": "n-0008",
+      "type": "util.output",
+      "version": 1,
+      "domain": "global",
+      "x": 2000,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0,
+        "mute": 0
+      }
+    },
+    {
+      "id": "n-000a",
+      "type": "proc.filter",
+      "version": 1,
+      "domain": "global",
+      "x": 1000,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "comp": 0.5,
+        "cutoff": 600,
+        "drive": 0.1,
+        "envAmount": 0.6,
+        "keytrack": 0.5,
+        "mode": 0,
+        "resonance": 0.2
+      }
+    },
+    {
+      "id": "n-000d",
+      "type": "util.gain",
+      "version": 1,
+      "domain": "global",
+      "x": 1250,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "gain": 0,
+        "invert": 0
+      }
+    },
+    {
+      "id": "n-0010",
+      "type": "src.rhythm",
+      "version": 1,
+      "domain": "global",
+      "x": 250,
+      "y": 75,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "beats": 0,
+        "level": 0.6,
+        "sensitivity": 0.6,
+        "start": 0,
+        "sync": 1
+      },
+      "strings": {
+        "sample": "samples/clockwork-120.wav"
+      }
+    },
+    {
+      "id": "n-0011",
+      "type": "util.mixer",
+      "version": 1,
+      "domain": "global",
+      "x": 1500,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level1": -3,
+        "level2": -12,
+        "level3": -3,
+        "level4": -3,
+        "master": 0,
+        "mute1": 0,
+        "mute2": 0,
+        "mute3": 0,
+        "mute4": 0,
+        "pan1": 0,
+        "pan2": 0,
+        "pan3": 0,
+        "pan4": 0,
+        "solo1": 0,
+        "solo2": 0,
+        "solo3": 0,
+        "solo4": 0
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "c-0003",
+      "from": "n-0002",
+      "fromPort": "notes",
+      "to": "n-0001",
+      "toPort": "notes"
+    },
+    {
+      "id": "c-0005",
+      "from": "n-0001",
+      "fromPort": "out",
+      "to": "n-0004",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0007",
+      "from": "n-0004",
+      "fromPort": "out",
+      "to": "n-0006",
+      "toPort": "in"
+    },
+    {
+      "id": "c-000b",
+      "from": "n-0006",
+      "fromPort": "out",
+      "to": "n-000a",
+      "toPort": "in"
+    },
+    {
+      "id": "c-000e",
+      "from": "n-000a",
+      "fromPort": "out",
+      "to": "n-000d",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0012",
+      "from": "n-000d",
+      "fromPort": "out",
+      "to": "n-0011",
+      "toPort": "in1"
+    },
+    {
+      "id": "c-0013",
+      "from": "n-0010",
+      "fromPort": "out",
+      "to": "n-0011",
+      "toPort": "in2"
+    },
+    {
+      "id": "c-0014",
+      "from": "n-0011",
+      "fromPort": "out",
+      "to": "n-0008",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0015",
+      "from": "n-0010",
+      "fromPort": "env",
+      "to": "n-000a",
+      "toPort": "env"
+    },
+    {
+      "id": "c-0016",
+      "from": "n-0010",
+      "fromPort": "env",
+      "to": "n-000d",
+      "toPort": "cv"
+    }
+  ],
+  "groups": [],
+  "macros": [
+    {
+      "name": "GROOVE",
+      "value": 0.6000000000000001,
+      "default": 0.6000000000000001,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-000a",
+          "param": "envAmount",
+          "min": 0.5,
+          "max": 1,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "CUTOFF",
+      "value": 0.487289585955368,
+      "default": 0.487289585955368,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-000a",
+          "param": "cutoff",
+          "min": 0.2,
+          "max": 0.8,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "CLOCK LEVEL",
+      "value": 0.8080808080808081,
+      "default": 0.8080808080808081,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-0011",
+          "param": "level2",
+          "min": 0,
+          "max": 0.9,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "SPREAD",
+      "value": 0.5,
+      "default": 0.5,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-0001",
+          "param": "spread",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "ATTACK",
+      "value": 0.8242296876598513,
+      "default": 0.8242296876598513,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-0004",
+          "param": "attack",
+          "min": 0.2,
+          "max": 0.8,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "RELEASE",
+      "value": 0.6966748644707528,
+      "default": 0.6966748644707528,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-0004",
+          "param": "release",
+          "min": 0.4,
+          "max": 0.9,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    }
+  ],
+  "scenes": [
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    }
+  ],
+  "scenePosition": 0,
+  "currentScene": 0,
+  "hostBindings": [],
+  "view": {
+    "zoom": 1,
+    "panX": 0,
+    "panY": 0,
+    "group": "",
+    "play": false,
+    "panelLayout": 0,
+    "visualisation": "scope"
+  },
+  "evolve": {
+    "seed": "1",
+    "generation": 0
+  },
+  "idCounter": "23",
+  "dependencies": [
+    "samples/clockwork-120.wav"
+  ]
+}

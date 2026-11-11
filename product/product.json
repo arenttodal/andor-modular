@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "name": "ANDOR Modular",
+  "slug": "modular",
+  "pluginCode": "Amdr",
+  "bundleId": "com.osp.andormodular",
+  "manufacturerCode": "Ospx",
+  "companyName": "OSP",
+  "version": "0.1.0",
+  "target": "ANDOR_Modular",
+  "identity": "/MODULAR",
+  "tagline": "Invent an instrument",
+  "patchExtension": ".andormodular",
+  "moduleExtension": ".andormodule",
+  "stateType": "ANDOR_MODULAR",
+  "created": "2026-11-11"
+}

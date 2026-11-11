@@ -1,0 +1,396 @@
+{
+  "format": "andormodular",
+  "schemaVersion": 1,
+  "name": "Basic Poly",
+  "author": "ANDOR",
+  "description": "One CLASSIC saw per note through the ladder filter, a filter envelope and a hall. The starting point.",
+  "settings": {
+    "polyphony": 8,
+    "voiceMode": 0,
+    "glide": 0,
+    "seed": "1",
+    "masterDb": 0,
+    "bendRange": 2,
+    "limiter": true
+  },
+  "nodes": [
+    {
+      "id": "n-0001",
+      "type": "osc.analog",
+      "version": 1,
+      "domain": "voice",
+      "x": 250,
+      "y": -75,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "coarse": 0,
+        "dcoWave": 0,
+        "drift": 0.15,
+        "fine": 0,
+        "fm": 0,
+        "keytrack": 1,
+        "level": 0.5,
+        "model": 0,
+        "octave": 0,
+        "phaseReset": 0,
+        "shape": 0.5,
+        "spread": 0.35,
+        "sub": 0,
+        "wave": 0,
+        "wideWave": 0,
+        "width": 0.5
+      }
+    },
+    {
+      "id": "n-0002",
+      "type": "event.keyboard",
+      "version": 1,
+      "domain": "event",
+      "x": 0,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "channel": 0,
+        "curve": 1,
+        "high": 127,
+        "low": 0,
+        "octave": 0
+      }
+    },
+    {
+      "id": "n-0004",
+      "type": "proc.vca",
+      "version": 1,
+      "domain": "voice",
+      "x": 750,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "attack": 0.005,
+        "decay": 0.4,
+        "level": 1,
+        "release": 0.35,
+        "sustain": 0.75,
+        "velocity": 0.6
+      }
+    },
+    {
+      "id": "n-0006",
+      "type": "util.voicemix",
+      "version": 1,
+      "domain": "global",
+      "x": 1000,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0.5,
+        "pan": 0,
+        "spread": 0.3
+      }
+    },
+    {
+      "id": "n-0008",
+      "type": "util.output",
+      "version": 1,
+      "domain": "global",
+      "x": 1750,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0,
+        "mute": 0
+      }
+    },
+    {
+      "id": "n-000a",
+      "type": "proc.filter",
+      "version": 1,
+      "domain": "voice",
+      "x": 500,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "comp": 0.5,
+        "cutoff": 900,
+        "drive": 0.1,
+        "envAmount": 0.45,
+        "keytrack": 0.5,
+        "mode": 0,
+        "resonance": 0.2
+      }
+    },
+    {
+      "id": "n-000d",
+      "type": "ctl.env",
+      "version": 1,
+      "domain": "voice",
+      "x": 250,
+      "y": 75,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "attack": 0.01,
+        "decay": 0.5,
+        "depth": 1,
+        "release": 0.5,
+        "sustain": 0.2,
+        "velocity": 0.3
+      }
+    },
+    {
+      "id": "n-000f",
+      "type": "fx.space",
+      "version": 1,
+      "domain": "global",
+      "x": 1250,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "damping": 0.4,
+        "decay": 3,
+        "gravity": 0,
+        "highcut": 6000,
+        "lowcut": 100,
+        "mix": 0.22,
+        "modulation": 0.4,
+        "predelay": 8,
+        "size": 0.5,
+        "type": 1,
+        "width": 1
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "c-0003",
+      "from": "n-0002",
+      "fromPort": "notes",
+      "to": "n-0001",
+      "toPort": "notes"
+    },
+    {
+      "id": "c-0007",
+      "from": "n-0004",
+      "fromPort": "out",
+      "to": "n-0006",
+      "toPort": "in"
+    },
+    {
+      "id": "c-000b",
+      "from": "n-0001",
+      "fromPort": "out",
+      "to": "n-000a",
+      "toPort": "in"
+    },
+    {
+      "id": "c-000c",
+      "from": "n-000a",
+      "fromPort": "out",
+      "to": "n-0004",
+      "toPort": "in"
+    },
+    {
+      "id": "c-000e",
+      "from": "n-000d",
+      "fromPort": "out",
+      "to": "n-000a",
+      "toPort": "env"
+    },
+    {
+      "id": "c-0010",
+      "from": "n-0006",
+      "fromPort": "out",
+      "to": "n-000f",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0011",
+      "from": "n-000f",
+      "fromPort": "out",
+      "to": "n-0008",
+      "toPort": "in"
+    }
+  ],
+  "groups": [],
+  "macros": [
+    {
+      "name": "CUTOFF",
+      "value": 0.501784729875191,
+      "default": 0.501784729875191,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-000a",
+          "param": "cutoff",
+          "min": 0.25,
+          "max": 0.85,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "RESONANCE",
+      "value": 0.25,
+      "default": 0.25,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-000a",
+          "param": "resonance",
+          "min": 0,
+          "max": 0.8,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "ENVELOPE",
+      "value": 0.5,
+      "default": 0.5,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-000a",
+          "param": "envAmount",
+          "min": 0.5,
+          "max": 0.95,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "ATTACK",
+      "value": 0.2912375018066745,
+      "default": 0.2912375018066745,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-0004",
+          "param": "attack",
+          "min": 0,
+          "max": 0.6,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "RELEASE",
+      "value": 0.551065908093665,
+      "default": 0.551065908093665,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-0004",
+          "param": "release",
+          "min": 0.2,
+          "max": 0.8,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "DRIFT",
+      "value": 0.15,
+      "default": 0.15,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-0001",
+          "param": "drift",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "SPACE",
+      "value": 0.31428571428571433,
+      "default": 0.31428571428571433,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-000f",
+          "param": "mix",
+          "min": 0,
+          "max": 0.7,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "WIDTH",
+      "value": 0.4999999999999999,
+      "default": 0.4999999999999999,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-0001",
+          "param": "width",
+          "min": 0.2,
+          "max": 0.8,
+          "curve": "linear"
+        }
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    }
+  ],
+  "scenePosition": 0,
+  "currentScene": 0,
+  "hostBindings": [],
+  "view": {
+    "zoom": 1,
+    "panX": 0,
+    "panY": 0,
+    "group": "",
+    "play": false,
+    "panelLayout": 0,
+    "visualisation": "scope"
+  },
+  "evolve": {
+    "seed": "1",
+    "generation": 0
+  },
+  "idCounter": "18",
+  "dependencies": []
+}

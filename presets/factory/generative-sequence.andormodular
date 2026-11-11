@@ -1,0 +1,402 @@
+{
+  "format": "andormodular",
+  "schemaVersion": 1,
+  "name": "Generative Sequence",
+  "author": "ANDOR",
+  "description": "A seeded melody in D dorian for two oscillators an octave apart: the same seed plays the same notes, always.",
+  "settings": {
+    "polyphony": 8,
+    "voiceMode": 0,
+    "glide": 0,
+    "seed": "1",
+    "masterDb": 0,
+    "bendRange": 2,
+    "limiter": true
+  },
+  "nodes": [
+    {
+      "id": "n-0001",
+      "type": "osc.analog",
+      "version": 1,
+      "domain": "voice",
+      "x": 250,
+      "y": -75,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "coarse": 0,
+        "dcoWave": 0,
+        "drift": 0.15,
+        "fine": 0,
+        "fm": 0,
+        "keytrack": 1,
+        "level": 0.5,
+        "model": 0,
+        "octave": 0,
+        "phaseReset": 0,
+        "shape": 0.5,
+        "spread": 0.35,
+        "sub": 0,
+        "wave": 0,
+        "wideWave": 0,
+        "width": 0.5
+      }
+    },
+    {
+      "id": "n-0002",
+      "type": "event.keyboard",
+      "version": 1,
+      "domain": "event",
+      "x": 0,
+      "y": -75,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "channel": 0,
+        "curve": 1,
+        "high": 127,
+        "low": 0,
+        "octave": 0
+      }
+    },
+    {
+      "id": "n-0004",
+      "type": "proc.vca",
+      "version": 1,
+      "domain": "voice",
+      "x": 500,
+      "y": -75,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "attack": 0.005,
+        "decay": 0.3,
+        "level": 1,
+        "release": 0.35,
+        "sustain": 0.2,
+        "velocity": 0.6
+      }
+    },
+    {
+      "id": "n-0006",
+      "type": "util.voicemix",
+      "version": 1,
+      "domain": "global",
+      "x": 750,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0.5,
+        "pan": 0,
+        "spread": 0.3
+      }
+    },
+    {
+      "id": "n-0008",
+      "type": "util.output",
+      "version": 1,
+      "domain": "global",
+      "x": 1500,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0,
+        "mute": 0
+      }
+    },
+    {
+      "id": "n-000a",
+      "type": "osc.analog",
+      "version": 1,
+      "domain": "voice",
+      "x": 250,
+      "y": 75,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "coarse": 0,
+        "dcoWave": 0,
+        "drift": 0.15,
+        "fine": 0,
+        "fm": 0,
+        "keytrack": 1,
+        "level": 0.5,
+        "model": 2,
+        "octave": 0,
+        "phaseReset": 0,
+        "shape": 0.5,
+        "spread": 0.35,
+        "sub": 0,
+        "wave": 0,
+        "wideWave": 2,
+        "width": 0.5
+      }
+    },
+    {
+      "id": "n-000c",
+      "type": "proc.vca",
+      "version": 1,
+      "domain": "voice",
+      "x": 500,
+      "y": 75,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "attack": 0.005,
+        "decay": 0.5,
+        "level": 1,
+        "release": 0.35,
+        "sustain": 0,
+        "velocity": 0.6
+      }
+    },
+    {
+      "id": "n-000f",
+      "type": "event.generative",
+      "version": 1,
+      "domain": "event",
+      "x": 0,
+      "y": 75,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "bars": 2,
+        "density": 0.55,
+        "follow": 0,
+        "gate": 0.7,
+        "low": 55,
+        "range": 2,
+        "rate": 2,
+        "root": 2,
+        "scale": 2,
+        "stepwise": 0.65,
+        "variation": 0
+      }
+    },
+    {
+      "id": "n-0012",
+      "type": "fx.echo",
+      "version": 1,
+      "domain": "global",
+      "x": 1000,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "age": 0.35,
+        "division": 5,
+        "feedback": 0.45,
+        "mix": 0.3,
+        "stereo": 1,
+        "sync": 1,
+        "time": 375,
+        "tone": 0.5,
+        "type": 0
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "c-0005",
+      "from": "n-0001",
+      "fromPort": "out",
+      "to": "n-0004",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0007",
+      "from": "n-0004",
+      "fromPort": "out",
+      "to": "n-0006",
+      "toPort": "in"
+    },
+    {
+      "id": "c-000d",
+      "from": "n-000a",
+      "fromPort": "out",
+      "to": "n-000c",
+      "toPort": "in"
+    },
+    {
+      "id": "c-000e",
+      "from": "n-000c",
+      "fromPort": "out",
+      "to": "n-0006",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0010",
+      "from": "n-000f",
+      "fromPort": "notes",
+      "to": "n-0001",
+      "toPort": "notes"
+    },
+    {
+      "id": "c-0011",
+      "from": "n-000f",
+      "fromPort": "notes",
+      "to": "n-000a",
+      "toPort": "notes",
+      "transpose": 12
+    },
+    {
+      "id": "c-0013",
+      "from": "n-0006",
+      "fromPort": "out",
+      "to": "n-0012",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0014",
+      "from": "n-0012",
+      "fromPort": "out",
+      "to": "n-0008",
+      "toPort": "in"
+    }
+  ],
+  "groups": [],
+  "macros": [
+    {
+      "name": "DENSITY",
+      "value": 0.5294117647058825,
+      "default": 0.5294117647058825,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-000f",
+          "param": "density",
+          "min": 0.1,
+          "max": 0.95,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "VARIATION",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-000f",
+          "param": "variation",
+          "min": 0,
+          "max": 0.01,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "STEPWISE",
+      "value": 0.65,
+      "default": 0.65,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-000f",
+          "param": "stepwise",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "ECHO",
+      "value": 0.4285714285714286,
+      "default": 0.4285714285714286,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-0012",
+          "param": "mix",
+          "min": 0,
+          "max": 0.7,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    }
+  ],
+  "scenes": [
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    }
+  ],
+  "scenePosition": 0,
+  "currentScene": 0,
+  "hostBindings": [],
+  "view": {
+    "zoom": 1,
+    "panX": 0,
+    "panY": 0,
+    "group": "",
+    "play": false,
+    "panelLayout": 0,
+    "visualisation": "scope"
+  },
+  "evolve": {
+    "seed": "1",
+    "generation": 0
+  },
+  "idCounter": "21",
+  "dependencies": []
+}

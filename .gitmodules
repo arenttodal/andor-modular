@@ -1,0 +1,6 @@
+[submodule "external/osp"]
+	path = external/osp
+	url = https://github.com/arenttodal/OSP
+[submodule "external/analog"]
+	path = external/analog
+	url = https://github.com/arenttodal/analog

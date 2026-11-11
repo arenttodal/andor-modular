@@ -1,0 +1,233 @@
+{
+  "format": "andormodule",
+  "schemaVersion": 1,
+  "name": "RHYTHM GATE",
+  "author": "",
+  "description": "",
+  "settings": {
+    "polyphony": 8,
+    "voiceMode": 0,
+    "glide": 0,
+    "seed": "1",
+    "masterDb": 0,
+    "bendRange": 2,
+    "limiter": true
+  },
+  "nodes": [
+    {
+      "id": "n-000a",
+      "type": "util.gain",
+      "version": 1,
+      "domain": "global",
+      "x": 590,
+      "y": 40,
+      "size": 1,
+      "enabled": true,
+      "group": "g-000f",
+      "params": {
+        "gain": 0,
+        "invert": 0
+      }
+    },
+    {
+      "id": "n-000d",
+      "type": "ctl.lfo",
+      "version": 1,
+      "domain": "global",
+      "x": 0,
+      "y": 200,
+      "size": 1,
+      "enabled": true,
+      "group": "g-000f",
+      "params": {
+        "depth": 1,
+        "division": 2,
+        "phase": 0,
+        "rate": 1,
+        "retrigger": 0,
+        "shape": 4,
+        "sync": 1,
+        "unipolar": 1
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "c-000e",
+      "from": "n-000d",
+      "fromPort": "out",
+      "to": "n-000a",
+      "toPort": "cv"
+    }
+  ],
+  "groups": [
+    {
+      "id": "g-000f",
+      "name": "RHYTHM GATE",
+      "x": 295,
+      "y": 120,
+      "collapsed": true,
+      "ports": [
+        {
+          "name": "IN",
+          "node": "n-000a",
+          "port": "in",
+          "input": true
+        },
+        {
+          "name": "OUT",
+          "node": "n-000a",
+          "port": "out",
+          "input": false
+        }
+      ],
+      "controls": [
+        {
+          "name": "DEPTH",
+          "value": 1,
+          "default": 1,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-000d",
+              "param": "depth",
+              "min": 0,
+              "max": 1,
+              "curve": "linear"
+            }
+          ]
+        },
+        {
+          "name": "SHAPE",
+          "value": 0.6666666666666666,
+          "default": 0.6666666666666666,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-000d",
+              "param": "shape",
+              "min": 0,
+              "max": 1,
+              "curve": "linear"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "macros": [
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    }
+  ],
+  "scenes": [
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    }
+  ],
+  "scenePosition": 0,
+  "currentScene": 0,
+  "hostBindings": [],
+  "view": {
+    "zoom": 1,
+    "panX": 0,
+    "panY": 0,
+    "group": "",
+    "play": false,
+    "panelLayout": 0,
+    "visualisation": "scope"
+  },
+  "evolve": {
+    "seed": "1",
+    "generation": 0
+  },
+  "idCounter": "1",
+  "dependencies": [],
+  "module": "RHYTHM GATE",
+  "root": "g-000f",
+  "hash": "6a607bed1df18dc4"
+}

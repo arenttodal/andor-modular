@@ -1,0 +1,314 @@
+{
+  "format": "andormodule",
+  "schemaVersion": 1,
+  "name": "PLUCK VOICE",
+  "author": "",
+  "description": "",
+  "settings": {
+    "polyphony": 8,
+    "voiceMode": 0,
+    "glide": 0,
+    "seed": "1",
+    "masterDb": 0,
+    "bendRange": 2,
+    "limiter": true
+  },
+  "nodes": [
+    {
+      "id": "n-0001",
+      "type": "osc.analog",
+      "version": 1,
+      "domain": "voice",
+      "x": 0,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "group": "g-000f",
+      "params": {
+        "coarse": 0,
+        "dcoWave": 0,
+        "drift": 0.15,
+        "fine": 0,
+        "fm": 0,
+        "keytrack": 1,
+        "level": 0.5,
+        "model": 0,
+        "octave": 0,
+        "phaseReset": 0,
+        "shape": 0.5,
+        "spread": 0.35,
+        "sub": 0,
+        "wave": 2,
+        "wideWave": 0,
+        "width": 0.5
+      }
+    },
+    {
+      "id": "n-0004",
+      "type": "proc.vca",
+      "version": 1,
+      "domain": "voice",
+      "x": 230,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "group": "g-000f",
+      "params": {
+        "attack": 0.005,
+        "decay": 0.25,
+        "level": 1,
+        "release": 0.3,
+        "sustain": 0,
+        "velocity": 0.6
+      }
+    },
+    {
+      "id": "n-000a",
+      "type": "proc.filter",
+      "version": 1,
+      "domain": "voice",
+      "x": 115,
+      "y": 40,
+      "size": 1,
+      "enabled": true,
+      "group": "g-000f",
+      "params": {
+        "comp": 0.5,
+        "cutoff": 500,
+        "drive": 0.1,
+        "envAmount": 0.7,
+        "keytrack": 0.5,
+        "mode": 0,
+        "resonance": 0.2
+      }
+    },
+    {
+      "id": "n-000d",
+      "type": "ctl.env",
+      "version": 1,
+      "domain": "voice",
+      "x": 0,
+      "y": 160,
+      "size": 1,
+      "enabled": true,
+      "group": "g-000f",
+      "params": {
+        "attack": 0.01,
+        "decay": 0.18,
+        "depth": 1,
+        "release": 0.5,
+        "sustain": 0,
+        "velocity": 0.3
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "c-000b",
+      "from": "n-0001",
+      "fromPort": "out",
+      "to": "n-000a",
+      "toPort": "in"
+    },
+    {
+      "id": "c-000c",
+      "from": "n-000a",
+      "fromPort": "out",
+      "to": "n-0004",
+      "toPort": "in"
+    },
+    {
+      "id": "c-000e",
+      "from": "n-000d",
+      "fromPort": "out",
+      "to": "n-000a",
+      "toPort": "env"
+    }
+  ],
+  "groups": [
+    {
+      "id": "g-000f",
+      "name": "PLUCK VOICE",
+      "x": 86.25,
+      "y": 50,
+      "collapsed": true,
+      "ports": [
+        {
+          "name": "NOTES",
+          "node": "n-0001",
+          "port": "notes",
+          "input": true
+        },
+        {
+          "name": "OUT",
+          "node": "n-0004",
+          "port": "out",
+          "input": false
+        }
+      ],
+      "controls": [
+        {
+          "name": "BRIGHT",
+          "value": 0.4659800028906792,
+          "default": 0.4659800028906792,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-000a",
+              "param": "cutoff",
+              "min": 0,
+              "max": 1,
+              "curve": "linear"
+            }
+          ]
+        },
+        {
+          "name": "SNAP",
+          "value": 0.4714596664712363,
+          "default": 0.4714596664712363,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-000d",
+              "param": "decay",
+              "min": 0,
+              "max": 1,
+              "curve": "linear"
+            }
+          ]
+        },
+        {
+          "name": "LENGTH",
+          "value": 0.514678753773118,
+          "default": 0.514678753773118,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-0004",
+              "param": "decay",
+              "min": 0,
+              "max": 1,
+              "curve": "linear"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "macros": [
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    }
+  ],
+  "scenes": [
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    }
+  ],
+  "scenePosition": 0,
+  "currentScene": 0,
+  "hostBindings": [],
+  "view": {
+    "zoom": 1,
+    "panX": 0,
+    "panY": 0,
+    "group": "",
+    "play": false,
+    "panelLayout": 0,
+    "visualisation": "scope"
+  },
+  "evolve": {
+    "seed": "1",
+    "generation": 0
+  },
+  "idCounter": "1",
+  "dependencies": [],
+  "module": "PLUCK VOICE",
+  "root": "g-000f",
+  "hash": "c7fefa883fa1e18a"
+}

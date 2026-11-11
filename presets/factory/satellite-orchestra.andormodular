@@ -1,0 +1,589 @@
+{
+  "format": "andormodular",
+  "schemaVersion": 1,
+  "name": "Satellite Orchestra",
+  "author": "ANDOR",
+  "description": "Three voices in three orbits (ORBIT, BOUNCE, PAN) around one room.",
+  "settings": {
+    "polyphony": 8,
+    "voiceMode": 0,
+    "glide": 0,
+    "seed": "1",
+    "masterDb": 0,
+    "bendRange": 2,
+    "limiter": true
+  },
+  "nodes": [
+    {
+      "id": "n-0001",
+      "type": "osc.analog",
+      "version": 1,
+      "domain": "voice",
+      "x": 250,
+      "y": -150,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "coarse": 0,
+        "dcoWave": 0,
+        "drift": 0.15,
+        "fine": 0,
+        "fm": 0,
+        "keytrack": 1,
+        "level": 0.5,
+        "model": 0,
+        "octave": 0,
+        "phaseReset": 0,
+        "shape": 0.5,
+        "spread": 0.35,
+        "sub": 0,
+        "wave": 0,
+        "wideWave": 0,
+        "width": 0.5
+      }
+    },
+    {
+      "id": "n-0002",
+      "type": "event.keyboard",
+      "version": 1,
+      "domain": "event",
+      "x": 0,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "channel": 0,
+        "curve": 1,
+        "high": 127,
+        "low": 0,
+        "octave": 0
+      }
+    },
+    {
+      "id": "n-0004",
+      "type": "proc.vca",
+      "version": 1,
+      "domain": "voice",
+      "x": 500,
+      "y": -150,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "attack": 0.005,
+        "decay": 0.4,
+        "level": 1,
+        "release": 0.35,
+        "sustain": 0.75,
+        "velocity": 0.6
+      }
+    },
+    {
+      "id": "n-0006",
+      "type": "util.voicemix",
+      "version": 1,
+      "domain": "global",
+      "x": 750,
+      "y": -150,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0.5,
+        "pan": 0,
+        "spread": 0.3
+      }
+    },
+    {
+      "id": "n-0008",
+      "type": "util.output",
+      "version": 1,
+      "domain": "global",
+      "x": 2000,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0,
+        "mute": 0
+      }
+    },
+    {
+      "id": "n-000a",
+      "type": "osc.analog",
+      "version": 1,
+      "domain": "voice",
+      "x": 250,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "coarse": 0,
+        "dcoWave": 0,
+        "drift": 0.15,
+        "fine": 0,
+        "fm": 0,
+        "keytrack": 1,
+        "level": 0.5,
+        "model": 1,
+        "octave": 1,
+        "phaseReset": 0,
+        "shape": 0.5,
+        "spread": 0.35,
+        "sub": 0,
+        "wave": 0,
+        "wideWave": 0,
+        "width": 0.5
+      }
+    },
+    {
+      "id": "n-000c",
+      "type": "proc.vca",
+      "version": 1,
+      "domain": "voice",
+      "x": 500,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "attack": 0.005,
+        "decay": 0.4,
+        "level": 1,
+        "release": 0.35,
+        "sustain": 0.75,
+        "velocity": 0.6
+      }
+    },
+    {
+      "id": "n-000f",
+      "type": "src.noise",
+      "version": 1,
+      "domain": "voice",
+      "x": 250,
+      "y": 150,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "color": 1,
+        "keytrack": 1,
+        "level": 0.4,
+        "motion": 0,
+        "tone": 0.35
+      }
+    },
+    {
+      "id": "n-0011",
+      "type": "proc.vca",
+      "version": 1,
+      "domain": "voice",
+      "x": 500,
+      "y": 150,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "attack": 0.005,
+        "decay": 0.4,
+        "level": 1,
+        "release": 0.35,
+        "sustain": 0.75,
+        "velocity": 0.6
+      }
+    },
+    {
+      "id": "n-0014",
+      "type": "util.voicemix",
+      "version": 1,
+      "domain": "global",
+      "x": 750,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0.5,
+        "pan": 0,
+        "spread": 0.3
+      }
+    },
+    {
+      "id": "n-0016",
+      "type": "util.voicemix",
+      "version": 1,
+      "domain": "global",
+      "x": 750,
+      "y": 150,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0.5,
+        "pan": 0,
+        "spread": 0.3
+      }
+    },
+    {
+      "id": "n-0018",
+      "type": "spatial.satellite",
+      "version": 1,
+      "domain": "global",
+      "x": 1000,
+      "y": -150,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "depth": 0.8,
+        "division": 0,
+        "manual": 0,
+        "mode": 1,
+        "phase": 0,
+        "rate": 0.25,
+        "sync": 0,
+        "width": 1
+      }
+    },
+    {
+      "id": "n-001b",
+      "type": "spatial.satellite",
+      "version": 1,
+      "domain": "global",
+      "x": 1000,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "depth": 0.8,
+        "division": 0,
+        "manual": 0,
+        "mode": 2,
+        "phase": 0,
+        "rate": 0.4,
+        "sync": 0,
+        "width": 1
+      }
+    },
+    {
+      "id": "n-001d",
+      "type": "util.mixer",
+      "version": 1,
+      "domain": "global",
+      "x": 1250,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level1": -3,
+        "level2": -3,
+        "level3": -3,
+        "level4": -3,
+        "master": 0,
+        "mute1": 0,
+        "mute2": 0,
+        "mute3": 0,
+        "mute4": 0,
+        "pan1": 0,
+        "pan2": 0,
+        "pan3": 0,
+        "pan4": 0,
+        "solo1": 0,
+        "solo2": 0,
+        "solo3": 0,
+        "solo4": 0
+      }
+    },
+    {
+      "id": "n-0021",
+      "type": "spatial.satellite",
+      "version": 1,
+      "domain": "global",
+      "x": 1000,
+      "y": 150,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "depth": 0.8,
+        "division": 0,
+        "manual": 0,
+        "mode": 0,
+        "phase": 0,
+        "rate": 0.11,
+        "sync": 0,
+        "width": 1
+      }
+    },
+    {
+      "id": "n-0024",
+      "type": "fx.space",
+      "version": 1,
+      "domain": "global",
+      "x": 1500,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "damping": 0.4,
+        "decay": 3,
+        "gravity": 0,
+        "highcut": 6000,
+        "lowcut": 100,
+        "mix": 0.35,
+        "modulation": 0.4,
+        "predelay": 8,
+        "size": 0.5,
+        "type": 1,
+        "width": 1
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "c-0003",
+      "from": "n-0002",
+      "fromPort": "notes",
+      "to": "n-0001",
+      "toPort": "notes"
+    },
+    {
+      "id": "c-0005",
+      "from": "n-0001",
+      "fromPort": "out",
+      "to": "n-0004",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0007",
+      "from": "n-0004",
+      "fromPort": "out",
+      "to": "n-0006",
+      "toPort": "in"
+    },
+    {
+      "id": "c-000b",
+      "from": "n-0002",
+      "fromPort": "notes",
+      "to": "n-000a",
+      "toPort": "notes"
+    },
+    {
+      "id": "c-000d",
+      "from": "n-000a",
+      "fromPort": "out",
+      "to": "n-000c",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0010",
+      "from": "n-0002",
+      "fromPort": "notes",
+      "to": "n-000f",
+      "toPort": "notes"
+    },
+    {
+      "id": "c-0012",
+      "from": "n-000f",
+      "fromPort": "out",
+      "to": "n-0011",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0015",
+      "from": "n-000c",
+      "fromPort": "out",
+      "to": "n-0014",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0017",
+      "from": "n-0011",
+      "fromPort": "out",
+      "to": "n-0016",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0019",
+      "from": "n-0006",
+      "fromPort": "out",
+      "to": "n-0018",
+      "toPort": "in"
+    },
+    {
+      "id": "c-001c",
+      "from": "n-0014",
+      "fromPort": "out",
+      "to": "n-001b",
+      "toPort": "in"
+    },
+    {
+      "id": "c-001e",
+      "from": "n-0018",
+      "fromPort": "out",
+      "to": "n-001d",
+      "toPort": "in1"
+    },
+    {
+      "id": "c-001f",
+      "from": "n-001b",
+      "fromPort": "out",
+      "to": "n-001d",
+      "toPort": "in2"
+    },
+    {
+      "id": "c-0022",
+      "from": "n-0016",
+      "fromPort": "out",
+      "to": "n-0021",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0023",
+      "from": "n-0021",
+      "fromPort": "out",
+      "to": "n-001d",
+      "toPort": "in3"
+    },
+    {
+      "id": "c-0025",
+      "from": "n-001d",
+      "fromPort": "out",
+      "to": "n-0024",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0026",
+      "from": "n-0024",
+      "fromPort": "out",
+      "to": "n-0008",
+      "toPort": "in"
+    }
+  ],
+  "groups": [],
+  "macros": [
+    {
+      "name": "ORBIT",
+      "value": 0.8,
+      "default": 0.8,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-0018",
+          "param": "depth",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "SPEED",
+      "value": 0.5359241118343369,
+      "default": 0.5359241118343369,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-0018",
+          "param": "rate",
+          "min": 0.1,
+          "max": 0.7,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "ROOM",
+      "value": 0.43749999999999994,
+      "default": 0.43749999999999994,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-0024",
+          "param": "mix",
+          "min": 0,
+          "max": 0.8,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    }
+  ],
+  "scenes": [
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    }
+  ],
+  "scenePosition": 0,
+  "currentScene": 0,
+  "hostBindings": [],
+  "view": {
+    "zoom": 1,
+    "panX": 0,
+    "panY": 0,
+    "group": "",
+    "play": false,
+    "panelLayout": 0,
+    "visualisation": "scope"
+  },
+  "evolve": {
+    "seed": "1",
+    "generation": 0
+  },
+  "idCounter": "39",
+  "dependencies": []
+}

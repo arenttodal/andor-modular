@@ -1,0 +1,513 @@
+{
+  "format": "andormodular",
+  "schemaVersion": 1,
+  "name": "Bowed Machine",
+  "author": "ANDOR",
+  "description": "A bowed recording morphed into a DCO and filtered per voice, grouped as one instrument with four controls.",
+  "settings": {
+    "polyphony": 8,
+    "voiceMode": 0,
+    "glide": 0,
+    "seed": "1",
+    "masterDb": 0,
+    "bendRange": 2,
+    "limiter": true
+  },
+  "nodes": [
+    {
+      "id": "n-0001",
+      "type": "osc.analog",
+      "version": 1,
+      "domain": "voice",
+      "x": 0,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "group": "g-0016",
+      "params": {
+        "coarse": 0,
+        "dcoWave": 0,
+        "drift": 0.15,
+        "fine": 0,
+        "fm": 0,
+        "keytrack": 1,
+        "level": 0.5,
+        "model": 1,
+        "octave": 0,
+        "phaseReset": 0,
+        "shape": 0.5,
+        "spread": 0.35,
+        "sub": 0,
+        "wave": 0,
+        "wideWave": 0,
+        "width": 0.5
+      }
+    },
+    {
+      "id": "n-0002",
+      "type": "event.keyboard",
+      "version": 1,
+      "domain": "event",
+      "x": 0,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "channel": 0,
+        "curve": 1,
+        "high": 127,
+        "low": 0,
+        "octave": 0
+      }
+    },
+    {
+      "id": "n-0004",
+      "type": "proc.vca",
+      "version": 1,
+      "domain": "voice",
+      "x": 230,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "group": "g-0016",
+      "params": {
+        "attack": 0.15,
+        "decay": 0.4,
+        "level": 1,
+        "release": 1.5,
+        "sustain": 0.75,
+        "velocity": 0.6
+      }
+    },
+    {
+      "id": "n-0006",
+      "type": "util.voicemix",
+      "version": 1,
+      "domain": "global",
+      "x": 250,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0.5,
+        "pan": 0,
+        "spread": 0.3
+      }
+    },
+    {
+      "id": "n-0008",
+      "type": "util.output",
+      "version": 1,
+      "domain": "global",
+      "x": 1000,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "level": 0,
+        "mute": 0
+      }
+    },
+    {
+      "id": "n-000a",
+      "type": "src.organic",
+      "version": 1,
+      "domain": "voice",
+      "x": 0,
+      "y": 200,
+      "size": 1,
+      "enabled": true,
+      "group": "g-0016",
+      "params": {
+        "keytrack": 1,
+        "level": 1,
+        "loop": 1,
+        "reverse": 0,
+        "root": -1,
+        "start": 0,
+        "tune": 0
+      },
+      "strings": {
+        "sample": "samples/bowed-c3.wav"
+      }
+    },
+    {
+      "id": "n-000f",
+      "type": "proc.morph",
+      "version": 1,
+      "domain": "voice",
+      "x": 200,
+      "y": 100,
+      "size": 1,
+      "enabled": true,
+      "group": "g-0016",
+      "params": {
+        "attack": 0.5,
+        "detail": 0.5,
+        "formants": 0,
+        "levelMatch": 1,
+        "method": 0,
+        "output": 0,
+        "position": 0.65,
+        "texture": 0.5,
+        "tuneA": 0,
+        "tuneB": 0
+      }
+    },
+    {
+      "id": "n-0013",
+      "type": "proc.filter",
+      "version": 1,
+      "domain": "voice",
+      "x": 215,
+      "y": 90,
+      "size": 1,
+      "enabled": true,
+      "group": "g-0016",
+      "params": {
+        "comp": 0.5,
+        "cutoff": 2400,
+        "drive": 0.1,
+        "envAmount": 0.3,
+        "keytrack": 0.5,
+        "mode": 0,
+        "resonance": 0.2
+      }
+    },
+    {
+      "id": "n-0017",
+      "type": "fx.space",
+      "version": 1,
+      "domain": "global",
+      "x": 500,
+      "y": 0,
+      "size": 1,
+      "enabled": true,
+      "params": {
+        "damping": 0.4,
+        "decay": 3,
+        "gravity": 0,
+        "highcut": 6000,
+        "lowcut": 100,
+        "mix": 0.3,
+        "modulation": 0.4,
+        "predelay": 8,
+        "size": 0.5,
+        "type": 1,
+        "width": 1
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "c-0003",
+      "from": "n-0002",
+      "fromPort": "notes",
+      "to": "n-0001",
+      "toPort": "notes"
+    },
+    {
+      "id": "c-0007",
+      "from": "n-0004",
+      "fromPort": "out",
+      "to": "n-0006",
+      "toPort": "in"
+    },
+    {
+      "id": "c-000b",
+      "from": "n-0002",
+      "fromPort": "notes",
+      "to": "n-000a",
+      "toPort": "notes"
+    },
+    {
+      "id": "c-0010",
+      "from": "n-0001",
+      "fromPort": "out",
+      "to": "n-000f",
+      "toPort": "a"
+    },
+    {
+      "id": "c-0011",
+      "from": "n-000a",
+      "fromPort": "out",
+      "to": "n-000f",
+      "toPort": "b"
+    },
+    {
+      "id": "c-0014",
+      "from": "n-000f",
+      "fromPort": "out",
+      "to": "n-0013",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0015",
+      "from": "n-0013",
+      "fromPort": "out",
+      "to": "n-0004",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0018",
+      "from": "n-0006",
+      "fromPort": "out",
+      "to": "n-0017",
+      "toPort": "in"
+    },
+    {
+      "id": "c-0019",
+      "from": "n-0017",
+      "fromPort": "out",
+      "to": "n-0008",
+      "toPort": "in"
+    }
+  ],
+  "groups": [
+    {
+      "id": "g-0016",
+      "name": "BOWED MACHINE",
+      "x": 129,
+      "y": 78,
+      "collapsed": true,
+      "ports": [
+        {
+          "name": "NOTES",
+          "node": "n-0001",
+          "port": "notes",
+          "input": true
+        },
+        {
+          "name": "OUT",
+          "node": "n-0004",
+          "port": "out",
+          "input": false
+        },
+        {
+          "name": "NOTES",
+          "node": "n-000a",
+          "port": "notes",
+          "input": true
+        }
+      ],
+      "controls": [
+        {
+          "name": "BOW",
+          "value": 0.65,
+          "default": 0.65,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-000f",
+              "param": "position",
+              "min": 0,
+              "max": 1,
+              "curve": "linear"
+            }
+          ]
+        },
+        {
+          "name": "RESIN",
+          "value": 0.5,
+          "default": 0.5,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-000f",
+              "param": "texture",
+              "min": 0,
+              "max": 1,
+              "curve": "linear"
+            }
+          ]
+        },
+        {
+          "name": "TONE",
+          "value": 0.6047083313064744,
+          "default": 0.6047083313064744,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-0013",
+              "param": "cutoff",
+              "min": 0.3,
+              "max": 0.95,
+              "curve": "linear"
+            }
+          ]
+        },
+        {
+          "name": "RING",
+          "value": 0.732008246911291,
+          "default": 0.732008246911291,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "n-0004",
+              "param": "release",
+              "min": 0.2,
+              "max": 0.9,
+              "curve": "linear"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "macros": [
+    {
+      "name": "BOW",
+      "value": 0.65,
+      "default": 0.65,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "g-0016",
+          "param": "control.0",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "RESIN",
+      "value": 0.5,
+      "default": 0.5,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "g-0016",
+          "param": "control.1",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "TONE",
+      "value": 0.6047083313064744,
+      "default": 0.6047083313064744,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "g-0016",
+          "param": "control.2",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "RING",
+      "value": 0.732008246911291,
+      "default": 0.732008246911291,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "g-0016",
+          "param": "control.3",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "SPACE",
+      "value": 0.37499999999999994,
+      "default": 0.37499999999999994,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "n-0017",
+          "param": "mix",
+          "min": 0,
+          "max": 0.8,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    },
+    {
+      "name": "",
+      "value": 0,
+      "default": 0,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": []
+    }
+  ],
+  "scenes": [
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "",
+      "captured": false,
+      "values": {},
+      "macros": [0, 0, 0, 0, 0, 0, 0, 0]
+    }
+  ],
+  "scenePosition": 0,
+  "currentScene": 0,
+  "hostBindings": [],
+  "view": {
+    "zoom": 1,
+    "panX": 0,
+    "panY": 0,
+    "group": "",
+    "play": false,
+    "panelLayout": 0,
+    "visualisation": "scope"
+  },
+  "evolve": {
+    "seed": "1",
+    "generation": 0
+  },
+  "idCounter": "26",
+  "dependencies": [
+    "samples/bowed-c3.wav"
+  ]
+}
