@@ -60,6 +60,7 @@ set(MODULAR_PRODUCT_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/QuickAdd.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/RackHost.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/Racks.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/ModuleRack.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/Rack.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/PlayView.cpp)
 set(MODULAR_PRODUCT_INCLUDES

@@ -81,7 +81,7 @@ void RackHost::pull()
     {
         const auto& b = bound[index];
         auto* p = state->getParameter (id);
-        const float target = p->convertTo0to1 (static_cast<float> (toRack (b, doc.paramValue (session.registry(), node, b.param))));
+        const float target = p->convertTo0to1 (static_cast<float> (b.read ? b.read() : toRack (b, doc.paramValue (session.registry(), node, b.param))));
         if (std::abs (p->getValue() - target) > 1.0e-6f)
             p->setValueNotifyingHost (target);
     }
@@ -118,6 +118,11 @@ void RackHost::parameterChanged (const juce::String& id, float value)
     const auto& b = bound[it->second];
     if (! juce::MessageManager::getInstance()->isThisTheMessageThread())
         return;   // (the rack's state has no other writer: nothing here is automated)
+    if (b.write)
+    {
+        b.write (static_cast<double> (value));
+        return;
+    }
     if (! gesture)
         touch();
     session.setParam (node, b.param, toNode (b, static_cast<double> (value)));

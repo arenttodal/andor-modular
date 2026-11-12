@@ -26,6 +26,51 @@ namespace
             fx = afx::makeProcessor (T);
             if (fx != nullptr)
                 fx->prepare (pc.sampleRate, maxChunk);
+            // (what its rack draws live: found once, here, off the audio thread)
+            comp = dynamic_cast<afx::Compressor*> (fx.get());
+            phaser = dynamic_cast<afx::Phaser*> (fx.get());
+            flanger = dynamic_cast<afx::Flanger*> (fx.get());
+            spread = dynamic_cast<afx::StereoSpread*> (fx.get());
+            retro = dynamic_cast<afx::Retro*> (fx.get());
+        }
+        /** The processor's own meters (atomics it already keeps for ANDOR Analog's graphs):
+            COMPRESSOR gain reduction and input level (dB); PHASER its notches (Hz); FLANGER its
+            delay now (ms); SPREAD correlation, side and mid level; RETRO bits, rate (kHz), wow
+            (cents), kept fraction. */
+        void telemetry (Telemetry& t) const noexcept override
+        {
+            if (comp != nullptr)
+            {
+                t.values[0] = comp->reductionDb.load (std::memory_order_relaxed);
+                t.values[1] = comp->inputDb.load (std::memory_order_relaxed);
+                t.count = 2;
+            }
+            else if (phaser != nullptr)
+            {
+                for (std::size_t i = 0; i < 6; ++i)
+                    t.values[i] = phaser->notchHz[i].load (std::memory_order_relaxed);
+                t.count = 6;
+            }
+            else if (flanger != nullptr)
+            {
+                t.values[0] = flanger->delayNowMs.load (std::memory_order_relaxed);
+                t.count = 1;
+            }
+            else if (spread != nullptr)
+            {
+                t.values[0] = spread->correlation.load (std::memory_order_relaxed);
+                t.values[1] = spread->sideLevel.load (std::memory_order_relaxed);
+                t.values[2] = spread->midLevel.load (std::memory_order_relaxed);
+                t.count = 3;
+            }
+            else if (retro != nullptr)
+            {
+                t.values[0] = retro->effectiveBits.load (std::memory_order_relaxed);
+                t.values[1] = retro->effectiveRateKHz.load (std::memory_order_relaxed);
+                t.values[2] = retro->wowCents.load (std::memory_order_relaxed);
+                t.values[3] = retro->keptFraction.load (std::memory_order_relaxed);
+                t.count = 4;
+            }
         }
         void reset() noexcept override
         {
@@ -50,6 +95,11 @@ namespace
         Fill fill;
         std::unique_ptr<afx::Processor> fx;
         afx::Settings settings;
+        const afx::Compressor* comp = nullptr;
+        const afx::Phaser* phaser = nullptr;
+        const afx::Flanger* flanger = nullptr;
+        const afx::StereoSpread* spread = nullptr;
+        const afx::Retro* retro = nullptr;
     };
 
     template <afx::Type T>

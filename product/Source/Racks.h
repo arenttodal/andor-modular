@@ -18,6 +18,10 @@ struct NativeRack
         "shared": the very class ANDOR OSP and Analog show; "parts": built here from the
         family's rack parts, faceplate and drawing for a module they have no rack for. */
     juce::String provenance;
+    /** What of the patch, besides the module's own settings, the rack was built from (its
+        incoming modulations): when this changes the rack is built again. */
+    std::function<std::string()> shape;
+    std::string shapeAtBuild;
 };
 
 /** The rack library: the rack for `nodeId`'s type (and mode), or null where the module has no

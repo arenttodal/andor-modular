@@ -6,6 +6,7 @@
 #include "PluginProcessor.h"
 
 #include "ModularMaterialsData.h"
+#include "ParameterRack.h"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_session.hpp>
@@ -571,20 +572,53 @@ TEST_CASE ("The rack: one module's controls across the board's foot; the board k
     CHECK (rack.getHeight() >= 210);
     CHECK (rack.getHeight() <= 290);
     CHECK (canvas.zoomLevel() == zoom);
-    // identity left, controls centre, live display right
-    CHECK (rack.identityArea().getRight() < rack.controlsArea().getX());
-    CHECK (rack.controlsArea().getRight() < rack.displayArea().getX());
-    CHECK (rack.displayArea().getWidth() > 150);
-    // every control of the module in its current mode
+    // The family's device: its rail and name, its controls on the left, its graph on its glass
+    // on the right; every control the module has in its mode is in it (on a page, or its
+    // selector row), under the module's own names.
+    REQUIRE (rack.isNative());
+    auto* device = dynamic_cast<osp::plugin::rack::ParameterRack*> (rack.module());
+    REQUIRE (device != nullptr);
+    CHECK (device->title() == "FILTER");
+    CHECK (device->hasFaceplate());
+    CHECK ((device->headerSwitch() != nullptr || device->powerKey() != nullptr));
+    CHECK (device->graphBounds().getWidth() > 150);
+    for (const auto& cell : device->cellBounds())
+        CHECK (cell.getRight() <= device->graphBounds().getX());
     {
         const auto* n = in.session().document().findNode (filter);
         const auto* d = in.session().registry().find (n->type);
-        int shown = 0;
+        int shown = 0, found = 0;
         for (const auto& prm : d->params)
-            shown += d->paramShown (prm, n->params) ? 1 : 0;
-        CHECK (rack.controlCount() == shown);
+        {
+            if (! d->paramShown (prm, n->params))
+                continue;
+            ++shown;
+            bool here = false;
+            for (int page = 0; page < 6 && ! here; ++page)
+            {
+                device->showPage (page);
+                here = device->cellNamed (juce::String (prm.name)) != nullptr;
+            }
+            INFO (prm.name);
+            CHECK (here);
+            found += here ? 1 : 0;
+        }
+        device->showPage (0);
         CHECK (shown > 0);
+        CHECK (found == shown);
     }
+    // its ON is the module's light
+    REQUIRE (rack.binding() != nullptr);
+    CHECK (rack.binding()->parameterValue ("m.on") > 0.5f);
+    rack.binding()->setParameterValue ("m.on", 0.0f);
+    CHECK_FALSE (in.session().document().findNode (filter)->enabled);
+    in.session().undo();
+    CHECK (in.session().document().findNode (filter)->enabled);
+    CHECK (rack.binding()->parameterValue ("m.on") > 0.5f);
+    // a knob of the rack is the module's parameter, in the rack's units
+    rack.binding()->setParameterValue ("m.resonance", 65.0f);
+    CHECK (in.session().document().paramValue (in.session().registry(), filter, "resonance") == Catch::Approx (0.65).margin (1.0e-4));
+    in.session().undo();
     // the module it shows stays in sight above it
     for (int i = 0; i < canvas.getNumChildComponents(); ++i)
         if (auto* tile = dynamic_cast<ui::NodeView*> (canvas.getChildComponent (i)); tile != nullptr && tile->id() == filter)
@@ -844,6 +878,64 @@ TEST_CASE ("SPACE and MOVEMENT open ANDOR's own racks; every engine and mode the
     s.undo();
     CHECK (saveToString (s.document()) == before);
     run (in.processor, 0.2, { juce::MidiMessage::noteOff (1, 60) });
+    editor.openRack ({});
+}
+
+TEST_CASE ("Every module opens a device of its own: the family's rack, or one built from its parts in the module's identity", "[product][ui][rack][native]")
+{
+    Instrument in;
+    REQUIRE (in.editor != nullptr);
+    in.editor->setSize (1448, 1086);
+    auto& s = in.session();
+    auto& editor = *in.editor;
+    auto& rack = editor.rackView();
+    int opened = 0;
+    for (const auto* d : s.registry().all())
+    {
+        if (! d->available)
+            continue;
+        INFO (d->type);
+        s.newPatch();
+        const auto made = s.perform ("add", [&] (Document& doc) {
+            edit::Result r;
+            auto* n = doc.addNode (s.registry(), d->type, 100.0f, 100.0f);
+            r.ok = n != nullptr;
+            if (n != nullptr)
+                r.focus = n->id;
+            return r;
+        });
+        REQUIRE (made.ok);
+        editor.openRack (made.focus);
+        REQUIRE (rack.isOpen());
+        REQUIRE (rack.isNative());
+        auto* module = rack.module();
+        REQUIRE (module != nullptr);
+        CHECK (module->title().isNotEmpty());
+        CHECK (rack.getHeight() == ui::Rack::nativeHeight);
+        CHECK (module->getWidth() > 1000);
+        if (auto* device = dynamic_cast<osp::plugin::rack::ParameterRack*> (module))
+        {
+            // nothing spills: the cells end before the graph, inside the device
+            CHECK (device->hasFaceplate());
+            for (int page = 0; page < 8; ++page)
+            {
+                device->showPage (page);
+                if (device->page() != page)
+                    break;
+                for (const auto& cell : device->cellBounds())
+                {
+                    CHECK (cell.getX() >= 0);
+                    CHECK (cell.getRight() <= device->graphBounds().getX());
+                }
+            }
+            device->showPage (0);
+        }
+        // painting it (its graph reads the module and the running graph) must not fail
+        const auto image = rack.createComponentSnapshot (rack.getLocalBounds(), true, 1.0f);
+        CHECK (image.isValid());
+        ++opened;
+    }
+    CHECK (opened >= 50);
     editor.openRack ({});
 }
 
@@ -1222,6 +1314,34 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
         }
         editor->openRack ({});
     }
+    // The devices: one patch per module, its rack open (1448)
+    for (const char* type : { "proc.drive", "fx.compressor", "fx.phaser", "fx.retro", "fx.filter", "proc.vca", "ctl.lfo", "ctl.env", "event.arp", "proc.morph",
+                              "src.organic", "src.granular", "spatial.satellite", "util.mixer", "util.voicemix", "event.generative" })
+    {
+        p.session().newPatch();
+        editor->setSize (1448, 1086);
+        editor->showPlay (false);
+        p.session().perform ("add", [&] (Document& d) { return edit::addModule (d, p.session().registry(), "osc.analog", 0, 0); });
+        std::string osc;
+        for (const auto& n : p.session().document().nodes)
+            if (n.type == "osc.analog")
+                osc = n.id;
+        const auto made = p.session().perform ("add", [&] (Document& d) { return edit::addModule (d, p.session().registry(), type, 0, 240, osc); });
+        if (! made.ok)
+            continue;
+        if (juce::String (type).startsWith ("src."))
+            p.session().setNodeString (made.focus, "sample", juce::String (type) == "src.granular" ? "samples/rain-texture.wav" : "samples/bowed-c3.wav");
+        p.session().assets().waitIdle (20.0);
+        settle (300);
+        editor->canvasView().fitAll();
+        editor->canvasView().select (made.focus, false);
+        editor->openRack (made.focus);
+        run (p, 0.4, { juce::MidiMessage::noteOn (1, 48, 0.8f), juce::MidiMessage::noteOn (1, 55, 0.7f) });
+        settle (120);
+        snapshot (*editor, "rack-" + juce::String (type).replaceCharacter ('.', '-') + "-1448");
+        run (p, 0.1, { juce::MidiMessage::noteOff (1, 48), juce::MidiMessage::noteOff (1, 55) });
+        editor->openRack ({});
+    }
     // the step sequencer's rack (its step editor in the centre)
     {
         p.session().newPatch();
@@ -1235,8 +1355,7 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
         editor->openRack (made.focus);
         settle (300);   // (the tiles that made room have arrived)
         snapshot (*editor, "patch-rack-steps-1448");
-        CHECK (editor->rackView().controlsArea().getWidth() > 600);
-        CHECK_FALSE (editor->rackView().scrolls());   // the step editor takes the room that is left
+        CHECK (editor->rackView().isNative());
         editor->openRack ({});
     }
     // an empty patch: the first thing a musician sees after NEW

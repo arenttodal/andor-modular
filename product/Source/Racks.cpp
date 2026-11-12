@@ -1,6 +1,7 @@
 #include "Racks.h"
 
 #include "FxIdentity.h"
+#include "ModuleRack.h"
 #include "MacroPopups.h"
 
 namespace andor::modular::ui
@@ -13,9 +14,9 @@ namespace
     using osp::plugin::rack::Kind;
     using Builder = std::function<std::unique_ptr<NativeRack> (Session&, const std::string& nodeId)>;
 
-    RackParam same (const char* rackId, const char* param) { return { rackId, param, 1.0, 0.0, {}, {} }; }
+    RackParam same (const char* rackId, const char* param) { return { rackId, param, 1.0, 0.0, {}, {}, {}, {} }; }
     /** The rack counts in percent, the module 0..1. */
-    RackParam percent (const char* rackId, const char* param) { return { rackId, param, 100.0, 0.0, {}, {} }; }
+    RackParam percent (const char* rackId, const char* param) { return { rackId, param, 100.0, 0.0, {}, {}, {}, {} }; }
 
     /** What the module's output is doing now (its peak in the running graph): 0 when silent. */
     std::function<float()> peakOf (Session& s, const std::string& id)
@@ -62,10 +63,10 @@ namespace
     {
         const auto type = [&s, id] { return juce::roundToInt (s.document().paramValue (s.registry(), id, "type")); };
         auto room = std::make_shared<int> (std::min (3, type()) == type() ? type() : 1);   // the room the rack shows while another engine plays
-        RackParam engine { "space.engine", "type", 1.0, 0.0, {}, {} };
+        RackParam engine { "space.engine", "type", 1.0, 0.0, {}, {}, {}, {} };
         engine.toRack = [] (double t) { return t < 3.5 ? 0.0 : t - 3.0; };
         engine.toNode = [room] (double e) { return e < 0.5 ? static_cast<double> (*room) : e + 3.0; };
-        RackParam rooms { "space.type", "type", 1.0, 0.0, {}, {} };
+        RackParam rooms { "space.type", "type", 1.0, 0.0, {}, {}, {}, {} };
         rooms.toRack = [room] (double t) {
             if (t < 3.5)
                 *room = juce::roundToInt (t);
@@ -149,15 +150,17 @@ namespace
     }
 }
 
-bool hasNativeRack (const std::string& type) { return library().count (type) > 0; }
+bool hasNativeRack (const std::string& type) { return library().count (type) > 0 || Registry::builtIn().find (type) != nullptr; }
 
 std::unique_ptr<NativeRack> createNativeRack (Session& session, const std::string& nodeId)
 {
     const auto* n = session.document().findNode (nodeId);
     if (n == nullptr)
         return nullptr;
+    // The family's own rack where it has one for this device; else a rack built from its parts
+    // for this module (ModuleRack.cpp). Only a module this version does not know has neither.
     const auto it = library().find (n->type);
-    return it != library().end() ? it->second (session, nodeId) : nullptr;
+    return it != library().end() ? it->second (session, nodeId) : createModuleRack (session, nodeId);
 }
 
 } // namespace andor::modular::ui

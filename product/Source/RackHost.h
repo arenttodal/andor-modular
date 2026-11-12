@@ -25,6 +25,10 @@ struct RackParam
     double scale = 1.0, offset = 0.0;
     std::function<double (double node)> toRack;
     std::function<double (double rack)> toNode;
+    /** Something of the module that is not a parameter (its light): read and written here
+        instead (the write is its own step of the history). `param` is then unused. */
+    std::function<double()> read;
+    std::function<void (double rack)> write;
 };
 
 /**
