@@ -99,4 +99,10 @@ ParseResult parse (const std::string& text, const ParseLimits& limits = {});
 /** Compact (indent < 0) or pretty (indent spaces) text; numbers in the shortest round-trip form. */
 std::string write (const Value& v, int indent = 2);
 
+/** A value derived through a curve (log / pow, an interpolation), as a document stores it:
+    rounded to `digits` significant decimal digits. The last digits of such a result differ
+    between platforms (their maths libraries, fused multiply-add); a stored value must not,
+    so the same edit writes the same patch everywhere. Message thread (it allocates). */
+double roundSignificant (double value, int digits = 12);
+
 } // namespace andor::modular::json

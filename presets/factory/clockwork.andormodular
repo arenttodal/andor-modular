@@ -265,8 +265,8 @@
   "macros": [
     {
       "name": "GROOVE",
-      "value": 0.6000000000000001,
-      "default": 0.6000000000000001,
+      "value": 0.6,
+      "default": 0.6,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
@@ -281,8 +281,8 @@
     },
     {
       "name": "CUTOFF",
-      "value": 0.487289585955368,
-      "default": 0.487289585955368,
+      "value": 0.487289585955,
+      "default": 0.487289585955,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
@@ -297,8 +297,8 @@
     },
     {
       "name": "CLOCK LEVEL",
-      "value": 0.8080808080808081,
-      "default": 0.8080808080808081,
+      "value": 0.808080808081,
+      "default": 0.808080808081,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
@@ -329,8 +329,8 @@
     },
     {
       "name": "ATTACK",
-      "value": 0.8242296876598513,
-      "default": 0.8242296876598513,
+      "value": 0.82422968766,
+      "default": 0.82422968766,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
@@ -345,8 +345,8 @@
     },
     {
       "name": "RELEASE",
-      "value": 0.6966748644707528,
-      "default": 0.6966748644707528,
+      "value": 0.696674864471,
+      "default": 0.696674864471,
       "color": 0,
       "smooth": 0.03,
       "mappings": [

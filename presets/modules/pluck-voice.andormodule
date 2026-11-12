@@ -149,8 +149,8 @@
       "controls": [
         {
           "name": "BRIGHT",
-          "value": 0.4659800028906792,
-          "default": 0.4659800028906792,
+          "value": 0.465980002891,
+          "default": 0.465980002891,
           "color": 0,
           "smooth": 0.03,
           "mappings": [
@@ -165,8 +165,8 @@
         },
         {
           "name": "SNAP",
-          "value": 0.4714596664712363,
-          "default": 0.4714596664712363,
+          "value": 0.471459666471,
+          "default": 0.471459666471,
           "color": 0,
           "smooth": 0.03,
           "mappings": [
@@ -181,8 +181,8 @@
         },
         {
           "name": "LENGTH",
-          "value": 0.514678753773118,
-          "default": 0.514678753773118,
+          "value": 0.514678753773,
+          "default": 0.514678753773,
           "color": 0,
           "smooth": 0.03,
           "mappings": [

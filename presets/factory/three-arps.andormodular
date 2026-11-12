@@ -438,8 +438,8 @@
   "macros": [
     {
       "name": "ARP 2 RATE",
-      "value": 0.46428571428571436,
-      "default": 0.46428571428571436,
+      "value": 0.464285714286,
+      "default": 0.464285714286,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
@@ -470,8 +470,8 @@
     },
     {
       "name": "ORBIT SPEED",
-      "value": 0.3692574451676701,
-      "default": 0.3692574451676701,
+      "value": 0.369257445168,
+      "default": 0.369257445168,
       "color": 0,
       "smooth": 0.03,
       "mappings": [

@@ -114,7 +114,7 @@ EvolveResult evolve (const Document& original, const Registry& reg, const Evolve
                 else
                 {
                     const double norm = p.normalise (was) + r.bipolar() * reach[level];
-                    now = p.denormalise (std::clamp (norm, 0.0, 1.0));
+                    now = json::roundSignificant (p.denormalise (std::clamp (norm, 0.0, 1.0)));
                 }
                 if (std::abs (now - was) < 1.0e-9)
                     continue;
@@ -129,7 +129,7 @@ EvolveResult evolve (const Document& original, const Registry& reg, const Evolve
                 if (c.toParam && protect.count (c.to) == 0 && std::find (scope.begin(), scope.end(), c.to) != scope.end() && r.nextDouble() < 0.5)
                 {
                     const double was = c.depth;
-                    c.depth = std::clamp (c.depth + r.bipolar() * reach[level], -1.0, 1.0);
+                    c.depth = json::roundSignificant (std::clamp (c.depth + r.bipolar() * reach[level], -1.0, 1.0));
                     changes.push_back ("modulation depth " + std::to_string (static_cast<int> (std::round (was * 100))) + "% > "
                                        + std::to_string (static_cast<int> (std::round (c.depth * 100))) + "%");
                 }
@@ -178,7 +178,7 @@ EvolveResult evolve (const Document& original, const Registry& reg, const Evolve
                 if (! targets.empty())
                 {
                     const auto& [to, param] = targets[static_cast<std::size_t> (r.nextBelow (targets.size()))];
-                    const auto m = modulate (d, reg, from, "out", to, param, 0.15 + 0.3 * r.nextDouble());
+                    const auto m = modulate (d, reg, from, "out", to, param, json::roundSignificant (0.15 + 0.3 * r.nextDouble()));
                     if (m.ok)
                         changes.push_back (d.displayName (reg, *d.findNode (from)) + " now modulates " + d.displayName (reg, *d.findNode (to)) + " " + param);
                 }

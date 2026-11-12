@@ -908,7 +908,7 @@ bool mapMacro (Document& doc, const Registry& reg, int index, const std::string&
         if (c < g->controls.size())
         {
             const double span = max - min;
-            m.value = m.defaultValue = std::abs (span) > 1.0e-9 ? std::clamp ((g->controls[c].value - min) / span, 0.0, 1.0) : 0.0;
+            m.value = m.defaultValue = std::abs (span) > 1.0e-9 ? json::roundSignificant (std::clamp ((g->controls[c].value - min) / span, 0.0, 1.0)) : 0.0;
         }
     }
     if (m.mappings.size() == 1 && ! groupControl)
@@ -917,7 +917,7 @@ bool mapMacro (Document& doc, const Registry& reg, int index, const std::string&
         const auto& pd = d->params[static_cast<std::size_t> (d->paramIndex (param))];
         const double norm = pd.normalise (doc.paramValue (reg, node, param));
         const double span = max - min;
-        m.value = m.defaultValue = std::abs (span) > 1.0e-9 ? std::clamp ((norm - min) / span, 0.0, 1.0) : 0.0;
+        m.value = m.defaultValue = std::abs (span) > 1.0e-9 ? json::roundSignificant (std::clamp ((norm - min) / span, 0.0, 1.0)) : 0.0;
     }
     return true;
 }
@@ -989,11 +989,13 @@ void applyScenePosition (Document& doc, const Registry& reg, double position)
             const double va = ia != sa.values.end() ? ia->second : ib->second;
             const double vb = ib != sb.values.end() ? ib->second : va;
             const bool stepped = p.curve == ParamCurve::choice || p.curve == ParamCurve::toggle || p.curve == ParamCurve::integer;
-            n.params[p.id] = stepped ? (t < 0.5 ? va : vb) : p.denormalise (p.normalise (va) + (p.normalise (vb) - p.normalise (va)) * t);
+            // (through the parameter's curve: stored rounded, the same on every platform)
+            n.params[p.id] = stepped ? (t < 0.5 ? va : vb) : json::roundSignificant (p.denormalise (p.normalise (va) + (p.normalise (vb) - p.normalise (va)) * t));
         }
     }
     for (int m = 0; m < maxMacros; ++m)
-        doc.macros[static_cast<std::size_t> (m)].value = sa.macros[static_cast<std::size_t> (m)] + (sb.macros[static_cast<std::size_t> (m)] - sa.macros[static_cast<std::size_t> (m)]) * t;
+        doc.macros[static_cast<std::size_t> (m)].value =
+            json::roundSignificant (sa.macros[static_cast<std::size_t> (m)] + (sb.macros[static_cast<std::size_t> (m)] - sa.macros[static_cast<std::size_t> (m)]) * t);
     doc.scenePosition = position;
 }
 

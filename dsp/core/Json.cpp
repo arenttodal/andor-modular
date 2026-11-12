@@ -522,4 +522,13 @@ std::string write (const Value& v, int indent)
     return out;
 }
 
+double roundSignificant (double value, int digits)
+{
+    if (value == 0.0 || ! std::isfinite (value))
+        return value;
+    const auto text = formatDouble (value, digits);
+    double rounded = value;
+    return parseDouble (text.data(), text.size(), rounded) ? rounded : value;
+}
+
 } // namespace andor::modular::json

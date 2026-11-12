@@ -123,8 +123,8 @@
       "controls": [
         {
           "name": "TONE",
-          "value": 0.4336766652213271,
-          "default": 0.4336766652213271,
+          "value": 0.433676665221,
+          "default": 0.433676665221,
           "color": 0,
           "smooth": 0.03,
           "mappings": [
@@ -155,8 +155,8 @@
         },
         {
           "name": "PUNCH",
-          "value": 0.5765139939630113,
-          "default": 0.5765139939630113,
+          "value": 0.576513993963,
+          "default": 0.576513993963,
           "color": 0,
           "smooth": 0.03,
           "mappings": [

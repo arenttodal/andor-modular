@@ -69,10 +69,10 @@
       "size": 1,
       "enabled": true,
       "params": {
-        "attack": 0.004999999999999999,
+        "attack": 0.005,
         "decay": 0.4,
         "level": 1,
-        "release": 0.3500000000000004,
+        "release": 0.35,
         "sustain": 0.75,
         "velocity": 0.6
       }
@@ -117,9 +117,9 @@
       "enabled": true,
       "params": {
         "comp": 0.5,
-        "cutoff": 2399.9999999999995,
+        "cutoff": 2400,
         "drive": 0.1,
-        "envAmount": 0.30000000000000004,
+        "envAmount": 0.3,
         "keytrack": 0.5,
         "mode": 0,
         "resonance": 0.2
@@ -138,7 +138,7 @@
         "depth": 1,
         "division": 6,
         "phase": 0,
-        "rate": 0.10000000000000002,
+        "rate": 0.1,
         "retrigger": 0,
         "shape": 0,
         "sync": 0,
@@ -160,7 +160,7 @@
         "manual": 0,
         "mode": 0,
         "phase": 0,
-        "rate": 0.2500000000000001,
+        "rate": 0.25,
         "sync": 0,
         "width": 1
       }
@@ -198,7 +198,7 @@
         "mix": 0.35,
         "stereo": 1,
         "sync": 1,
-        "time": 375.00000000000006,
+        "time": 375,
         "tone": 0.5,
         "type": 0
       }
@@ -214,9 +214,9 @@
       "enabled": true,
       "params": {
         "damping": 0.4,
-        "decay": 3.0000000000000013,
+        "decay": 3,
         "gravity": 0,
-        "highcut": 6000.000000000001,
+        "highcut": 6000,
         "lowcut": 100,
         "mix": 0.3,
         "modulation": 0.4,
@@ -306,7 +306,7 @@
     {
       "name": "CUTOFF",
       "value": 0.35,
-      "default": 0.7043720219274404,
+      "default": 0.704372021927,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
@@ -370,7 +370,7 @@
     {
       "name": "ECHO",
       "value": 0,
-      "default": 0.43749999999999994,
+      "default": 0.4375,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
@@ -386,7 +386,7 @@
     {
       "name": "SPACE",
       "value": 0.5,
-      "default": 0.3333333333333333,
+      "default": 0.333333333333,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
@@ -418,7 +418,7 @@
     {
       "name": "RELEASE",
       "value": 0.6,
-      "default": 0.4723422069374272,
+      "default": 0.472342206937,
       "color": 0,
       "smooth": 0.03,
       "mappings": [

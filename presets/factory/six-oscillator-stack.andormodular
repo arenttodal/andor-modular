@@ -524,8 +524,8 @@
   "macros": [
     {
       "name": "CUTOFF",
-      "value": 0.6390400182965325,
-      "default": 0.6390400182965325,
+      "value": 0.639040018297,
+      "default": 0.639040018297,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
@@ -540,8 +540,8 @@
     },
     {
       "name": "RESONANCE",
-      "value": 0.28571428571428575,
-      "default": 0.28571428571428575,
+      "value": 0.285714285714,
+      "default": 0.285714285714,
       "color": 0,
       "smooth": 0.03,
       "mappings": [

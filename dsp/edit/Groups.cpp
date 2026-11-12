@@ -147,7 +147,7 @@ bool exposeControl (Document& doc, const Registry& reg, const std::string& group
         const auto& pd = d->params[static_cast<std::size_t> (pi)];
         m.name = name.empty() ? pd.name : name;
         const double span = max - min;
-        m.value = m.defaultValue = std::abs (span) > 1.0e-9 ? std::clamp ((pd.normalise (n->param (param, pd.def)) - min) / span, 0.0, 1.0) : 0.0;
+        m.value = m.defaultValue = std::abs (span) > 1.0e-9 ? json::roundSignificant (std::clamp ((pd.normalise (n->param (param, pd.def)) - min) / span, 0.0, 1.0)) : 0.0;
     }
     else
         m.name = name.empty() ? "CONTROL" : name;

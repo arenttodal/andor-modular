@@ -260,8 +260,8 @@
   "macros": [
     {
       "name": "DENSITY",
-      "value": 0.5294117647058825,
-      "default": 0.5294117647058825,
+      "value": 0.529411764706,
+      "default": 0.529411764706,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
@@ -308,8 +308,8 @@
     },
     {
       "name": "ECHO",
-      "value": 0.4285714285714286,
-      "default": 0.4285714285714286,
+      "value": 0.428571428571,
+      "default": 0.428571428571,
       "color": 0,
       "smooth": 0.03,
       "mappings": [

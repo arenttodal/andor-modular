@@ -222,8 +222,8 @@
   "macros": [
     {
       "name": "CUTOFF",
-      "value": 0.501784729875191,
-      "default": 0.501784729875191,
+      "value": 0.501784729875,
+      "default": 0.501784729875,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
@@ -270,8 +270,8 @@
     },
     {
       "name": "ATTACK",
-      "value": 0.2912375018066745,
-      "default": 0.2912375018066745,
+      "value": 0.291237501807,
+      "default": 0.291237501807,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
@@ -286,8 +286,8 @@
     },
     {
       "name": "RELEASE",
-      "value": 0.551065908093665,
-      "default": 0.551065908093665,
+      "value": 0.551065908094,
+      "default": 0.551065908094,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
@@ -318,8 +318,8 @@
     },
     {
       "name": "SPACE",
-      "value": 0.31428571428571433,
-      "default": 0.31428571428571433,
+      "value": 0.314285714286,
+      "default": 0.314285714286,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
@@ -334,8 +334,8 @@
     },
     {
       "name": "WIDTH",
-      "value": 0.4999999999999999,
-      "default": 0.4999999999999999,
+      "value": 0.5,
+      "default": 0.5,
       "color": 0,
       "smooth": 0.03,
       "mappings": [
