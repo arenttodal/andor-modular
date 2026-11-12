@@ -32,6 +32,15 @@ _Last updated 2026-11-12. Branch `claude/epic-feynman-fsf8ij`. Pins: OSP `e7a383
 - Every factory patch plays in the plugin with ANDOR's own recordings; state recalls.
 - Output identical across host block sizes; zero heap allocations in `process()`.
 
+## macOS build (2026-11-12)
+CI builds the plugin universal (arm64 + x86_64, macOS 11+) on `macos-15` and uploads two
+downloads from every successful build: `ANDOR-Modular-macOS-installer` (one `.pkg`: AU, VST3,
+standalone; UNSIGNED until the repository has the Apple secrets named in
+`packaging/macos/build-installer.sh`) and `ANDOR-Modular-macOS-test` (a zip with
+`install.command`: per-user, no admin rights, clears the quarantine). On the runner: kernel
+suite, product suite and `auval -v aumu Amdr Ospx` pass. Not yet done on a real Mac by a
+person: installing, a DAW session, listening.
+
 ## What does not (yet)
 See [RELEASE_BLOCKERS.md](RELEASE_BLOCKERS.md): live Kontakt, DAW validation, Mac numbers,
 per-voice MORPH at tiny buffers with many voices, REIMAGINED, Key DNA, topology scenes,

@@ -58,3 +58,10 @@ Tools: `build/tools/modular-render` (headless WAV renders, `--list`, `--validate
 
 Start with [docs/STATUS.md](docs/STATUS.md), [docs/architecture.md](docs/architecture.md) and
 [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
+
+## macOS download
+
+Every successful CI run (Actions → the run → Artifacts) carries `ANDOR-Modular-macOS-installer`
+(a `.pkg`, unsigned for now: right-click → Open, or allow it under Privacy & Security) and
+`ANDOR-Modular-macOS-test` (unzip, double-click `install.command`: installs for your user and
+clears the download quarantine). Universal, macOS 11 or later. See `packaging/`.
