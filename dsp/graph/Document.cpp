@@ -673,8 +673,8 @@ LoadResult fromJson (const json::Value& input, Document& out)
             if (m.modes.size() >= 16 || type.empty())
                 break;
             SourceMode mode;
-            Domain d = Domain::global;
-            mode.domain = domainFromName (saved.getString ("domain"), d) ? d : Domain::global;
+            Domain ran = Domain::global;
+            mode.domain = domainFromName (saved.getString ("domain"), ran) ? ran : Domain::global;
             for (const auto& [k, value] : saved["params"].entries())
                 if (value.isNumber() && std::isfinite (value.asNumber()))
                     mode.params[k] = value.asNumber();

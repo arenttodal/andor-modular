@@ -1,8 +1,8 @@
 # Test matrix
 
-Kernel: `build/tests/modular_tests` — **59 test cases, 1,689,055 assertions, all passing**
+Kernel: `build/tests/modular_tests` — **63 test cases, 1,970,974 assertions, all passing**
 (2026-11-12, Linux, GCC 13.3; CI also macOS 15, Apple clang). Product: `modular_product_tests`
-— **13 cases, all passing** (headless under Xvfb).
+— **18 cases, all passing** (headless under Xvfb).
 
 | Area | Test (file: case) | What it proves |
 |---|---|---|
@@ -38,6 +38,7 @@ Kernel: `build/tests/modular_tests` — **59 test cases, 1,689,055 assertions, a
 | Mute, solo, bypass | ReliabilityTests `[source][mute][solo]` | ramps at 44.1 / 48 / 96 kHz × blocks 16 / 64 / 512: no rebuild, no click, no restarted note; solo isolates at the source's output; mute wins; groups; save / load |
 | Shared routing | ReliabilityTests `[routing][fanin]` | two and three sources through one per-voice filter (one instance per voice, both darkened); two arpeggiated chains through one global filter (two voice pools, one instance, nothing hangs); voice audio into a global SPACE; refusals leave the patch untouched |
 | Layout | ReliabilityTests `[ui][layout]` | every factory patch tidy; drop / insert / six sources; 40-seed property test (no overlap, deterministic, idempotent, anchors stay); 32 stacked modules in 0.6 ms |
+| Source type | ReliabilityTests `[source][type]` | in place (id, name, place, M / S); each type's settings and recording come back; cables and macro / host assignments only one type has are set aside and restored, or taken back by a type that can use them; a type that plays once joins after the voices, and back; refusals (not a source, a second hosted instrument) leave the patch untouched; save / load round trip; a held chord through five changes |
 | Real time | RealtimeTests: every factory patch × blocks 32/333/512 with notes, stealing, bend, macro and scene moves and three graph swaps | **zero** heap calls in `process()` |
 | External | ExternalTests (surrogate instrument) | one instance for all notes (not × polyphony), legato overlaps in order, GLOBAL MORPH hears it, absent plugin silent and kept, survives edits |
 | Product | ProductTests: every factory patch plays in the processor; fixed parameter ids; state recall (host values win); 0-to-sound through Quick Add < 100 ms + insert FILTER + one undo; screenshots 869/1448/1810 | |
@@ -47,6 +48,8 @@ Kernel: `build/tests/modular_tests` — **59 test cases, 1,689,055 assertions, a
 | Product: rack | `[ui][rack]` | full width under the canvas, 210–290 px; the canvas keeps x, y, width and zoom; identity / controls / display in order; every control of the mode; swap; close; deleted module closes it; PLAY hides it; no graph swap |
 | Product: layout | `[ui][layout]` | twelve modules through the menu onto one spot: no overlap, undo and redo exact; the make-room glide starts and ends; a dropped tile stays |
 | Product: gesture | `[ui][gesture]` | pan follows the deltas whatever `isReversed` says; Traditional reverses; scrolling never zooms, Cmd + scroll does; F changes nothing; FIT fits |
+| Product: native racks | `[ui][rack][native]` | ECHO is the family's rack, two echoes independent, no graph swap, FEEDBACK changes the tail; SPACE's four engines and MOVEMENT's modes play in the module, SHAPER's phase live, a drawn pattern one undo step; every available module type opens a device whose cells stay inside it on every page |
+| Product: Source | `[ui][source][type]`, `[source][type][state]` | SOURCE first in Sources and found by ten words; added in < 100 ms; every type sounds from the card; undo and redo exact; the rack follows; six sources; factory files load and save byte for byte, each card shows its type |
 | Product: finish | `[ui][materials]` | the pack is Modular's; cheeks, rails and ceramic sampled at three sizes |
 
 ## Not covered yet (see RELEASE_BLOCKERS.md)

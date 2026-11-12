@@ -249,8 +249,16 @@ namespace
         }
         else
             caption (g, area, "FET: INPUT DRIVES IT INTO A FIXED THRESHOLD", juce::Justification::topLeft, words());
+        // what it is doing now: the processor's own gain reduction, and what leaves it
         const auto* live = liveOf (s, id);
         const float peak = live != nullptr ? live->peak.load (std::memory_order_relaxed) : 0.0f;
+        const float reduction = live != nullptr && live->telemetryCount.load() > 0 ? std::abs (telemetryOf (live, 0)) : 0.0f;
+        const auto bar = juce::Rectangle<float> (area.getX() + 12.0f, area.getBottom() - 30.0f, 110.0f, 5.0f);
+        g.setColour (colour::wellGrid);
+        g.fillRoundedRectangle (bar, 2.0f);
+        g.setColour (look.trace);
+        g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * juce::jlimit (0.0f, 1.0f, reduction / 24.0f)), 2.0f);
+        caption (g, area, "GAIN REDUCTION  " + juce::String (reduction, 1) + " dB", juce::Justification::bottomLeft, words());
         caption (g, area, peak > 0.0005f ? "OUT " + juce::String (juce::Decibels::gainToDecibels (peak), 1) + " dB" : juce::String ("SILENT"), juce::Justification::bottomRight, look.trace);
     }
 

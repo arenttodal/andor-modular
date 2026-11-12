@@ -172,3 +172,37 @@ render, in the family's skin-pack format. Only the housing piece changes: the ce
 board, the modules and the interaction colours do not. This is the one asset Modular owns
 (CLAUDE.md rule 9).
 
+## D-29 A family rack is bound to one module through a host of its own
+The family's racks read and write an `osp::plugin::InstrumentHost`: in OSP and Analog, the
+instrument. A patch has any number of echoes, so each open rack gets a `RackHost`: that
+interface for exactly one node (a private parameter state under the rack's IDs, each bound to
+one of the node's parameters; tempo and telemetry from the running graph). Rejected: a fake
+`AnalogEngine`, casting Modular's processor to the shell, or pointing racks at plugin-wide
+parameters (two echoes would share one).
+
+## D-30 Shared racks where the family has them; siblings from its parts where it cannot share
+ECHO, SPACE and MOVEMENT are the shared classes, unmodified. Analog's FILTER, MORPH and
+effect racks cast to its shell and engine and cannot be linked into another product; its
+FILTER rack is its whole voice. For those, and for modules the family has no rack for, a
+device is built from the same parts in the module's identity with a picture of what it does.
+The seam that would let the effect racks be shared is specified, upstream, in the audit; it
+was not taken on in the same pass as it changes Analog and needs its suites.
+
+## D-31 Modules are completed rather than racks pruned
+Where a shared rack offers something the module lacked (SPACE's VINTAGE and BLOOM, MOVEMENT's
+SHAPER, ECHO's ASCEND settings), the module gained it from the same shared processors at
+their defaults, instead of hiding or disabling parts of the rack. Rule 6 (no fake controls)
+and rule 8 (wrap, do not fork).
+
+## D-32 One SOURCE over the existing source modules (stage 1)
+The musician's "Source" is a presentation: its TYPE names which existing module it is. No
+wrapper node, no renamed type id, no migration: old patches are untouched. `changeSourceType`
+changes the node's type in place and keeps each other type on the node ("modes").
+
+## D-33 What a type change does with cables
+A cable belongs to the source, not to a type: it stays if the new type can honour it; else it
+is set aside with the type it was for and taken back by the first type that can use it. A type
+that plays once for all notes joins where its chain's voices meet rather than being refused,
+and the edit says so. Only when no such place exists, or a limit would break, is the change
+refused. Where a type runs is the musician's choice only if the type left offered one.
+

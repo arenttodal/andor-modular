@@ -32,6 +32,21 @@ Rules:
   files without them are unchanged and older versions read them as before). They are the
   musician's mix state, separate from `enabled` (bypass): `audibleGain` (Document.h) fades a
   source at its own output; mute wins over solo; a group's reach the sources inside it.
+- A sound source may carry `"modes"`: its other TYPES as it left them, by module type id
+  (written only when any; files without it are unchanged):
+  `"modes": { "src.organic": { "domain": "voice", "params": {…}, "strings": { "sample": "…" },
+  "cables": [ { "from", "fromPort", "to", "toPort", "toParam", "depth", "transpose" } ],
+  "mappings": [ { "slot", "host", "param", "min", "max", "curve" } ] } }`.
+  `cables` and `mappings` are what only that type could use (set aside, restored when the
+  source is that type again, or taken back by a type that can use them). The node's own
+  `type`, `params` and `strings` are always the active type's (`edit::changeSourceType`).
+- Parameters added on 2026-11-12, each at the shared processor's default (older patches play
+  as they did): ECHO `interval`, `motion`; SPACE `resonance`, `freeze`, `abyssVariant`,
+  `vintageVariant`, `vintageEra`, `vintageDiffusion`, `bloomVariant`, `bloomSync`,
+  `bloomDivision`, `bloomTime`, `bloomDiffusion` and TYPE's appended VINTAGE, BLOOM; MOVEMENT
+  `pattern`, `shaperRate`, `target`, `smooth`, `custom`, `s1`…`s16`, `e1`…`e16`, `h1`…`h16`
+  and MODE's appended SHAPER. ECHO's DIVISION names were corrected (the stored index and the
+  sound did not change).
 - Loading runs the layout rule once (`edit::resolveOverlaps`): a patch saved with overlapping
   tiles opens with them apart. Positions are the only thing it changes.
 - Ids are stable; a group control is addressed as `{ "node": <group id>, "param": "control.N" }`.

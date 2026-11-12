@@ -20,12 +20,34 @@ and its modules open beside it. Type at any time for the best matches. **Up / Do
 one level. On a port or a cable the menu only offers what fits there.
 
 ## The rack
-**Double-click a module** (or select it and press **Return**): all its controls open in a
-drawer across the foot of the board: what it is on the left, its modes and knobs in the middle
-(the step editor for STEP SEQUENCER, its incoming modulation with depths), its live display on
-the right. The board keeps its width and its place. Double-click another module to swap; **X**
-or **Escape** closes it. Right-click a knob there as on a tile (macros, automation,
-modulation). Double-clicking a group opens the group instead.
+**Double-click a module** (or select it and press **Return**): its device opens across the
+foot of the board, as in ANDOR Analog: its name and light on the rail, its mode in the row
+under it, its controls, and its picture on the glass. ECHO, SPACE and MOVEMENT are the very
+racks of ANDOR OSP and Analog (the tape deck, the repeats, the room's portrait, the pattern
+editor, their presets). Every other module has a device of its own in its own colours: a
+filter shows its response, DRIVE its curve, a compressor its curve and gain reduction, an
+envelope its shape, the step sequencer its steps to draw on. A row is filled first; MORE
+holds the rest. Cables that modulate the module show as depth knobs. The board keeps its width
+and its place. Double-click another module to swap; **X** or **Escape** closes it. The
+module's MIX (how much of an echo or a space) stays on its tile. Double-clicking a group
+opens the group instead.
+
+## Sources
+A sound source is one thing, **SOURCE**, with a **TYPE**: ANALOG (CLASSIC, DCO and WIDE are
+its models), ORGANIC (a recording across the keys), GRANULAR, RHYTHM (a loop on the tempo),
+EXTERNAL (an instrument plugin you own), NOISE, LIVE INPUT.
+- **Add**: right-click → Sources → SOURCE: an oscillator, wired, playable at once. Typing
+  "organic", "granular", "rhythm", "kontakt"… adds it as that type.
+- **Change its type** on its PLAY card (the key beside its name), in its tile's menu, or in
+  its rack. It stays the same source: its letter, its name, its M and S, its place.
+- Each type keeps its own settings and recording: go to ORGANIC, load a recording, try
+  GRANULAR, come back: ORGANIC is as you left it.
+- Cables follow where they can. A cable only one type has (FM into an oscillator) waits for
+  that type. A type that plays once for all notes (RHYTHM, EXTERNAL, LIVE INPUT) cannot pass
+  through a per-voice filter or envelope: it joins after them, and the status line says so;
+  back on a per-voice type the chain is as before. If a type cannot fit (a second EXTERNAL),
+  nothing changes and you are told why.
+- One undo takes a type change back exactly.
 
 ## Escape
 One press closes one thing, the topmost: a drag you have started (a moved module goes back),

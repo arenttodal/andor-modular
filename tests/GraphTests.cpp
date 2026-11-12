@@ -116,7 +116,7 @@ TEST_CASE ("Save and load are lossless and deterministic; missing modules surviv
     d.macros[0].name = "BRIGHT";
     edit::mapMacro (d, reg(), 0, test::nodeOfType (d, "osc.analog"), "width", 0.1, 0.9);
     edit::captureScene (d, reg(), 1, "TWO");
-    d.nodes.push_back ({ "n-ghost", "future.module", 3, Domain::global, 10, 20, 1, true, "", "", { { "x", 1.5 } }, { { "sample", "a.wav" } } });
+    d.nodes.push_back ({ "n-ghost", "future.module", 3, Domain::global, 10, 20, 1, true, "", "", { { "x", 1.5 } }, { { "sample", "a.wav" } }, false, false, {} });
     const auto text = saveToString (d);
     Document back;
     const auto res = loadFromString (text, back);

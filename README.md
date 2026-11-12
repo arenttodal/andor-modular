@@ -16,7 +16,9 @@ without seeing a single cable.
 - **Hear sound immediately.** Right-click the empty board, type "analog", press Return, play:
   KEYBOARD → ANALOG OSC → AMP ENVELOPE → VOICE MIX → OUTPUT is made for you.
 - **Complexity is optional.** Every module has a Quick face (2–4 controls, live telemetry) and
-  a rack with everything else: double-click it and its controls open across the board's foot.
+  a rack with everything else: double-click it and its ANDOR device opens across the board's
+  foot (ECHO, SPACE and MOVEMENT are the family's very racks). A sound source is one SOURCE
+  whose TYPE (analog, organic, granular, rhythm, external…) changes on its card.
 - **Everything connects where meaningful.** Typed ports (notes, pitch, gate, trigger, control,
   mono/stereo audio, clock) in three domains (per voice, global, note events), with the reason
   and a converter when a cable is refused.

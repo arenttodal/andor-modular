@@ -18,7 +18,7 @@ _Last updated 2026-11-12. Branch `claude/epic-feynman-fsf8ij`. Pins: OSP `e7a383
 | 9 Instrument builder & presets | done | 282038e, c110afa | groups → .andormodule → import, group controls ← macros, PLAY panel, 12 patches + 6 modules | owner listening review |
 | 10 Scenes & EVOLVE | done | 282038e, c110afa | 4 scenes + fader (host parameter), deterministic EVOLVE with locks, A/B, one undo | EVOLVE taste curve (owner) |
 | 11 External instrument | partly: host built, surrogate-tested | c110afa | ExternalHost (VST3/AU from file, state in patch, window, missing fallback); ExternalTests: one instance, overlaps in order, GLOBAL MORPH, absence, edits | **live Kontakt not available here** (P1) |
-| 12 QA, performance, docs | done for this environment | this commit | 59 kernel + 13 product test cases green; 240-configuration benchmark, 0 allocations; docs set; demo renders script | reference Mac numbers, DAW validation (P1) |
+| 12 QA, performance, docs | done for this environment | this commit | 63 kernel + 18 product test cases green; 240-configuration benchmark, 0 allocations; docs set; demo renders script | reference Mac numbers, DAW validation (P1) |
 
 ## Patch workflow, audio reliability, shared routing and material pass (2026-11-12)
 
@@ -40,7 +40,23 @@ Report with root causes, measurements, limits and the owner's checklist:
 CI (Linux, macOS 15: both suites, auval, installer): green for d5626a1 and 3b483b1; the later
 commits' runs are listed under the repository's Actions.
 
+## Addendum 02: native ANDOR racks and the one flexible Source (2026-11-12)
+
+Report: [ADDENDUM_02_REPORT.md](ADDENDUM_02_REPORT.md); what is the family's own code and
+what is built from its parts: [ADDENDUM_02_REUSE_AUDIT.md](ADDENDUM_02_REUSE_AUDIT.md).
+
+| Gate | State | Commit | Evidence |
+|---|---|---|---|
+| A Audit | done | bb68057 | the audit; "just call Analog's factories" shown not to work |
+| B Rack binding, ECHO | done | bb68057 | ANDOR's `EchoRack` on a node through `RackHost`; `[ui][rack][native]` |
+| C Rack library | done, with one stated gap | 3275618, f86d955 | SPACE and MOVEMENT are the shared racks; every other module has a device built from the family's parts. **Gap:** FILTER, MORPH and the effects are not Analog's own rack classes (they need an upstream seam) |
+| D One SOURCE | done | d63b386 | Quick Add SOURCE; TYPE on card, tile menu and rack |
+| E Type change | done | d63b386 | `edit::changeSourceType`: in place, nothing lost, refusals; kernel and product `[source][type]` |
+| F Integration | done here; hands-on open | this commit | kernel 63, product 18 cases; paired pictures; the report's nine hands-on checks |
+
 ## What works (demonstrable now)
+- Double-click any module: its ANDOR device opens along the board's foot (ECHO, SPACE and
+  MOVEMENT are the family's very racks). A source is one SOURCE whose TYPE changes on its card.
 - Quick Add is a small menu (search, recent, six categories with submenus); a module's controls
   open in a rack across the board's foot; Escape closes one thing at a time; modules never
   land on each other; M and S on sources and groups; several sources share one filter.
@@ -71,6 +87,8 @@ per-voice MORPH at tiny buffers with many voices, REIMAGINED, Key DNA, topology 
 mini-map, free macro range sliders.
 
 ## NEXT
+0a. Owner: the nine hands-on checks and the four choices in ADDENDUM_02_REPORT.md (the
+   upstream seam for Analog's effect racks is the first).
 0. Owner: the twelve hands-on checks in PATCH_WORKFLOW_REPORT.md (Mac, DAW, trackpad,
    the Concept 2 image beside the plugin); then a next pass from what was heard and felt.
 1. Owner: listen to the demo renders; review the new screenshots (docs/screenshots).

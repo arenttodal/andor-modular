@@ -932,6 +932,7 @@ Result changeSourceType (Document& doc, const Registry& reg, const std::string& 
 
     r.ok = true;
     r.message = doc.displayName (reg, *doc.findNode (node)) + " is now " + sourceTypeName (type) + (returning ? " again, as it was" : "");
+    (void) kept;   // (cables that stayed are the ordinary case: only what did not is reported)
     if (aside > 0)
         r.message += "; " + std::to_string (aside) + (aside == 1 ? " cable" : " cables") + " that only " + sourceTypeName (oldType) + " has " + (aside == 1 ? "is" : "are")
                      + " kept for it";
