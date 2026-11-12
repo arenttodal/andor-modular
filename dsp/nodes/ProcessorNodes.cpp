@@ -883,7 +883,7 @@ void registerProcessorNodes (Registry& r)
         d.category = "Processors";
         d.domains = domains;
         d.defaultDomain = def;
-        d.inputs = { in ("in", "IN", PortKind::audioMono) };
+        d.inputs = { in ("in", "IN", PortKind::audioMono, true) };
         d.outputs = { out ("out", "OUT", PortKind::audioMono) };
         return d;
     };
@@ -909,7 +909,7 @@ void registerProcessorNodes (Registry& r)
         d.keywords = { "vca", "envelope", "adsr", "amp", "articulation", "gain" };
         d.help = "Every new sound source gets one automatically. A voice lasts until its envelope has released. GATE (optional) replaces the "
                  "key; GLOBAL instances follow any held note.";
-        d.inputs = { in ("in", "IN", PortKind::audioMono), in ("gate", "GATE", PortKind::gate), notesIn() };
+        d.inputs = { in ("in", "IN", PortKind::audioMono, true), in ("gate", "GATE", PortKind::gate), notesIn() };
         d.outputs = { out ("out", "OUT", PortKind::audioMono), out ("env", "ENV", PortKind::control, Polarity::unipolar) };
         d.params = { logNum ("attack", "ATTACK", 0.001, 10.0, 0.005, "s", true), logNum ("decay", "DECAY", 0.005, 10.0, 0.4, "s", true),
                      num ("sustain", "SUSTAIN", 0.0, 1.0, 0.75, "%", true), logNum ("release", "RELEASE", 0.005, 15.0, 0.35, "s", true),
@@ -978,7 +978,7 @@ void registerProcessorNodes (Registry& r)
         d.category = "Spatial";
         d.keywords = { "reverb", "space", "room", "hall", "plate", "spring", "abyss", "ambience" };
         d.help = "A global stereo reverb. TYPE and SIZE re-voice the room (heard at the next sound); the rest changes in place.";
-        d.inputs = { in ("in", "IN", PortKind::audioStereo) };
+        d.inputs = { in ("in", "IN", PortKind::audioStereo, true) };
         d.outputs = { out ("out", "OUT", PortKind::audioStereo) };
         d.params = { choice ("type", "TYPE", { "ROOM", "HALL", "PLATE", "SPRING", "ABYSS" }, 1, true), logNum ("decay", "DECAY", 0.2, 30.0, 3.0, "s", true),
                      num ("size", "SIZE", 0.0, 1.0, 0.5, "%"), num ("predelay", "PRE-DELAY", 0.0, 250.0, 8.0, "ms"), num ("damping", "DAMPING", 0.0, 1.0, 0.4, "%"),
@@ -994,7 +994,7 @@ void registerProcessorNodes (Registry& r)
         auto d = processor ("fx.echo", "ECHO", "ANDOR OSP's TAPE, BBD and ASCEND echoes, synced or free, feedback-safe", globalOnly, Domain::global);
         d.category = "Spatial";
         d.keywords = { "delay", "echo", "tape", "bbd", "ascend", "ping pong" };
-        d.inputs = { in ("in", "IN", PortKind::audioStereo) };
+        d.inputs = { in ("in", "IN", PortKind::audioStereo, true) };
         d.outputs = { out ("out", "OUT", PortKind::audioStereo) };
         d.params = { choice ("type", "TYPE", { "TAPE", "BBD", "ASCEND" }, 0, true), toggle ("sync", "SYNC", true),
                      when (choice ("division", "DIVISION", { "1/32", "1/16", "1/16D", "1/8T", "1/8", "1/8D", "1/4T", "1/4", "1/4D", "1/2", "1/2D", "1 BAR" }, 5), "sync", { 1 }),
@@ -1009,7 +1009,7 @@ void registerProcessorNodes (Registry& r)
         auto d = processor ("fx.movement", "MOVEMENT", "ANDOR OSP's DRIFT, TAPE, CHORUS and PULSE motion", globalOnly, Domain::global);
         d.category = "Spatial";
         d.keywords = { "movement", "drift", "wow", "flutter", "chorus", "tremolo", "pulse" };
-        d.inputs = { in ("in", "IN", PortKind::audioStereo) };
+        d.inputs = { in ("in", "IN", PortKind::audioStereo, true) };
         d.outputs = { out ("out", "OUT", PortKind::audioStereo) };
         d.params = { choice ("mode", "MODE", { "DRIFT", "TAPE", "CHORUS", "PULSE" }, 0, true), num ("amount", "AMOUNT", 0.0, 1.0, 0.4, "%", true),
                      num ("a", "RATE", 0.0, 1.0, 0.5, "%", true), num ("b", "DEPTH", 0.0, 1.0, 0.4, "%"), num ("c", "STEREO", 0.0, 1.0, 0.5, "%") };
@@ -1021,7 +1021,7 @@ void registerProcessorNodes (Registry& r)
         auto d = processor ("fx.chorus", "ENSEMBLE CHORUS", "ANDOR ANALOG's bucket-brigade chorus (modes I, II, I+II)", globalOnly, Domain::global);
         d.category = "Spatial";
         d.keywords = { "chorus", "ensemble", "juno", "bbd", "width" };
-        d.inputs = { in ("in", "IN", PortKind::audioStereo) };
+        d.inputs = { in ("in", "IN", PortKind::audioStereo, true) };
         d.outputs = { out ("out", "OUT", PortKind::audioStereo) };
         d.params = { choice ("mode", "MODE", { "I", "II", "I+II" }, 0, true), toggle ("hiss", "HISS", false), num ("mix", "MIX", 0.0, 1.0, 1.0, "%", true) };
         d.cost.units = 0.6f;

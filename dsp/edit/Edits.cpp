@@ -188,6 +188,207 @@ Result connect (Document& doc, const Registry& reg, const std::string& from, con
     return r;
 }
 
+namespace
+{
+    /** The voice chain `start` is part of: every per-voice module reachable from it along
+        cables, either way (the engine gives one such chain one pool of voices). */
+    std::set<std::string> voiceChain (const Document& doc, const Registry& reg, const std::string& start)
+    {
+        std::set<std::string> chain;
+        std::vector<std::string> todo { start };
+        auto perVoice = [&] (const std::string& id) {
+            const auto* n = doc.findNode (id);
+            const auto* d = n != nullptr ? reg.find (n->type) : nullptr;
+            return d != nullptr && n->domain == Domain::voice && d->role != NodeRole::event && d->role != NodeRole::boundary;
+        };
+        while (! todo.empty())
+        {
+            const auto id = todo.back();
+            todo.pop_back();
+            if (! perVoice (id) || ! chain.insert (id).second)
+                continue;
+            for (const auto& c : doc.connections)
+            {
+                if (c.from == id)
+                    todo.push_back (c.to);
+                if (c.to == id)
+                    todo.push_back (c.from);
+            }
+        }
+        return chain;
+    }
+
+    /** Who plays a chain: the note cables into it. */
+    std::set<std::string> notePlayers (const Document& doc, const Registry& reg, const std::set<std::string>& chain)
+    {
+        std::set<std::string> players;
+        for (const auto& c : doc.connections)
+        {
+            const auto* from = descOf (doc, reg, c.from);
+            if (! c.toParam && chain.count (c.to) > 0 && from != nullptr && from->role == NodeRole::event)
+                players.insert (c.from + "/" + c.fromPort + "/" + std::to_string (c.transpose));
+        }
+        return players;
+    }
+
+    std::string firstAudioOut (const NodeDesc& d)
+    {
+        for (const auto& o : d.outputs)
+            if (isAudio (o.kind))
+                return o.id;
+        return {};
+    }
+
+    /** Voice audio into a global input: through a VOICE MIX of its own. */
+    Result throughVoiceMix (Document& doc, const Registry& reg, const std::string& from, const std::string& fromPort, const std::string& to, const std::string& toPort)
+    {
+        const Document before = doc;
+        const auto* a = doc.findNode (from);
+        const auto* b = doc.findNode (to);
+        auto* mix = doc.addNode (reg, "util.voicemix", 0.5f * (a->x + b->x), a->y);
+        if (mix == nullptr)
+            return fail ("could not add a VOICE MIX");
+        mix->group = b->group;
+        const std::string mixId = mix->id;
+        const auto in = connect (doc, reg, from, fromPort, mixId, "in");
+        const auto out = in.ok ? connect (doc, reg, mixId, "out", to, toPort) : in;
+        if (! in.ok || ! out.ok)
+        {
+            const auto why = ! in.ok ? in.message : out.message;
+            doc = before;
+            return fail (why);
+        }
+        Result r;
+        r.ok = true;
+        r.focus = mixId;
+        r.message = "connected through its own VOICE MIX: " + nameOf (reg, b->type) + " runs once on the combined audio";
+        return r;
+    }
+
+    /** `to` is a per-voice processor in a chain that other note modules play than the chain
+        `from` is in: it moves after the voice mixes and runs once (see connectSmart). */
+    Result shareGlobally (Document& doc, const Registry& reg, const std::string& from, const std::string& fromPort, const std::string& to, const std::string& toPort)
+    {
+        const Document before = doc;
+        const auto* pd = descOf (doc, reg, to);
+        const std::string name = pd != nullptr ? pd->name : to;
+        const std::string outPort = pd != nullptr ? firstAudioOut (*pd) : std::string();
+        auto refuse = [&] (const std::string& why) {
+            doc = before;
+            return fail (why);
+        };
+        if (pd == nullptr || ! pd->supports (Domain::global) || outPort.empty())
+            return refuse (name + " plays per voice only, and these two chains are played by different note modules: give each chain its own VOICE MIX and join them after");
+
+        // The chain's own voice mix, downstream of the processor.
+        std::string mix;
+        {
+            std::set<std::string> seen;
+            std::vector<std::string> todo { to };
+            while (! todo.empty() && mix.empty())
+            {
+                const auto id = todo.back();
+                todo.pop_back();
+                if (! seen.insert (id).second)
+                    continue;
+                for (const auto& c : doc.connections)
+                    if (c.from == id && ! c.toParam)
+                    {
+                        const auto* d = descOf (doc, reg, c.to);
+                        if (d != nullptr && d->role == NodeRole::boundary && d->type == "util.voicemix")
+                            mix = c.to;
+                        else
+                            todo.push_back (c.to);
+                    }
+            }
+        }
+        if (mix.empty())
+            return refuse (name + "'s chain has no VOICE MIX to run it after: add one, then connect");
+
+        // 1. Out of the voice chain: what fed it now feeds what it fed.
+        std::vector<Connection> ups, downs, afterMix;
+        for (const auto& c : doc.connections)
+        {
+            if (c.toParam)
+                continue;
+            if (c.to == to && c.toPort == toPort)
+                ups.push_back (c);
+            else if (c.from == to && c.fromPort == outPort)
+                downs.push_back (c);
+            else if (c.from == mix && c.fromPort == "out")
+                afterMix.push_back (c);
+        }
+        for (const auto& c : ups)
+            doc.disconnect (c.id);
+        for (const auto& c : downs)
+            doc.disconnect (c.id);
+        for (const auto& u : ups)
+            for (const auto& dn : downs)
+                if (! connect (doc, reg, u.from, u.fromPort, dn.to, dn.toPort).ok)
+                    return refuse ("could not keep " + name + "'s chain connected without it");
+        // 2. Global, after the chain's voice mix.
+        for (const auto& c : afterMix)
+            doc.disconnect (c.id);
+        auto* p = doc.findNode (to);
+        const auto* m = doc.findNode (mix);
+        p->domain = Domain::global;
+        p->x = m->x + 240.0f;
+        p->y = m->y;
+        if (! connect (doc, reg, mix, "out", to, toPort).ok)
+            return refuse (name + " cannot take the voice mix");
+        for (const auto& c : afterMix)
+            if (! connect (doc, reg, to, outPort, c.to, c.toPort).ok)
+                return refuse ("could not route " + name + " on to where the voice mix went");
+        // 3. The other chain, through a voice mix of its own.
+        const auto other = throughVoiceMix (doc, reg, from, fromPort, to, toPort);
+        if (! other.ok)
+            return refuse (other.message);
+        if (Validator (reg).validate (doc).hasErrors())
+            return refuse ("that would not make a playable patch");
+        Result r;
+        r.ok = true;
+        r.focus = to;
+        r.message = name + " now runs once, after the voice mixes, on the combined audio: each chain keeps its own notes";
+        return r;
+    }
+}
+
+Result connectSmart (Document& doc, const Registry& reg, const std::string& from, const std::string& fromPort, const std::string& to, const std::string& toPort)
+{
+    const auto* a = doc.findNode (from);
+    const auto* b = doc.findNode (to);
+    const auto* da = descOf (doc, reg, from);
+    const auto* db = descOf (doc, reg, to);
+    if (a == nullptr || b == nullptr || da == nullptr || db == nullptr)
+        return connect (doc, reg, from, fromPort, to, toPort);
+    const int oi = da->outputIndex (fromPort);
+    const bool audio = oi >= 0 && isAudio (da->outputs[static_cast<std::size_t> (oi)].kind);
+    Validator v (reg);
+    const auto check = v.checkConnection (doc, from, fromPort, to, toPort, false);
+    if (check.ok && audio && a->domain == Domain::voice && b->domain == Domain::voice && db->role != NodeRole::boundary)
+    {
+        const auto chainA = voiceChain (doc, reg, from);
+        if (chainA.count (to) == 0)
+        {
+            const auto playersA = notePlayers (doc, reg, chainA), playersB = notePlayers (doc, reg, voiceChain (doc, reg, to));
+            if (! playersA.empty() && ! playersB.empty() && playersA != playersB)
+                return shareGlobally (doc, reg, from, fromPort, to, toPort);
+        }
+    }
+    if (! check.ok && audio && check.suggestion == "util.voicemix" && a->domain == Domain::voice)
+        return throughVoiceMix (doc, reg, from, fromPort, to, toPort);
+    auto r = connect (doc, reg, from, fromPort, to, toPort);
+    if (r.ok && audio)
+    {
+        int feeding = 0;
+        for (const auto& c : doc.connections)
+            feeding += ! c.toParam && c.to == to && c.toPort == toPort ? 1 : 0;
+        if (feeding > 1)
+            r.message = std::to_string (feeding) + " sources into " + db->name + ": it hears their sum" + (b->domain == Domain::voice ? " (one " + db->name + " per voice)" : "");
+    }
+    return r;
+}
+
 Result modulate (Document& doc, const Registry& reg, const std::string& from, const std::string& fromPort, const std::string& to, const std::string& param, double depth)
 {
     Validator v (reg);

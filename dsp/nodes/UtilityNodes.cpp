@@ -429,7 +429,7 @@ void registerUtilityNodes (Registry& r)
     {
         auto d = utility ("util.split", "STEREO SPLIT", "A stereo bus as LEFT, RIGHT, MID and SIDE mono signals");
         d.keywords = { "split", "stereo", "mid side", "left", "right", "mono" };
-        d.inputs = { in ("in", "IN", PortKind::audioStereo) };
+        d.inputs = { in ("in", "IN", PortKind::audioStereo, true) };
         auto mono = [] (const char* id, const char* name) {
             auto p = out (id, name, PortKind::audioMono);
             p.stereoWhenGlobal = false;
@@ -457,7 +457,7 @@ void registerUtilityNodes (Registry& r)
         auto d = utility ("util.gain", "GAIN / VCA", "Level in dB, polarity, and a CV input that multiplies (a VCA for any control)");
         d.keywords = { "gain", "vca", "volume", "level", "invert", "polarity", "trim" };
         d.domains = voiceOrGlobal;
-        d.inputs = { in ("in", "IN", PortKind::audioMono), in ("cv", "CV", PortKind::control) };
+        d.inputs = { in ("in", "IN", PortKind::audioMono, true), in ("cv", "CV", PortKind::control) };
         d.inputs[1].polarity = Polarity::unipolar;
         d.outputs = { out ("out", "OUT", PortKind::audioMono) };
         d.params = { num ("gain", "GAIN", -60.0, 24.0, 0.0, "dB", true), toggle ("invert", "INVERT", false) };
@@ -468,7 +468,7 @@ void registerUtilityNodes (Registry& r)
         auto d = utility ("util.feedback", "FEEDBACK DELAY", "The only way to close a loop: a delay of at least one block, gain below 1, DC-safe");
         d.keywords = { "feedback", "loop", "delay", "recursion" };
         d.role = NodeRole::feedback;
-        d.inputs = { in ("in", "IN", PortKind::audioStereo) };
+        d.inputs = { in ("in", "IN", PortKind::audioStereo, true) };
         d.outputs = { out ("out", "OUT", PortKind::audioStereo) };
         d.params = { logNum ("time", "TIME", 1.0, 2000.0, 120.0, "ms", true), num ("feedback", "AMOUNT", 0.0, 0.95, 0.5, "%", true),
                      num ("damping", "DAMPING", 0.0, 1.0, 0.3, "%") };
@@ -480,7 +480,7 @@ void registerUtilityNodes (Registry& r)
         auto d = utility ("util.output", "OUTPUT", "The patch's one true output (a safety limiter follows it)");
         d.keywords = { "output", "out", "master", "main" };
         d.role = NodeRole::output;
-        d.inputs = { in ("in", "IN", PortKind::audioStereo) };
+        d.inputs = { in ("in", "IN", PortKind::audioStereo, true) };
         d.outputs = { out ("main", "MAIN", PortKind::audioStereo) };
         d.params = { num ("level", "LEVEL", -60.0, 6.0, 0.0, "dB", true), toggle ("mute", "MUTE", false) };
         d.create = make<Output>();
@@ -489,7 +489,7 @@ void registerUtilityNodes (Registry& r)
     {
         auto d = utility ("util.scope", "SCOPE / METER", "A pass-through with a live meter and a small scope of what passes");
         d.keywords = { "scope", "meter", "level", "analyzer", "oscilloscope" };
-        d.inputs = { in ("in", "IN", PortKind::audioStereo) };
+        d.inputs = { in ("in", "IN", PortKind::audioStereo, true) };
         d.outputs = { out ("out", "OUT", PortKind::audioStereo) };
         d.create = make<Scope>();
         r.add (d);

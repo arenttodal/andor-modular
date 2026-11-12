@@ -403,6 +403,24 @@ void NodeView::paint (juce::Graphics& g)
         const auto key = (group ? p.innerNode + "/" : std::string()) + p.id;
         const bool on = p.input ? connectedIn.count (key) > 0 : connectedOut.count (key) > 0;
         drawSocket (g, p.at, p.kind, on, static_cast<int> (i) == hoverPort);
+        if (p.input && p.kind != PortKind::notes)
+        {
+            // Several cables into one input (it hears their sum): how many, beside the socket.
+            int feeding = 0;
+            for (const auto& c : doc.connections)
+                feeding += ! c.toParam && c.toPort == p.id && c.to == (group ? p.innerNode : nodeId) ? 1 : 0;
+            if (feeding > 1)
+            {
+                const auto pill = juce::Rectangle<float> (13.0f, 11.0f).withCentre ({ p.at.x - 1.0f, p.at.y - 11.0f });
+                g.setColour (board::terminalFace);
+                g.fillRoundedRectangle (pill, 5.0f);
+                g.setColour (board::terminalEdge);
+                g.drawRoundedRectangle (pill, 5.0f, 0.8f);
+                g.setColour (board::terminalInk);
+                g.setFont (fonts::make (8.5f, Weight::semibold));
+                g.drawText (juce::String (feeding), pill, juce::Justification::centred, false);
+            }
+        }
         g.setColour (on ? look.ink.withAlpha (0.92f) : look.mutedInk);
         const auto labelArea = p.input ? juce::Rectangle<float> (r.getX() + 10.0f, p.at.y - 8.0f, 78.0f, 16.0f) : juce::Rectangle<float> (r.getRight() - 88.0f, p.at.y - 8.0f, 78.0f, 16.0f);
         g.drawText (juce::String (p.name).toUpperCase(), labelArea, p.input ? juce::Justification::centredLeft : juce::Justification::centredRight, false);
@@ -1428,7 +1446,7 @@ void Canvas::finishCable (juce::Point<float> at)
             const auto to = cable.fromOutput ? other : cable.node, toPort = cable.fromOutput ? p.id : cable.port;
             const bool isParam = v->isGroup() && model.registry().find (model.document().findNode (to)->type)->inputIndex (toPort) < 0;
             model.perform ("connect", [&] (Document& d) {
-                return isParam ? edit::modulate (d, model.registry(), from, fromPort, to, toPort, 0.5) : edit::connect (d, model.registry(), from, fromPort, to, toPort);
+                return isParam ? edit::modulate (d, model.registry(), from, fromPort, to, toPort, 0.5) : edit::connectSmart (d, model.registry(), from, fromPort, to, toPort);
             });
         }
         return;
@@ -1457,8 +1475,8 @@ void Canvas::finishCable (juce::Point<float> at)
                 last.message = "no compatible port on " + d->name;
                 for (const auto& p : cable.fromOutput ? d->inputs : d->outputs)
                 {
-                    auto r = cable.fromOutput ? edit::connect (doc, model.registry(), cable.node, cable.port, v->id(), p.id)
-                                              : edit::connect (doc, model.registry(), v->id(), p.id, cable.node, cable.port);
+                    auto r = cable.fromOutput ? edit::connectSmart (doc, model.registry(), cable.node, cable.port, v->id(), p.id)
+                                              : edit::connectSmart (doc, model.registry(), v->id(), p.id, cable.node, cable.port);
                     if (r.ok)
                         return r;
                     last = r;

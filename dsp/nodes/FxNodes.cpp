@@ -68,7 +68,7 @@ namespace
         d.keywords = std::move (keywords);
         d.domains = globalOnly;
         d.defaultDomain = Domain::global;
-        d.inputs = { in ("in", "IN", PortKind::audioStereo) };
+        d.inputs = { in ("in", "IN", PortKind::audioStereo, true) };
         d.outputs = { out ("out", "OUT", PortKind::audioStereo) };
         d.cost.units = 0.8f;
         return d;

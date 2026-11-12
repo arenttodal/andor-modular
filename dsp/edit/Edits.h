@@ -77,6 +77,21 @@ Result connect (Document& doc, const Registry& reg, const std::string& from, con
 Result modulate (Document& doc, const Registry& reg, const std::string& from, const std::string& fromPort, const std::string& to,
                  const std::string& param, double depth);
 
+/** What dragging a cable does (the canvas uses this, not `connect`): several sources may meet
+    in one processor, and the patch is routed so that works as the musician means it.
+
+      - A further source into an audio input that already has one: connected and summed there
+        (a filter hears the sum, one filter per voice; it is not copied for each source).
+      - Two voice chains that DIFFERENT note modules play (each its own ARP) into one per-voice
+        processor would become one voice pool: every note of either would play both. Instead
+        the processor is moved after the voice mixes and runs ONCE, globally, on the combined
+        audio; each chain keeps its own notes ("shared effect runs once").
+      - Voice audio into a module that already runs globally: through a VOICE MIX of its own.
+
+    Everything else is `connect`, with its reasons when it refuses. One transaction. */
+Result connectSmart (Document& doc, const Registry& reg, const std::string& from, const std::string& fromPort, const std::string& to,
+                     const std::string& toPort);
+
 enum class DropAction { layer, morph, modulate, replace };
 /** A source dragged onto another: LAYER (both sound), MORPH (a two-input MORPH, both wired),
     MODULATE (dragged into target's FM), REPLACE (target becomes dragged's type). */

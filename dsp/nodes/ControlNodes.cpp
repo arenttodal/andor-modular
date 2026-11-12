@@ -482,7 +482,7 @@ void registerControlNodes (Registry& r)
         auto d = controller ("ctl.follower", "ENVELOPE FOLLOWER", "Any bus's level as a control, with onset trigger and gate (Rhythmic Morph anywhere)",
                              globalOnly, Domain::global);
         d.keywords = { "follower", "envelope", "sidechain", "ducking", "rhythm", "onset", "trigger" };
-        d.inputs = { in ("in", "IN", PortKind::audioStereo) };
+        d.inputs = { in ("in", "IN", PortKind::audioStereo, true) };
         d.outputs = { out ("env", "ENVELOPE", PortKind::control, Polarity::unipolar), out ("trig", "TRIGGER", PortKind::trigger, Polarity::unipolar),
                       out ("gate", "GATE", PortKind::gate, Polarity::unipolar) };
         d.params = { logNum ("attack", "ATTACK", 0.0005, 0.5, 0.004, "s", true), logNum ("release", "RELEASE", 0.005, 2.0, 0.15, "s", true),

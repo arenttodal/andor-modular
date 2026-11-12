@@ -428,3 +428,166 @@ TEST_CASE ("ORGANIC SAMPLE: a recording with no clear pitch is played as recorde
     // a tonal recording keeps its analysed root (the factory bowed C3)
     CHECK (library().loadNow (test::presetPath ("factory/samples/bowed-c3.wav"))->pitched());
 }
+
+//==============================================================================
+TEST_CASE ("Several sources of one note stream into ONE per-voice filter: it hears their sum, and is not copied", "[routing][fanin]")
+{
+    // KEYBOARD -> OSC A + OSC B (an octave up) -> [sum per voice] -> one FILTER -> AMP ENV -> VOICE MIX
+    std::string a;
+    Document d = steadyPatch (&a);
+    const auto filter = edit::addModule (d, reg(), "proc.filter", 200, 0, a).focus;
+    REQUIRE_FALSE (filter.empty());
+    edit::setParam (d, reg(), filter, "cutoff", 18000.0);
+    auto* second = d.addNode (reg(), "osc.analog", 0, 240);
+    const auto b = second->id;
+    second->domain = Domain::voice;
+    edit::setParam (d, reg(), b, "wave", 1.0);
+    edit::setParam (d, reg(), b, "drift", 0.0);
+    edit::setParam (d, reg(), b, "octave", 1.0);
+    REQUIRE (edit::connect (d, reg(), nodeOfType (d, "event.keyboard"), "notes", b, "notes").ok);
+    const std::size_t nodesBefore = d.nodes.size();
+    const auto joined = edit::connectSmart (d, reg(), b, "out", filter, "in");
+    INFO (joined.message);
+    REQUIRE (joined.ok);
+    CHECK (joined.message.find ("2 sources") != std::string::npos);
+    CHECK (d.nodes.size() == nodesBefore);                       // no mixer, no second filter
+    CHECK (d.findNode (filter)->domain == Domain::voice);
+    CHECK_FALSE (Validator (reg()).validate (d).hasErrors());
+
+    OfflineRenderer r;
+    const auto out = test::render (r, d, { { 57, 0.0, 1.0 } }, 1.0);
+    const double low = test::toneLevel (out.left, 48000.0, 220.0, 24000, 9600), high = test::toneLevel (out.left, 48000.0, 440.0, 24000, 9600);
+    CHECK (low > 0.001);
+    CHECK (high > 0.001);
+    // one voice chain (one pool), one filter instance per voice
+    REQUIRE (out.graph != nullptr);
+    CHECK (out.graph->lanes.size() == 1);
+    const auto& fn = out.graph->nodes[static_cast<std::size_t> (out.graph->nodeIndexById.at (filter))];
+    CHECK (static_cast<int> (fn.instances.size()) == d.settings.polyphony);
+    // closing the filter takes BOTH down: it really hears the sum
+    Document closed = d;
+    edit::setParam (closed, reg(), filter, "cutoff", 60.0);
+    OfflineRenderer r2;
+    const auto dark = test::render (r2, closed, { { 57, 0.0, 1.0 } }, 1.0);
+    CHECK (test::toneLevel (dark.left, 48000.0, 440.0, 24000, 9600) < 0.2 * high);
+    CHECK (test::toneLevel (dark.left, 48000.0, 220.0, 24000, 9600) < 0.7 * low);
+    // a third source the same way
+    auto* third = d.addNode (reg(), "src.noise", 0, 480);
+    const auto c = third->id;
+    third->domain = Domain::voice;
+    REQUIRE (edit::connect (d, reg(), nodeOfType (d, "event.keyboard"), "notes", c, "notes").ok);
+    const auto three = edit::connectSmart (d, reg(), c, "out", filter, "in");
+    CHECK (three.ok);
+    CHECK (three.message.find ("3 sources") != std::string::npos);
+    // saved and read back unchanged
+    Document back;
+    REQUIRE (loadFromString (saveToString (d), back).ok);
+    CHECK (saveToString (back) == saveToString (d));
+}
+
+TEST_CASE ("Two chains with their own ARPs into one filter: it runs once, globally, and each chain keeps its notes", "[routing][fanin][routing-domains]")
+{
+    // Chain A: KEYBOARD -> ARP -> OSC A -> FILTER -> AMP ENV -> VOICE MIX -> OUTPUT
+    std::string a;
+    Document d = steadyPatch (&a);
+    const auto filter = edit::addModule (d, reg(), "proc.filter", 200, 0, a).focus;
+    edit::setParam (d, reg(), filter, "cutoff", 18000.0);
+    const auto arpA = edit::addModule (d, reg(), "event.arp", -100, 0, a).focus;
+    REQUIRE_FALSE (arpA.empty());
+    // Chain B: KEYBOARD -> ARP (another rate) -> OSC B, not yet routed anywhere
+    auto* second = d.addNode (reg(), "osc.analog", 0, 300);
+    const auto b = second->id;
+    second->domain = Domain::voice;
+    edit::setParam (d, reg(), b, "wave", 1.0);
+    edit::setParam (d, reg(), b, "drift", 0.0);
+    edit::setParam (d, reg(), b, "octave", 2.0);
+    auto* arp2 = d.addNode (reg(), "event.arp", -200, 300);
+    const auto arpB = arp2->id;
+    edit::setParam (d, reg(), arpB, "rate", 2.0);
+    REQUIRE (edit::connect (d, reg(), nodeOfType (d, "event.keyboard"), "notes", arpB, "notes").ok);
+    REQUIRE (edit::connect (d, reg(), arpB, "notes", b, "notes").ok);
+
+    const Document before = d;
+    const auto shared = edit::connectSmart (d, reg(), b, "out", filter, "in");
+    INFO (shared.message);
+    REQUIRE (shared.ok);
+    CHECK (shared.message.find ("runs once") != std::string::npos);
+    CHECK (d.findNode (filter)->domain == Domain::global);
+    const auto report = Validator (reg()).validate (d);
+    for (const auto& i : report.issues)
+        INFO (i.message);
+    CHECK_FALSE (report.hasErrors());
+
+    OfflineRenderer r;
+    RenderSettings s;
+    s.seconds = 3.0;
+    s.notes = { { 45, 0.0, 3.0 }, { 52, 0.0, 3.0 } };
+    const auto out = r.render (d, s);
+    REQUIRE (out.graph != nullptr);
+    CHECK (out.graph->lanes.size() == 2);   // two voice pools: the notes of one never play the other
+    const auto& fn = out.graph->nodes[static_cast<std::size_t> (out.graph->nodeIndexById.at (filter))];
+    CHECK (fn.instances.size() == 1);       // the filter runs once
+    CHECK (test::finite (out.left));
+    CHECK (test::rms (out.left, 48000, 144000) > 0.005);
+    // each chain alone is heard through it (solo by mute): both feed the one filter
+    for (const auto& muted : { a, b })
+    {
+        Document one = d;
+        one.findNode (muted)->muted = true;
+        OfflineRenderer rr;
+        const auto solo = rr.render (one, s);
+        INFO ("with " << muted << " muted");
+        CHECK (test::rms (solo.left, 48000, 144000) > 0.002);
+        CHECK (test::rms (solo.left, 48000, 144000) < test::rms (out.left, 48000, 144000));
+    }
+    // released: nothing hangs
+    Player p;
+    p.timing.valid = true;
+    p.timing.bpm = 120.0;
+    p.publish (d);
+    p.run (400, { Player::on (45), Player::on (52) });
+    p.run (1500, { Player::off (45), Player::off (52) });
+    CHECK (p.engine.activeVoices() == 0);
+    CHECK (p.tail (8000) < 1.0e-5);
+
+    // a per-voice-only processor cannot be shared that way: refused with the reason, nothing changed
+    Document m = before;
+    const auto morph = m.addNode (reg(), "proc.morph", 300, 300)->id;
+    m.findNode (morph)->domain = Domain::voice;
+    REQUIRE (edit::connect (m, reg(), a, "out", morph, "a").ok);
+    const auto text = saveToString (m);
+    const auto refused = edit::connectSmart (m, reg(), b, "out", morph, "b");
+    INFO (refused.message);
+    if (! refused.ok)
+        CHECK (saveToString (m) == text);
+}
+
+TEST_CASE ("Voice audio dragged into a global effect goes through its own VOICE MIX; what cannot work is still refused", "[routing][fanin][routing-domains]")
+{
+    std::string a;
+    Document d = steadyPatch (&a);
+    const auto space = edit::addModule (d, reg(), "fx.space", 600, 0, nodeOfType (d, "util.voicemix")).focus;
+    REQUIRE_FALSE (space.empty());
+    REQUIRE (d.findNode (space)->domain == Domain::global);
+    auto* second = d.addNode (reg(), "osc.analog", 0, 300);
+    const auto b = second->id;
+    second->domain = Domain::voice;
+    REQUIRE (edit::connect (d, reg(), nodeOfType (d, "event.keyboard"), "notes", b, "notes").ok);
+    const std::size_t mixes = static_cast<std::size_t> (std::count_if (d.nodes.begin(), d.nodes.end(), [] (const NodeModel& n) { return n.type == "util.voicemix"; }));
+    const auto joined = edit::connectSmart (d, reg(), b, "out", space, "in");
+    INFO (joined.message);
+    REQUIRE (joined.ok);
+    CHECK (static_cast<std::size_t> (std::count_if (d.nodes.begin(), d.nodes.end(), [] (const NodeModel& n) { return n.type == "util.voicemix"; })) == mixes + 1);
+    CHECK_FALSE (Validator (reg()).validate (d).hasErrors());
+    OfflineRenderer r;
+    const auto out = test::render (r, d, { { 57, 0.0, 1.0 } }, 1.5);
+    CHECK (test::rms (out.left, 24000, 60000) > 0.005);
+    const auto& sn = out.graph->nodes[static_cast<std::size_t> (out.graph->nodeIndexById.at (space))];
+    CHECK (sn.instances.size() == 1);
+
+    // still refused, with the reason: notes into audio, audio into itself (a loop)
+    const auto text = saveToString (d);
+    CHECK_FALSE (edit::connectSmart (d, reg(), nodeOfType (d, "event.keyboard"), "notes", space, "in").ok);
+    CHECK_FALSE (edit::connectSmart (d, reg(), space, "out", space, "in").ok);
+    CHECK (saveToString (d) == text);
+}

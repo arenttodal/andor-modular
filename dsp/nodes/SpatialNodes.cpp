@@ -136,7 +136,7 @@ void registerSpatialNodes (Registry& r)
                  "Level-based (no delay between the channels): the mono downmix stays clean.";
         d.domains = globalOnly;
         d.defaultDomain = Domain::global;
-        d.inputs = { in ("in", "IN", PortKind::audioStereo) };
+        d.inputs = { in ("in", "IN", PortKind::audioStereo, true) };
         d.outputs = { out ("out", "OUT", PortKind::audioStereo), out ("pos", "POSITION", PortKind::control) };
         std::vector<std::string> rates;
         for (int i = 0; i < osp::arp::rateCount; ++i)
@@ -157,7 +157,7 @@ void registerSpatialNodes (Registry& r)
         d.keywords = { "pan", "width", "stereo", "balance", "mid side" };
         d.domains = globalOnly;
         d.defaultDomain = Domain::global;
-        d.inputs = { in ("in", "IN", PortKind::audioStereo), in ("pan", "PAN", PortKind::control) };
+        d.inputs = { in ("in", "IN", PortKind::audioStereo, true), in ("pan", "PAN", PortKind::control) };
         d.outputs = { out ("out", "OUT", PortKind::audioStereo) };
         d.params = { num ("pan", "PAN", -1.0, 1.0, 0.0, "", true), num ("width", "WIDTH", 0.0, 2.0, 1.0, "%", true) };
         d.cost.units = 0.05f;

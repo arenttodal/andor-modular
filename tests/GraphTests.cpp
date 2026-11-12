@@ -59,9 +59,18 @@ TEST_CASE ("The validator enforces types, domains, fan-in, cycles and budgets", 
     CHECK (check.suggestion == "util.voicemix");
     // notes into audio
     CHECK_FALSE (v.checkConnection (d, test::nodeOfType (d, "event.keyboard"), "notes", vca, "in", false).ok);
-    // fan-in on a single input
+    // several sources into one processor's audio input: accepted (summed there)
     auto* osc2 = d.addNode (reg(), "osc.analog", 0, 300);
-    check = v.checkConnection (d, osc2->id, "out", vca, "in", false);
+    const auto osc2id = osc2->id;
+    check = v.checkConnection (d, osc2id, "out", vca, "in", false);
+    CHECK (check.ok);
+    // but MORPH keeps its two inputs apart: a second cable into A is refused, a mix suggested
+    auto* morph = d.addNode (reg(), "proc.morph", 300, 300);
+    const auto morphId = morph->id;
+    REQUIRE (v.checkConnection (d, osc2id, "out", morphId, "a", false).ok);
+    d.connect (osc2id, "out", morphId, "a");
+    auto* osc3 = d.addNode (reg(), "osc.analog", 0, 500);
+    check = v.checkConnection (d, osc3->id, "out", morphId, "a", false);
     CHECK_FALSE (check.ok);
     CHECK (check.suggestion == "util.voicemix");
     // a loop without FEEDBACK DELAY
