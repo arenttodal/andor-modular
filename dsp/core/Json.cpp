@@ -522,10 +522,18 @@ std::string write (const Value& v, int indent)
     return out;
 }
 
-double roundSignificant (double value, int digits)
+double roundSignificant (double value, int digits, double scale)
 {
     if (value == 0.0 || ! std::isfinite (value))
         return value;
+    if (scale > 0.0)
+    {
+        double floor = scale;
+        for (int i = 0; i < digits; ++i)
+            floor *= 0.1;
+        if (std::abs (value) < floor)
+            return 0.0;
+    }
     const auto text = formatDouble (value, digits);
     double rounded = value;
     return parseDouble (text.data(), text.size(), rounded) ? rounded : value;

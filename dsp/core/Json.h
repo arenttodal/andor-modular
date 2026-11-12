@@ -102,7 +102,9 @@ std::string write (const Value& v, int indent = 2);
 /** A value derived through a curve (log / pow, an interpolation), as a document stores it:
     rounded to `digits` significant decimal digits. The last digits of such a result differ
     between platforms (their maths libraries, fused multiply-add); a stored value must not,
-    so the same edit writes the same patch everywhere. Message thread (it allocates). */
-double roundSignificant (double value, int digits = 12);
+    so the same edit writes the same patch everywhere. `scale` (the size of the value's range,
+    when known): a result that small beside it (under scale * 10^-digits) is the residue of a
+    value that is zero, and is stored as zero. Message thread (it allocates). */
+double roundSignificant (double value, int digits = 12, double scale = 0.0);
 
 } // namespace andor::modular::json

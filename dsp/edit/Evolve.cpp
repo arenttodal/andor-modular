@@ -114,7 +114,7 @@ EvolveResult evolve (const Document& original, const Registry& reg, const Evolve
                 else
                 {
                     const double norm = p.normalise (was) + r.bipolar() * reach[level];
-                    now = json::roundSignificant (p.denormalise (std::clamp (norm, 0.0, 1.0)));
+                    now = json::roundSignificant (p.denormalise (std::clamp (norm, 0.0, 1.0)), 12, std::max (std::abs (p.min), std::abs (p.max)));
                 }
                 if (std::abs (now - was) < 1.0e-9)
                     continue;
@@ -129,7 +129,7 @@ EvolveResult evolve (const Document& original, const Registry& reg, const Evolve
                 if (c.toParam && protect.count (c.to) == 0 && std::find (scope.begin(), scope.end(), c.to) != scope.end() && r.nextDouble() < 0.5)
                 {
                     const double was = c.depth;
-                    c.depth = json::roundSignificant (std::clamp (c.depth + r.bipolar() * reach[level], -1.0, 1.0));
+                    c.depth = json::roundSignificant (std::clamp (c.depth + r.bipolar() * reach[level], -1.0, 1.0), 12, 1.0);
                     changes.push_back ("modulation depth " + std::to_string (static_cast<int> (std::round (was * 100))) + "% > "
                                        + std::to_string (static_cast<int> (std::round (c.depth * 100))) + "%");
                 }
