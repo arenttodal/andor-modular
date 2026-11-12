@@ -9,6 +9,8 @@
 #include "core/Fft.h"
 #include "core/Prng.h"
 #include "engine/AbyssReverb.h"
+#include "engine/BloomReverb.h"
+#include "engine/VintageReverb.h"
 #include "engine/DriveProcessor.h"
 #include "engine/EchoDelay.h"
 #include "engine/MovementBus.h"
@@ -667,55 +669,89 @@ namespace
     };
 
     //==========================================================================
+    /** ANDOR's note values for a synced delay time, in the echo's own order (the index is what
+        EchoDelay and BLOOM play). */
+    std::vector<std::string> divisionNames()
+    {
+        std::vector<std::string> names;
+        for (int i = 0; i < osp::shaping::echoDivisionCount; ++i)
+            names.emplace_back (osp::shaping::echoDivisionName (i));
+        return names;
+    }
+
     class Space final : public Processor
     {
     public:
-        enum P { type, decay, size, predelay, damping, modulation, width, lowcut, highcut, mix, gravity };
+        enum P { type, decay, size, predelay, damping, modulation, width, lowcut, highcut, mix, gravity,
+                 resonance, freeze, abyssVariant, vintageVariant, vintageEra, vintageDiffusion, bloomVariant, bloomSync, bloomDivision, bloomTime, bloomDiffusion };
+        /** TYPE: the four rooms, then ANDOR's other three engines (appended: saved by index). */
+        enum Engine { abyssType = 4, vintageType = 5, bloomType = 6 };
         void prepare (const PrepareContext& pc) override
         {
             rooms.prepare (pc.sampleRate);
             abyss.prepare (pc.sampleRate);
+            vintage.prepare (pc.sampleRate);
+            bloom.prepare (pc.sampleRate);
         }
         void reset() noexcept override
         {
             rooms.reset();
             abyss.reset();
+            vintage.reset();
+            bloom.reset();
         }
         void process (const ChunkContext& ctx, ProcessIO& io) noexcept override
         {
             const float* p = io.params;
-            const int t = static_cast<int> (p[type]);
-            const bool useAbyss = t == 4;
-            if (useAbyss)
+            const int t = std::clamp (static_cast<int> (p[type]), 0, 6);
+            shared = p;   // (what every engine shares: ANDOR's SPACE is one set of controls over its engines)
+            if (t == abyssType)
             {
                 osp::AbyssReverb::Settings s;
-                s.decaySeconds = p[decay];
-                s.size = p[size];
-                s.preDelayMs = p[predelay];
-                s.damping = p[damping];
-                s.modulation = p[modulation];
-                s.width = p[width];
-                s.lowCutHz = p[lowcut];
-                s.highCutHz = p[highcut];
+                fill (s);
                 s.gravity = p[gravity];
+                s.resonance = p[resonance];
+                s.freeze = p[freeze] >= 0.5f;
+                s.variant = static_cast<osp::AbyssVariant> (std::clamp (static_cast<int> (p[abyssVariant]), 0, 3));
                 if (! configured || lastType != t || s.structurallyDifferent (abyssNow))
                     abyss.configure (s);
                 else
                     abyss.tune (s);
                 abyssNow = s;
             }
+            else if (t == vintageType)
+            {
+                osp::VintageReverb::Settings s;
+                fill (s);
+                s.variant = static_cast<osp::VintageVariant> (std::clamp (static_cast<int> (p[vintageVariant]), 0, 3));
+                s.era = static_cast<osp::VintageEra> (std::clamp (static_cast<int> (p[vintageEra]), 0, 1));
+                s.diffusion = p[vintageDiffusion];
+                if (! configured || lastType != t || s.structurallyDifferent (vintageNow))
+                    vintage.configure (s);
+                else
+                    vintage.tune (s);
+                vintageNow = s;
+            }
+            else if (t == bloomType)
+            {
+                osp::BloomReverb::Settings s;
+                fill (s);
+                s.variant = static_cast<osp::BloomVariant> (std::clamp (static_cast<int> (p[bloomVariant]), 0, 3));
+                s.sync = p[bloomSync] >= 0.5f;
+                s.division = static_cast<int> (p[bloomDivision]);
+                s.timeMs = p[bloomTime];
+                s.diffusion = p[bloomDiffusion];
+                bloom.setTempo (ctx.bpm);
+                if (! configured || lastType != t)
+                    bloom.configure (s);
+                else
+                    bloom.tune (s);
+            }
             else
             {
                 osp::SpaceReverb::Settings s;
-                s.type = static_cast<osp::SpaceType> (std::clamp (t, 0, 3));
-                s.decaySeconds = p[decay];
-                s.size = p[size];
-                s.preDelayMs = p[predelay];
-                s.damping = p[damping];
-                s.modulation = p[modulation];
-                s.width = p[width];
-                s.lowCutHz = p[lowcut];
-                s.highCutHz = p[highcut];
+                s.type = static_cast<osp::SpaceType> (t);
+                fill (s);
                 if (! configured || lastType != t || s.structurallyDifferent (roomsNow))
                     rooms.configure (s);
                 else
@@ -729,8 +765,12 @@ namespace
             {
                 const float l = io.in[0][0][i], r = io.in[0][1][i];
                 float wl, wr;
-                if (useAbyss)
+                if (t == abyssType)
                     abyss.process (l, r, wl, wr);
+                else if (t == vintageType)
+                    vintage.process (l, r, wl, wr);
+                else if (t == bloomType)
+                    bloom.process (l, r, wl, wr);
                 else
                     rooms.process (l, r, wl, wr);
                 io.out[0][0][i] = l * (1.0f - wet) + wl * wet;
@@ -739,10 +779,27 @@ namespace
         }
 
     private:
+        template <typename S>
+        void fill (S& s) const noexcept
+        {
+            const float* p = shared;
+            s.decaySeconds = p[decay];
+            s.size = p[size];
+            s.preDelayMs = p[predelay];
+            s.damping = p[damping];
+            s.modulation = p[modulation];
+            s.width = p[width];
+            s.lowCutHz = p[lowcut];
+            s.highCutHz = p[highcut];
+        }
+        const float* shared = nullptr;
         osp::SpaceReverb rooms;
         osp::AbyssReverb abyss;
+        osp::VintageReverb vintage;
+        osp::BloomReverb bloom;
         osp::SpaceReverb::Settings roomsNow;
         osp::AbyssReverb::Settings abyssNow;
+        osp::VintageReverb::Settings vintageNow;
         bool configured = false;
         int lastType = -1;
     };
@@ -788,8 +845,18 @@ namespace
     class Movement final : public Processor
     {
     public:
-        void prepare (const PrepareContext& pc) override { bus.prepare (pc.sampleRate, pc.seed); }
-        void reset() noexcept override { bus.reset(); }
+        // (SHAPER's own clock, for a host whose transport is stopped, starts "on the first note":
+        // a module in a patch has no note of its own, so it starts with the module.)
+        void prepare (const PrepareContext& pc) override
+        {
+            bus.prepare (pc.sampleRate, pc.seed);
+            bus.noteStarted();
+        }
+        void reset() noexcept override
+        {
+            bus.reset();
+            bus.noteStarted();
+        }
         void process (const ChunkContext& ctx, ProcessIO& io) noexcept override
         {
             const float* p = io.params;
@@ -808,12 +875,28 @@ namespace
             s.pulseRate = a;
             s.pulseShape = b;
             s.pulseStereo = c;
+            // SHAPER: a pattern on the host's grid (its own settings; A, B and C are not its)
+            s.movementMode = static_cast<osp::MovementMode> (std::clamp (static_cast<int> (p[0]), 0, 4));
+            s.shaper.pattern = static_cast<int> (p[pattern]);
+            s.shaper.rate = static_cast<osp::ShaperRate> (std::clamp (static_cast<int> (p[shaperRate]), 0, 5));
+            s.shaper.target = static_cast<osp::ShaperTarget> (std::clamp (static_cast<int> (p[target]), 0, 2));
+            s.shaper.smooth = p[smooth];
+            s.shaper.custom = p[custom] >= 0.5f;
+            if (s.shaper.custom)
+                for (int i = 0; i < 16; ++i)
+                {
+                    auto& step = s.shaper.customSteps[static_cast<std::size_t> (i)];
+                    step.start = p[firstStep + i];
+                    step.end = p[firstStep + 16 + i];
+                    step.shape = static_cast<osp::StepShape> (std::clamp (static_cast<int> (p[firstStep + 32 + i]), 0, 5));
+                }
             osp::HostTiming t;
             t.valid = true;
             t.playing = ctx.playing;
             t.bpm = ctx.bpm;
             t.ppq = ctx.ppq;
             bus.setTiming (t);
+            bus.setVoicesActive (true);   // (a module in a patch: it runs while the patch does)
             bus.setTargets (s, p[1]);
             for (int i = 0; i < ctx.numSamples; ++i)
             {
@@ -823,6 +906,14 @@ namespace
                 io.out[0][1][i] = r;
             }
         }
+        void telemetry (Telemetry& t) const noexcept override
+        {
+            t.values[0] = bus.shaperPhase();   // SHAPER's place in its pattern (-1: not running)
+            t.values[1] = bus.amplitude();
+            t.count = 2;
+        }
+        /** (after MODE, AMOUNT, A, B, C: SHAPER's, then its sixteen steps' starts, ends, shapes) */
+        enum P { pattern = 5, shaperRate, target, smooth, custom, firstStep };
 
     private:
         osp::MovementBus bus;
@@ -982,12 +1073,24 @@ void registerProcessorNodes (Registry& r)
         d.help = "A global stereo reverb. TYPE and SIZE re-voice the room (heard at the next sound); the rest changes in place.";
         d.inputs = { in ("in", "IN", PortKind::audioStereo, true) };
         d.outputs = { out ("out", "OUT", PortKind::audioStereo) };
-        d.params = { choice ("type", "TYPE", { "ROOM", "HALL", "PLATE", "SPRING", "ABYSS" }, 1, true), logNum ("decay", "DECAY", 0.2, 30.0, 3.0, "s", true),
+        d.params = { choice ("type", "TYPE", { "ROOM", "HALL", "PLATE", "SPRING", "ABYSS", "VINTAGE", "BLOOM" }, 1, true), logNum ("decay", "DECAY", 0.2, 30.0, 3.0, "s", true),
                      num ("size", "SIZE", 0.0, 1.0, 0.5, "%"), num ("predelay", "PRE-DELAY", 0.0, 250.0, 8.0, "ms"), num ("damping", "DAMPING", 0.0, 1.0, 0.4, "%"),
                      num ("modulation", "MOTION", 0.0, 1.0, 0.4, "%"), num ("width", "WIDTH", 0.0, 1.0, 1.0, "%"),
                      logNum ("lowcut", "LOW CUT", 20.0, 1000.0, 100.0, "Hz"), logNum ("highcut", "HIGH CUT", 1000.0, 20000.0, 6000.0, "Hz"),
-                     num ("mix", "MIX", 0.0, 1.0, 0.3, "%", true), when (num ("gravity", "GRAVITY", -1.0, 1.0, 0.0, "%"), "type", { 4 }) };
+                     num ("mix", "MIX", 0.0, 1.0, 0.3, "%", true), when (num ("gravity", "GRAVITY", -1.0, 1.0, 0.0, "%"), "type", { 4 }),
+                     // ANDOR OSP's other engines' own settings (appended; each at its engine's default)
+                     when (num ("resonance", "RESONANCE", 0.0, 1.0, 0.0, "%"), "type", { 4 }), when (toggle ("freeze", "FREEZE", false), "type", { 4 }),
+                     when (choice ("abyssVariant", "VARIANT", { "DEEP", "DARK", "INVERSE", "ENDLESS" }, 0), "type", { 4 }),
+                     when (choice ("vintageVariant", "VARIANT", { "HALL", "PLATE", "CHAMBER", "ROOM" }, 0), "type", { 5 }),
+                     when (choice ("vintageEra", "ERA", { "EARLY", "LATER" }, 0), "type", { 5 }),
+                     when (num ("vintageDiffusion", "DIFFUSION", 0.0, 1.0, 0.7, "%"), "type", { 5 }),
+                     when (choice ("bloomVariant", "VARIANT", { "CLEAN", "VINTAGE", "TAPE", "WASH" }, 0), "type", { 6 }),
+                     when (toggle ("bloomSync", "SYNC", true), "type", { 6 }), when (choice ("bloomDivision", "DIVISION", divisionNames(), 6), "type", { 6 }),
+                     when (logNum ("bloomTime", "TIME", 20.0, 1500.0, 350.0, "ms"), "type", { 6 }),
+                     when (num ("bloomDiffusion", "DIFFUSION", 0.0, 1.0, 0.6, "%"), "type", { 6 }) };
         d.params[2].modulatable = false;   // SIZE re-voices the network
+        for (const char* fixed : { "resonance", "vintageDiffusion", "bloomTime", "bloomDiffusion" })
+            d.params[static_cast<std::size_t> (d.paramIndex (fixed))].modulatable = false;
         d.cost.units = 2.0f;
         d.create = make<Space>();
         r.add (d);
@@ -1001,9 +1104,7 @@ void registerProcessorNodes (Registry& r)
         // (The note values are the echo's own, in its order: the index is what EchoDelay plays.
         // The first names here once read "1/32, 1/16, 1/16D, 1/8T ...": labels that did not match
         // what sounded. The stored values, and so every patch's sound, are unchanged.)
-        std::vector<std::string> divisions;
-        for (int i = 0; i < osp::shaping::echoDivisionCount; ++i)
-            divisions.emplace_back (osp::shaping::echoDivisionName (i));
+        const auto divisions = divisionNames();
         d.params = { choice ("type", "TYPE", { "TAPE", "BBD", "ASCEND" }, 0, true), toggle ("sync", "SYNC", true),
                      when (choice ("division", "DIVISION", divisions, 5), "sync", { 1 }),
                      when (logNum ("time", "TIME", 20.0, 1500.0, 375.0, "ms"), "sync", { 0 }), num ("feedback", "FEEDBACK", 0.0, 1.0, 0.45, "%", true),
@@ -1022,8 +1123,28 @@ void registerProcessorNodes (Registry& r)
         d.keywords = { "movement", "drift", "wow", "flutter", "chorus", "tremolo", "pulse" };
         d.inputs = { in ("in", "IN", PortKind::audioStereo, true) };
         d.outputs = { out ("out", "OUT", PortKind::audioStereo) };
-        d.params = { choice ("mode", "MODE", { "DRIFT", "TAPE", "CHORUS", "PULSE" }, 0, true), num ("amount", "AMOUNT", 0.0, 1.0, 0.4, "%", true),
-                     num ("a", "RATE", 0.0, 1.0, 0.5, "%", true), num ("b", "DEPTH", 0.0, 1.0, 0.4, "%"), num ("c", "STEREO", 0.0, 1.0, 0.5, "%") };
+        std::vector<std::string> patterns;
+        for (int i = 0; i < 12; ++i)
+            patterns.emplace_back (osp::RhythmicShaper::patternName (i));
+        d.params = { choice ("mode", "MODE", { "DRIFT", "TAPE", "CHORUS", "PULSE", "SHAPER" }, 0, true), num ("amount", "AMOUNT", 0.0, 1.0, 0.4, "%", true),
+                     when (num ("a", "RATE", 0.0, 1.0, 0.5, "%", true), "mode", { 0, 1, 2, 3 }), when (num ("b", "DEPTH", 0.0, 1.0, 0.4, "%"), "mode", { 0, 1, 2, 3 }),
+                     when (num ("c", "STEREO", 0.0, 1.0, 0.5, "%"), "mode", { 0, 1, 2, 3 }),
+                     // SHAPER (appended): a pattern of the library, or the musician's own sixteen steps
+                     when (choice ("pattern", "PATTERN", patterns, 3), "mode", { 4 }),
+                     when (choice ("shaperRate", "RATE", { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" }, 3), "mode", { 4 }),
+                     when (choice ("target", "TARGET", { "VOL", "FILTER", "BOTH" }, 2), "mode", { 4 }),
+                     when (num ("smooth", "SMOOTH", 0.0, 1.0, 0.3, "%"), "mode", { 4 }), when (toggle ("custom", "CUSTOM", false), "mode", { 4 }) };
+        for (const char* part : { "s", "e", "h" })
+            for (int i = 1; i <= 16; ++i)
+            {
+                // (edited as a picture in the rack, never as forty-eight knobs)
+                auto step = part[0] == 'h' ? choice (part + std::to_string (i), "SHAPE " + std::to_string (i), { "HOLD", "DOWN", "UP", "DIP", "PULSE", "SOFT" }, 0)
+                                           : num (part + std::to_string (i), (part[0] == 's' ? "START " : "END ") + std::to_string (i), 0.0, 1.0, 1.0, "%");
+                step.modulatable = false;
+                step.showIf = "custom";
+                step.showIfMask = 1u << 31;   // (never listed)
+                d.params.push_back (step);
+            }
         d.cost.units = 0.8f;
         d.create = make<Movement>();
         r.add (d);

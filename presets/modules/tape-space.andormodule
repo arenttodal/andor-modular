@@ -49,16 +49,27 @@
       "enabled": true,
       "group": "g-0010",
       "params": {
+        "abyssVariant": 0,
+        "bloomDiffusion": 0.6,
+        "bloomDivision": 6,
+        "bloomSync": 1,
+        "bloomTime": 350,
+        "bloomVariant": 0,
         "damping": 0.4,
         "decay": 3,
+        "freeze": 0,
         "gravity": 0,
         "highcut": 6000,
         "lowcut": 100,
         "mix": 0.3,
         "modulation": 0.4,
         "predelay": 8,
+        "resonance": 0,
         "size": 0.5,
         "type": 1,
+        "vintageDiffusion": 0.7,
+        "vintageEra": 0,
+        "vintageVariant": 0,
         "width": 1
       }
     }
@@ -257,5 +268,5 @@
   "dependencies": [],
   "module": "TAPE SPACE",
   "root": "g-0010",
-  "hash": "bb8f58317dba7344"
+  "hash": "421fa57c1db04ec2"
 }

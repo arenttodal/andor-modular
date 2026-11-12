@@ -752,6 +752,101 @@ TEST_CASE ("ECHO opens ANDOR's own ECHO rack, bound to that one module: two echo
     editor.openRack ({});
 }
 
+TEST_CASE ("SPACE and MOVEMENT open ANDOR's own racks; every engine and mode the rack offers plays in the module", "[product][ui][rack][native]")
+{
+    Instrument in;
+    REQUIRE (in.editor != nullptr);
+    in.editor->setSize (1448, 1086);
+    auto& s = in.session();
+    REQUIRE (in.loadFactory ("Analog Organic Morph"));
+    s.assets().waitIdle (20.0);
+    settle();
+    auto& editor = *in.editor;
+    auto& rack = editor.rackView();
+    const auto space = in.firstOfType ("fx.space");
+    REQUIRE_FALSE (space.empty());
+    const auto value = [&] (const std::string& node, const char* param) { return s.document().paramValue (s.registry(), node, param); };
+
+    editor.openRack (space);
+    REQUIRE (rack.isNative());
+    REQUIRE (rack.module() != nullptr);
+    CHECK (rack.module()->title() == "SPACE");
+    auto* host = rack.binding();
+    // the module's one TYPE is the rack's room and engine
+    CHECK (juce::roundToInt (host->parameterValue ("space.engine")) == 0);
+    CHECK (juce::roundToInt (host->parameterValue ("space.type")) == juce::roundToInt (value (space, "type")));
+    CHECK (host->parameterValue ("space.decay") == Catch::Approx (value (space, "decay")).margin (0.01));
+    host->setParameterValue ("space.type", 2.0f);   // PLATE
+    CHECK (juce::roundToInt (value (space, "type")) == 2);
+    // each engine of the rack is an engine of the module, and sounds
+    const auto wet = [&] {
+        run (in.processor, 0.3, { juce::MidiMessage::noteOn (1, 60, 0.9f) });
+        run (in.processor, 0.1, { juce::MidiMessage::noteOff (1, 60) });
+        const auto out = run (in.processor, 0.8);
+        run (in.processor, 1.5);
+        return rms (out, 9600);
+    };
+    host->setParameterValue ("space", 100.0f);
+    CHECK (value (space, "mix") == Catch::Approx (1.0).margin (1.0e-4));
+    for (const int engine : { 1, 2, 3, 0 })
+    {
+        INFO ("engine " << engine);
+        host->setParameterValue ("space.engine", static_cast<float> (engine));
+        CHECK (juce::roundToInt (value (space, "type")) == (engine == 0 ? 2 : engine + 3));   // (ROOMS comes back to the PLATE it was)
+        CHECK (juce::roundToInt (host->parameterValue ("space.engine")) == engine);
+        settle (70);
+        CHECK (rack.isNative());
+        CHECK (wet() > 1.0e-4);
+    }
+    host->setParameterValue ("space.engine", 2.0f);
+    host->setParameterValue ("space.vintage.era", 1.0f);
+    CHECK (juce::roundToInt (value (space, "vintageEra")) == 1);
+    host->setParameterValue ("space.engine", 3.0f);
+    host->setParameterValue ("space.bloom.diffusion", 25.0f);
+    CHECK (value (space, "bloomDiffusion") == Catch::Approx (0.25).margin (1.0e-4));
+    host->setParameterValue ("space.engine", 0.0f);
+
+    // MOVEMENT
+    const auto movement = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), "fx.movement", 0, 0, space); }).focus;
+    REQUIRE_FALSE (movement.empty());
+    settle (300);
+    editor.openRack (movement);
+    REQUIRE (rack.isNative());
+    CHECK (rack.module()->title() == "MOVEMENT");
+    host = rack.binding();
+    CHECK (host->nodeId() == movement);
+    CHECK (host->parameterValue ("motion") == Catch::Approx (100.0 * value (movement, "amount")).margin (0.01));
+    host->setParameterValue ("movement.drift.speed", 80.0f);
+    CHECK (value (movement, "a") == Catch::Approx (0.8).margin (1.0e-4));
+    host->setParameterValue ("movement.mode", 1.0f);   // TAPE: its first control is the same one
+    settle (70);
+    CHECK (host->parameterValue ("movement.tape.wow") == Catch::Approx (80.0).margin (0.01));
+    // SHAPER: a pattern on the host's grid; its place is read from the running module
+    host->setParameterValue ("movement.mode", 4.0f);
+    CHECK (juce::roundToInt (value (movement, "mode")) == 4);
+    host->setParameterValue ("motion", 100.0f);
+    host->setParameterValue ("movement.shaper.pattern", 0.0f);
+    settle (70);
+    run (in.processor, 0.5, { juce::MidiMessage::noteOn (1, 60, 0.9f) });
+    CHECK (host->shaperPhase() >= 0.0f);
+    // the musician's own sixteen steps: one action, one undo step
+    auto pattern = host->shaperCustomPattern();
+    const auto before = saveToString (s.document());
+    pattern[2].start = 0.25f;
+    pattern[2].end = 0.5f;
+    pattern[5].shape = osp::StepShape::down;
+    settle (120);
+    host->setShaperCustomPattern (pattern, true);
+    CHECK (value (movement, "s3") == Catch::Approx (0.25).margin (1.0e-6));
+    CHECK (value (movement, "e3") == Catch::Approx (0.5).margin (1.0e-6));
+    CHECK (juce::roundToInt (value (movement, "h6")) == 1);
+    CHECK (host->shaperCustomPattern()[2].start == Catch::Approx (0.25f));
+    s.undo();
+    CHECK (saveToString (s.document()) == before);
+    run (in.processor, 0.2, { juce::MidiMessage::noteOff (1, 60) });
+    editor.openRack ({});
+}
+
 TEST_CASE ("Modules never land on each other: added, inserted, connected from a port, loaded", "[product][ui][layout]")
 {
     Instrument in;
@@ -1102,6 +1197,28 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
             p.session().setParam (made.focus, "type", 1.0);
             settle (120);
             snapshot (*editor, "patch-rack-echo-bbd-" + juce::String (width));
+            // SPACE (a room, then ABYSS) and MOVEMENT (DRIFT, then SHAPER): ANDOR's own racks
+            editor->canvasView().select (space, false);
+            editor->openRack (space);
+            settle (120);
+            snapshot (*editor, "patch-rack-space-" + juce::String (width));
+            p.session().setParam (space, "type", 4.0);
+            settle (150);
+            snapshot (*editor, "patch-rack-space-abyss-" + juce::String (width));
+            p.session().setParam (space, "type", 1.0);
+            const auto movement = p.session().perform ("add", [&] (Document& d) { return edit::addModule (d, p.session().registry(), "fx.movement", 0, 0, space); });
+            REQUIRE (movement.ok);
+            settle (300);
+            editor->canvasView().fitAll();
+            editor->canvasView().select (movement.focus, false);
+            editor->openRack (movement.focus);
+            settle (120);
+            snapshot (*editor, "patch-rack-movement-" + juce::String (width));
+            p.session().setParam (movement.focus, "mode", 4.0);
+            p.session().setParam (movement.focus, "amount", 0.8);
+            run (p, 0.3);
+            settle (150);
+            snapshot (*editor, "patch-rack-movement-shaper-" + juce::String (width));
         }
         editor->openRack ({});
     }

@@ -62,11 +62,17 @@ public:
     /** Rack IDs that are held at a value and never reach the module (a macro's amount at 100 %
         where the module has its own MIX, a switch the module does not have). */
     void hold (const juce::String& rackId, float value);
+    /** Something of the rack that is not a parameter of its state is about to change the module
+        (a drawn pattern): the start of one step of the patch's history, as a control's is. */
+    void beginAction() { touch(); }
     /** The faceplate racks of `kind` wear (rack::Kind as int). */
     void setFaceplate (int kind, osp::plugin::rack::Faceplate plate) { plates[kind] = std::move (plate); }
     /** Live answers (set by the rack's factory for the module it shows). */
     std::function<float()> shaperPhaseNow, outputPeakNow;
     std::function<juce::String (const juce::String& topic)> statusNow;
+    /** MOVEMENT's SHAPER: the module's own sixteen steps (read, and written as one action). */
+    std::function<osp::ShaperPattern()> shaperPatternNow;
+    std::function<void (const osp::ShaperPattern&)> writeShaperPattern;
 
     // -- InstrumentHost ----------------------------------------------------------------------
     juce::AudioProcessorValueTreeState& apvts() override { return *state; }
@@ -116,8 +122,12 @@ public:
     int lastPlayedNoteNumber() const noexcept override { return -1; }
     ArpView arpView() const noexcept override { return {}; }
     int editLayer() const noexcept override { return 0; }
-    osp::ShaperPattern shaperCustomPattern() const override { return {}; }
-    void setShaperCustomPattern (const osp::ShaperPattern&, bool) override {}
+    osp::ShaperPattern shaperCustomPattern() const override { return shaperPatternNow ? shaperPatternNow() : osp::ShaperPattern {}; }
+    void setShaperCustomPattern (const osp::ShaperPattern& pattern, bool) override
+    {
+        if (writeShaperPattern)
+            writeShaperPattern (pattern);
+    }
     bool shaperEditorLarge() const noexcept override { return false; }
     void setShaperEditorLarge (bool) noexcept override {}
 
