@@ -4,6 +4,7 @@
 #include "TestUtil.h"
 
 #include "core/Prng.h"
+#include "edit/Factory.h"
 #include "io/Wav.h"
 
 using namespace test;
@@ -590,4 +591,143 @@ TEST_CASE ("Voice audio dragged into a global effect goes through its own VOICE 
     CHECK_FALSE (edit::connectSmart (d, reg(), nodeOfType (d, "event.keyboard"), "notes", space, "in").ok);
     CHECK_FALSE (edit::connectSmart (d, reg(), space, "out", space, "in").ok);
     CHECK (saveToString (d) == text);
+}
+
+//==============================================================================
+namespace
+{
+    /** True when no two tiles of the open view are closer than the clearance. */
+    bool tidy (const Document& d, float cx = 32.0f, float cy = 24.0f, std::string* which = nullptr)
+    {
+        std::vector<std::pair<std::string, edit::TileRect>> tiles;
+        for (const auto& g : d.groups)
+            if (g.parent == d.view.currentGroup)
+                tiles.emplace_back (g.id, edit::tileRect (d, reg(), g.id));
+        for (const auto& n : d.nodes)
+            if (n.group == d.view.currentGroup)
+                tiles.emplace_back (n.id, edit::tileRect (d, reg(), n.id));
+        for (std::size_t i = 0; i < tiles.size(); ++i)
+            for (std::size_t j = i + 1; j < tiles.size(); ++j)
+            {
+                const auto& a = tiles[i].second;
+                const auto& b = tiles[j].second;
+                if (! std::isfinite (a.x) || ! std::isfinite (a.y))
+                    return false;
+                if (a.x < b.x + b.w + cx && b.x < a.x + a.w + cx && a.y < b.y + b.h + cy && b.y < a.y + a.h + cy)
+                {
+                    if (which != nullptr)
+                        *which = tiles[i].first + " and " + tiles[j].first;
+                    return false;
+                }
+            }
+        return true;
+    }
+}
+
+TEST_CASE ("Layout: no tile ever overlaps another; what was just placed stays put and the others make room", "[ui][layout]")
+{
+    // every factory patch is tidy as it ships, and a pass changes nothing
+    for (const auto& p : factory::patches (reg()))
+    {
+        Document d = p;
+        INFO (d.name);
+        std::string which;
+        CHECK (tidy (d, 32.0f, 24.0f, &which));
+        INFO (which);
+        CHECK (edit::resolveOverlaps (d, reg()).empty());
+    }
+
+    // a module dropped onto another: it stays where it was dropped, the other moves, by little
+    {
+        std::string osc;
+        Document d = steadyPatch (&osc);
+        const auto env = nodeOfType (d, "proc.vca");
+        auto* a = d.findNode (osc);
+        const float ex = d.findNode (env)->x, ey = d.findNode (env)->y;
+        a->x = ex + 16.0f;
+        a->y = ey + 8.0f;
+        const float ax = a->x, ay = a->y;
+        const auto wires = d.connections.size();
+        const auto moved = edit::resolveOverlaps (d, reg(), { osc });
+        CHECK (tidy (d));
+        CHECK (d.findNode (osc)->x == ax);
+        CHECK (d.findNode (osc)->y == ay);
+        CHECK (std::find (moved.begin(), moved.end(), env) != moved.end());
+        CHECK (std::abs (d.findNode (env)->x - ex) + std::abs (d.findNode (env)->y - ey) < 400.0f);
+        CHECK (d.connections.size() == wires);
+        CHECK (edit::resolveOverlaps (d, reg(), { osc }).empty());   // settled: nothing jitters
+    }
+
+    // inserted on a cable, added after the selection, six sources stacked on one spot: always tidy
+    {
+        std::string osc;
+        Document d = steadyPatch (&osc);
+        for (const char* type : { "proc.filter", "proc.drive", "fx.echo", "fx.space", "proc.tone" })
+        {
+            const auto made = edit::addModule (d, reg(), type, d.findNode (osc)->x + 40.0f, d.findNode (osc)->y + 10.0f, osc);
+            REQUIRE (made.ok);
+            edit::resolveOverlaps (d, reg(), { made.focus });
+            std::string which;
+            const bool ok = tidy (d, 32.0f, 24.0f, &which);
+            INFO (type << " " << which);
+            CHECK (ok);
+        }
+        for (int i = 0; i < 5; ++i)
+        {
+            const auto made = edit::addModule (d, reg(), "osc.analog", 0.0f, 0.0f);   // all on one spot
+            if (! made.ok)
+                break;   // (the six-source budget)
+            edit::resolveOverlaps (d, reg(), { made.focus });
+            CHECK (tidy (d));
+        }
+        // through a save: the same places
+        Document back;
+        REQUIRE (loadFromString (saveToString (d), back).ok);
+        CHECK (saveToString (back) == saveToString (d));
+        CHECK (edit::resolveOverlaps (back, reg()).empty());
+    }
+}
+
+TEST_CASE ("Layout: any pile of modules settles, deterministically, in one pass (property)", "[ui][layout]")
+{
+    const char* const types[] = { "osc.analog", "proc.filter", "proc.vca", "fx.echo", "fx.space", "ctl.lfo", "event.arp", "util.mixer", "proc.morph", "src.noise" };
+    for (std::uint64_t seed = 1; seed <= 40; ++seed)
+    {
+        osp::Prng r (seed);
+        Document d;
+        const int count = 3 + static_cast<int> (r.nextBelow (28));
+        std::vector<std::string> ids;
+        for (int i = 0; i < count; ++i)
+        {
+            // crowded on purpose: a few hundred px for up to thirty tiles
+            auto* n = d.addNode (reg(), types[r.nextBelow (10)], static_cast<float> (r.uniform (-300.0, 300.0)), static_cast<float> (r.uniform (-200.0, 200.0)));
+            REQUIRE (n != nullptr);
+            ids.push_back (n->id);
+        }
+        std::vector<std::string> anchors;
+        if (seed % 2 == 0)
+            anchors.push_back (ids[r.nextBelow (static_cast<std::uint64_t> (count))]);
+        const auto anchorAt = anchors.empty() ? std::pair<float, float> { 0.0f, 0.0f } : std::pair<float, float> { d.findNode (anchors[0])->x, d.findNode (anchors[0])->y };
+        Document twin = d;
+        edit::resolveOverlaps (d, reg(), anchors);
+        edit::resolveOverlaps (twin, reg(), anchors);
+        std::string which;
+        INFO ("seed " << seed << " count " << count);
+        const bool ok = tidy (d, 32.0f, 24.0f, &which);
+        INFO (which);
+        CHECK (ok);
+        CHECK (saveToString (d) == saveToString (twin));                 // the same pile, the same result
+        CHECK (edit::resolveOverlaps (d, reg(), anchors).empty());      // and it stays
+        CHECK (d.nodes.size() == static_cast<std::size_t> (count));
+        if (! anchors.empty())
+        {
+            CHECK (d.findNode (anchors[0])->x == anchorAt.first);
+            CHECK (d.findNode (anchors[0])->y == anchorAt.second);
+        }
+        for (const auto& n : d.nodes)
+        {
+            CHECK (std::isfinite (n.x));
+            CHECK (std::isfinite (n.y));
+        }
+    }
 }

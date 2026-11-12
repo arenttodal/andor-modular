@@ -23,6 +23,7 @@ struct Result
     std::vector<std::string> created;    ///< node ids made by the action (first: the one asked for)
     std::string focus;                   ///< the node to select afterwards
     std::vector<std::string> choices;    ///< ambiguous placement: candidate connection ids
+    std::vector<std::string> placed;     ///< tiles the musician just put somewhere: they stay, others make room (resolveOverlaps)
 };
 
 /** Snapshot undo/redo (documents are small: a few kB). */
@@ -76,6 +77,23 @@ Result connect (Document& doc, const Registry& reg, const std::string& from, con
                 const std::string& toPort);
 Result modulate (Document& doc, const Registry& reg, const std::string& from, const std::string& fromPort, const std::string& to,
                  const std::string& param, double depth);
+
+/** A tile's face on the board, world px (what the editor draws: 184 wide, as tall as its
+    ports, knobs and glass need). A module's or a collapsed group's. */
+struct TileRect
+{
+    float x = 0.0f, y = 0.0f, w = 184.0f, h = 100.0f;
+};
+TileRect tileRect (const Document& doc, const Registry& reg, const std::string& nodeOrGroup);
+
+/** The board's one layout rule: NO TILE OVERLAPS ANOTHER, ever. Moves tiles of the view that
+    is open (doc.view.currentGroup) the least it can so that every pair keeps `clearanceX` /
+    `clearanceY` px between their faces. `anchors` (what was just added, inserted or dropped)
+    stay exactly where they are and the others make room. Deterministic, on the 8 px grid, and
+    idempotent: a second pass moves nothing. Never touches a cable, a group's members' group, or
+    a view that is not open. Returns the ids it moved. */
+std::vector<std::string> resolveOverlaps (Document& doc, const Registry& reg, const std::vector<std::string>& anchors = {}, float clearanceX = 32.0f,
+                                          float clearanceY = 24.0f);
 
 /** What dragging a cable does (the canvas uses this, not `connect`): several sources may meet
     in one processor, and the patch is routed so that works as the musician means it.

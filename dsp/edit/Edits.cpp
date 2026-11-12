@@ -977,6 +977,126 @@ namespace
     }
 }
 
+TileRect tileRect (const Document& doc, const Registry& reg, const std::string& id)
+{
+    TileRect r;
+    if (const auto* g = doc.findGroup (id))
+    {
+        r.x = g->x;
+        r.y = g->y;
+    }
+    else if (const auto* n = doc.findNode (id))
+    {
+        r.x = n->x;
+        r.y = n->y;
+    }
+    r.h = cardHeight (doc, reg, id);
+    return r;
+}
+
+std::vector<std::string> resolveOverlaps (Document& doc, const Registry& reg, const std::vector<std::string>& anchors, float clearanceX, float clearanceY)
+{
+    struct Item
+    {
+        std::string id;
+        TileRect at, wanted;
+        bool fixed = false;
+    };
+    const std::string view = doc.view.currentGroup;
+    std::vector<Item> items;
+    for (const auto& g : doc.groups)
+        if (g.parent == view)
+            items.push_back ({ g.id, tileRect (doc, reg, g.id), {}, false });
+    for (const auto& n : doc.nodes)
+        if (n.group == view)
+            items.push_back ({ n.id, tileRect (doc, reg, n.id), {}, false });
+    for (auto& it : items)
+    {
+        it.wanted = it.at;
+        it.fixed = std::find (anchors.begin(), anchors.end(), it.id) != anchors.end();
+    }
+    auto collide = [&] (const TileRect& a, const TileRect& b) {
+        return a.x < b.x + b.w + clearanceX && b.x < a.x + a.w + clearanceX && a.y < b.y + b.h + clearanceY && b.y < a.y + a.h + clearanceY;
+    };
+    // What stays put first, then left to right, top to bottom (ids break ties: the same patch
+    // always settles the same way).
+    std::stable_sort (items.begin(), items.end(), [] (const Item& a, const Item& b) {
+        if (a.fixed != b.fixed)
+            return a.fixed;
+        if (a.at.x != b.at.x)
+            return a.at.x < b.at.x;
+        if (a.at.y != b.at.y)
+            return a.at.y < b.at.y;
+        return a.id < b.id;
+    });
+    auto snapUp = [] (float v) { return std::ceil (v / 8.0f) * 8.0f; };
+    auto snapDown = [] (float v) { return std::floor (v / 8.0f) * 8.0f; };
+    std::vector<const Item*> placed;
+    std::vector<std::string> moved;
+    for (auto& it : items)
+    {
+        for (int guard = 0; guard < 400; ++guard)
+        {
+            const Item* hit = nullptr;
+            for (const auto* p : placed)
+                if (collide (it.at, p->at))
+                {
+                    hit = p;
+                    break;
+                }
+            if (hit == nullptr)
+                break;
+            // Out of its way by the least it takes, measured from where the tile was: below,
+            // above, to the right or to the left of what it hit. A free place is preferred.
+            const TileRect options[4] = { { it.at.x, snapUp (hit->at.y + hit->at.h + clearanceY), it.at.w, it.at.h },
+                                          { it.at.x, snapDown (hit->at.y - it.at.h - clearanceY), it.at.w, it.at.h },
+                                          { snapUp (hit->at.x + hit->at.w + clearanceX), it.at.y, it.at.w, it.at.h },
+                                          { snapDown (hit->at.x - it.at.w - clearanceX), it.at.y, it.at.w, it.at.h } };
+            int best = -1;
+            float bestCost = 0.0f;
+            bool bestFree = false;
+            for (int o = 0; o < 4; ++o)
+            {
+                bool free = true;
+                for (const auto* p : placed)
+                    free = free && ! collide (options[o], p->at);
+                const float cost = std::abs (options[o].x - it.wanted.x) + std::abs (options[o].y - it.wanted.y);
+                if (best < 0 || (free && ! bestFree) || (free == bestFree && cost < bestCost))
+                {
+                    best = o;
+                    bestCost = cost;
+                    bestFree = free;
+                }
+            }
+            it.at = options[best];
+            if (guard == 399)
+            {
+                // (never reached in practice: past everything, to the right)
+                float right = it.at.x;
+                for (const auto* p : placed)
+                    right = std::max (right, p->at.x + p->at.w + clearanceX);
+                it.at.x = snapUp (right);
+            }
+        }
+        placed.push_back (&it);
+        if (it.at.x != it.wanted.x || it.at.y != it.wanted.y)
+        {
+            moved.push_back (it.id);
+            if (auto* g = doc.findGroup (it.id))
+            {
+                g->x = it.at.x;
+                g->y = it.at.y;
+            }
+            else if (auto* n = doc.findNode (it.id))
+            {
+                n->x = it.at.x;
+                n->y = it.at.y;
+            }
+        }
+    }
+    return moved;
+}
+
 void autoArrange (Document& doc, const Registry& reg, const std::vector<std::string>& keep)
 {
     const std::string group = doc.view.currentGroup;
