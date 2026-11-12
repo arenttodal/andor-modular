@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Canvas.h"
+#include "Racks.h"
 
 namespace andor::modular::ui
 {
@@ -20,7 +21,14 @@ namespace andor::modular::ui
 class Rack final : public juce::Component, private juce::Timer
 {
 public:
-    static constexpr int height = 260;   ///< reference px
+    /** Reference px. A native rack is the family's 214 px device (rail 32, body 172, foot 10)
+        with the drawer's margin; the plain rack (modules without a native one yet) is taller. */
+    static constexpr int nativeHeight = 224, plainHeight = 260;
+    int wantedHeight() const noexcept { return family != nullptr ? nativeHeight : plainHeight; }
+    /** The family's rack component for the module shown (null: the plain rack), and its host. */
+    bool isNative() const noexcept { return family != nullptr; }
+    osp::plugin::rack::Module* module() const;
+    RackHost* binding() const noexcept { return native != nullptr ? native->host.get() : nullptr; }
 
     explicit Rack (Session& s);
     ~Rack() override;
@@ -47,6 +55,10 @@ private:
     std::string current;
     juce::Viewport viewport;
     std::unique_ptr<Content> content;
+    // (the host outlives the family's component that reads it)
+    std::unique_ptr<NativeRack> native;
+    std::unique_ptr<osp::plugin::rack::Host> family;
+    std::string shownType;
     std::vector<std::unique_ptr<juce::Component>> buttons;   ///< its recording, its plugin, save as module
     InkButton close { juce::String() };
     juce::Rectangle<int> card, identity, display;

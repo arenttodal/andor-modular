@@ -34,6 +34,8 @@ public:
     /** Message thread, audio stopped. Graphs compiled for another rate must be republished. */
     void prepare (double sampleRate, int maxBlock);
     double sampleRate() const noexcept { return rate; }
+    /** The host's tempo as the last block heard it (120 when the host gives none); any thread. */
+    float hostBpm() const noexcept { return tempoNow.load (std::memory_order_relaxed); }
     int maxBlock() const noexcept { return blockCapacity; }
 
     /** Message thread: hands a compiled graph to the audio thread. */
@@ -100,6 +102,8 @@ private:
     void retire (CompiledGraph* g) noexcept;
 
     double rate = 48000.0;
+
+    std::atomic<float> tempoNow { 120.0f };
     int blockCapacity = 512;
 
     std::atomic<CompiledGraph*> pending { nullptr };

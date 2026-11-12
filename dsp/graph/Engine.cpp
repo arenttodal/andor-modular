@@ -156,6 +156,7 @@ void Engine::process (float* left, float* right, int numSamples, const MidiMessa
 {
     if (numSamples <= 0)
         return;
+    tempoNow.store (static_cast<float> (timing.valid ? timing.bpm : 120.0), std::memory_order_relaxed);
     if (numSamples > blockCapacity)
     {
         // Longer than prepared: in parts, each with its own MIDI.

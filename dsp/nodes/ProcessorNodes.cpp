@@ -765,6 +765,8 @@ namespace
             s.tone = p[5];
             s.age = p[6];
             s.stereo = static_cast<osp::EchoStereo> (std::clamp (static_cast<int> (p[7]), 0, 2));
+            s.interval = static_cast<osp::AscendInterval> (std::clamp (static_cast<int> (p[9]), 0, 3));
+            s.motion = static_cast<osp::AscendMotion> (std::clamp (static_cast<int> (p[10]), 0, 2));
             echo.setTempo (ctx.bpm);
             echo.setSettings (s);
             const float wet = p[8];
@@ -996,11 +998,20 @@ void registerProcessorNodes (Registry& r)
         d.keywords = { "delay", "echo", "tape", "bbd", "ascend", "ping pong" };
         d.inputs = { in ("in", "IN", PortKind::audioStereo, true) };
         d.outputs = { out ("out", "OUT", PortKind::audioStereo) };
+        // (The note values are the echo's own, in its order: the index is what EchoDelay plays.
+        // The first names here once read "1/32, 1/16, 1/16D, 1/8T ...": labels that did not match
+        // what sounded. The stored values, and so every patch's sound, are unchanged.)
+        std::vector<std::string> divisions;
+        for (int i = 0; i < osp::shaping::echoDivisionCount; ++i)
+            divisions.emplace_back (osp::shaping::echoDivisionName (i));
         d.params = { choice ("type", "TYPE", { "TAPE", "BBD", "ASCEND" }, 0, true), toggle ("sync", "SYNC", true),
-                     when (choice ("division", "DIVISION", { "1/32", "1/16", "1/16D", "1/8T", "1/8", "1/8D", "1/4T", "1/4", "1/4D", "1/2", "1/2D", "1 BAR" }, 5), "sync", { 1 }),
+                     when (choice ("division", "DIVISION", divisions, 5), "sync", { 1 }),
                      when (logNum ("time", "TIME", 20.0, 1500.0, 375.0, "ms"), "sync", { 0 }), num ("feedback", "FEEDBACK", 0.0, 1.0, 0.45, "%", true),
                      num ("tone", "TONE", 0.0, 1.0, 0.5, "%"), num ("age", "AGE", 0.0, 1.0, 0.35, "%"),
-                     choice ("stereo", "STEREO", { "MONO", "PING PONG", "WIDE" }, 1), num ("mix", "MIX", 0.0, 1.0, 0.35, "%", true) };
+                     choice ("stereo", "STEREO", { "MONO", "PING PONG", "WIDE" }, 1), num ("mix", "MIX", 0.0, 1.0, 0.35, "%", true),
+                     // ASCEND's own (the echo's defaults: an older patch plays as it did)
+                     when (choice ("interval", "INTERVAL", { "+12", "+7", "+5", "-12" }, 0), "type", { 2 }),
+                     when (choice ("motion", "MOTION", { "RISE", "STEADY", "LATE" }, 0), "type", { 2 }) };
         d.cost.units = 1.0f;
         d.create = make<Echo>();
         r.add (d);

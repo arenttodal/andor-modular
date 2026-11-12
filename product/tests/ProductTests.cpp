@@ -7,6 +7,7 @@
 
 #include "ModularMaterialsData.h"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -593,7 +594,7 @@ TEST_CASE ("The rack: one module's controls across the board's foot; the board k
     const auto origin = canvas.viewOrigin();
     editor.openRack (osc);
     CHECK (rack.shown() == osc);
-    CHECK (rack.getBounds().getHeight() == ui::Rack::height);
+    CHECK (rack.getBounds().getHeight() == rack.wantedHeight());
     CHECK (canvas.zoomLevel() == zoom);
     juce::ignoreUnused (origin);
 
@@ -629,6 +630,126 @@ TEST_CASE ("The rack: one module's controls across the board's foot; the board k
     editor.showPlay (false);
     CHECK (rack.isVisible());
     CHECK (rack.shown() == osc);
+}
+
+TEST_CASE ("ECHO opens ANDOR's own ECHO rack, bound to that one module: two echoes never share a control", "[product][ui][rack][native]")
+{
+    Instrument in;
+    REQUIRE (in.editor != nullptr);
+    in.editor->setSize (1448, 1086);
+    auto& s = in.session();
+    s.newPatch();
+    const auto osc = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), "osc.analog", 0, 0); }).focus;
+    REQUIRE_FALSE (osc.empty());
+    const auto mix = in.firstOfType ("util.voicemix");
+    REQUIRE_FALSE (mix.empty());
+    const auto first = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), "fx.echo", 600, 0, mix); }).focus;
+    const auto second = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), "fx.echo", 800, 0, first); }).focus;
+    REQUIRE_FALSE (first.empty());
+    REQUIRE_FALSE (second.empty());
+    REQUIRE (first != second);
+    settle();
+    auto& editor = *in.editor;
+    auto& rack = editor.rackView();
+    const auto value = [&] (const std::string& node, const char* param) { return s.document().paramValue (s.registry(), node, param); };
+    s.beginGesture ("set");
+    s.setParam (second, "feedback", 0.2);
+    s.setParam (second, "type", 1.0);   // BBD
+
+    run (in.processor, 0.1);
+    const int swaps = in.processor.engine().swapsCompleted();
+    const auto opening = juce::Time::getMillisecondCounterHiRes();
+    editor.openRack (first);
+    std::printf ("echo rack: open in %.2f ms\n", juce::Time::getMillisecondCounterHiRes() - opening);
+    REQUIRE (rack.isOpen());
+    REQUIRE (rack.isNative());
+    auto* module = rack.module();
+    REQUIRE (module != nullptr);
+    CHECK (module->title() == "ECHO");
+    CHECK (module->getHeight() >= 204);
+    CHECK (rack.getHeight() >= 210);
+    CHECK (rack.getHeight() <= 290);
+    auto* host = rack.binding();
+    REQUIRE (host != nullptr);
+    CHECK (host->nodeId() == first);
+    // the rack shows this module
+    CHECK (host->parameterValue ("echo.feedback") == Catch::Approx (100.0 * value (first, "feedback")).margin (0.01));
+    CHECK (juce::roundToInt (host->parameterValue ("echo.type")) == juce::roundToInt (value (first, "type")));
+    CHECK (host->parameterValue ("echo") == Catch::Approx (100.0 * value (first, "mix")).margin (0.01));
+
+    // a control of the rack is that module's parameter, and only that module's; one undo step
+    const auto before = saveToString (s.document());
+    host->setParameterValue ("echo.feedback", 70.0f);
+    CHECK (value (first, "feedback") == Catch::Approx (0.7).margin (1.0e-4));
+    CHECK (value (second, "feedback") == Catch::Approx (0.2).margin (1.0e-6));
+    run (in.processor, 0.1);
+    CHECK (in.processor.engine().swapsCompleted() == swaps);   // (opening it and turning a knob: the running graph)
+    s.undo();
+    CHECK (saveToString (s.document()) == before);
+    CHECK (host->parameterValue ("echo.feedback") == Catch::Approx (100.0 * value (first, "feedback")).margin (0.01));
+    run (in.processor, 0.1);
+    const int afterUndo = in.processor.engine().swapsCompleted();   // (an undo restores the patch by rebuilding: RELEASE_BLOCKERS)
+    // a switch of the rack (TAPE -> ASCEND) changes the module and leaves the rack standing
+    host->setParameterValue ("echo.type", 2.0f);
+    CHECK (juce::roundToInt (value (first, "type")) == 2);
+    CHECK (juce::roundToInt (value (second, "type")) == 1);
+    CHECK (rack.isNative());
+    CHECK (rack.module() == module);
+    settle (80);
+    host->setParameterValue ("echo.ascend.interval", 1.0f);
+    CHECK (juce::roundToInt (value (first, "interval")) == 1);
+    host->setParameterValue ("echo.type", 0.0f);
+    // the module moved from elsewhere (its tile, a macro, a scene): the rack follows
+    s.beginGesture ("tile");
+    s.setParam (first, "tone", 0.9);
+    CHECK (host->parameterValue ("echo.tone") == Catch::Approx (90.0).margin (0.01));
+    s.setParam (first, "sync", 0.0);
+    s.setParam (first, "time", 100.0);
+    CHECK (host->parameterValue ("echo.sync") < 0.5f);
+    CHECK (host->parameterValue ("echo.time") == Catch::Approx (100.0).margin (0.01));
+
+    // the other echo: its own rack, its own values, the same drawer
+    editor.openRack (second);
+    REQUIRE (rack.isNative());
+    host = rack.binding();
+    REQUIRE (host != nullptr);
+    CHECK (host->nodeId() == second);
+    CHECK (juce::roundToInt (host->parameterValue ("echo.type")) == 1);
+    CHECK (host->parameterValue ("echo.feedback") == Catch::Approx (20.0).margin (0.01));
+    host->setParameterValue ("echo.age", 80.0f);
+    CHECK (value (second, "age") == Catch::Approx (0.8).margin (1.0e-4));
+    CHECK (value (first, "age") != Catch::Approx (0.8).margin (1.0e-4));
+    // opening, swapping and turning its knobs never rebuilt the running graph
+    run (in.processor, 0.1);
+    CHECK (in.processor.engine().swapsCompleted() == afterUndo);
+
+    // ...and it is the sound that changes: the first echo's FEEDBACK decides how long a note rings
+    const auto tail = [&] (float feedback) {
+        editor.openRack (first);
+        auto* h = rack.binding();
+        h->setParameterValue ("echo", 100.0f);
+        h->setParameterValue ("echo.feedback", feedback);
+        s.beginGesture ("bypass");
+        s.setParam (second, "mix", 0.0);
+        run (in.processor, 0.25, { juce::MidiMessage::noteOn (1, 57, 0.9f) });
+        run (in.processor, 0.25, { juce::MidiMessage::noteOff (1, 57) });
+        run (in.processor, 0.9);
+        const auto out = run (in.processor, 0.4);
+        run (in.processor, 3.0);   // (let it die away before the next measure)
+        return rms (out);
+    };
+    const double dry = tail (0.0f), ringing = tail (90.0f);
+    INFO ("tail without feedback " << dry << ", with 90 % " << ringing);
+    CHECK (ringing > 10.0 * dry + 1.0e-5);
+
+    // X on its rail (the family's collapse key) and Escape close the drawer
+    editor.openRack (first);
+    CHECK (editor.dismissTopmost());
+    CHECK_FALSE (rack.isOpen());
+    // a module without a native rack still opens the plain one
+    editor.openRack (osc);
+    CHECK (rack.isOpen());
+    editor.openRack ({});
 }
 
 TEST_CASE ("Modules never land on each other: added, inserted, connected from a port, loaded", "[product][ui][layout]")
@@ -962,6 +1083,26 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
                     snapshot (*editor, juce::String ("patch-rack-") + (juce::String (type) == "proc.filter" ? "filter-" : "oscillator-") + juce::String (width));
                     break;
                 }
+        // ANDOR's own ECHO rack on an echo of the patch (TAPE, then BBD)
+        {
+            std::string space;
+            for (const auto& n : p.session().document().nodes)
+                if (n.type == "fx.space")
+                    space = n.id;
+            const auto made = p.session().perform ("add", [&] (Document& d) { return edit::addModule (d, p.session().registry(), "fx.echo", 0, 0, space); });
+            REQUIRE (made.ok);
+            settle (300);
+            editor->canvasView().fitAll();
+            editor->canvasView().select (made.focus, false);
+            editor->openRack (made.focus);
+            run (p, 0.3, { juce::MidiMessage::noteOn (1, 48, 0.8f) });
+            settle();
+            snapshot (*editor, "patch-rack-echo-tape-" + juce::String (width));
+            p.session().beginGesture ("type");
+            p.session().setParam (made.focus, "type", 1.0);
+            settle (120);
+            snapshot (*editor, "patch-rack-echo-bbd-" + juce::String (width));
+        }
         editor->openRack ({});
     }
     // the step sequencer's rack (its step editor in the centre)

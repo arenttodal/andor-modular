@@ -357,18 +357,30 @@ void Rack::show (const std::string& id)
 }
 
 int Rack::controlCount() const { return content != nullptr ? content->controlCount() : 0; }
+osp::plugin::rack::Module* Rack::module() const { return family != nullptr ? family->module (osp::plugin::rack::Kind::fx) : nullptr; }
 bool Rack::scrolls() const { return content != nullptr && content->getWidth() > viewport.getWidth(); }
 
 void Rack::rebuild()
 {
-    const int scroll = viewport.getViewPositionX();
-    viewport.setViewedComponent (nullptr, false);
-    content.reset();
-    buttons.clear();
-    title = subtitle = help = {};
     const auto& doc = session.document();
     const auto* g = doc.findGroup (current);
     const auto* n = doc.findNode (current);
+    // A native rack is the family's component: it follows its module by itself (a mode chosen
+    // in it changes the patch, and must not tear down the control that was just clicked). It is
+    // rebuilt only when it shows another module, or its module became another type.
+    if (family != nullptr && n != nullptr && n->type == shownType && native->host->nodeId() == current)
+    {
+        native->host->pull();
+        return;
+    }
+    const int scroll = viewport.getViewPositionX();
+    viewport.setViewedComponent (nullptr, false);
+    content.reset();
+    family.reset();
+    native.reset();
+    shownType.clear();
+    buttons.clear();
+    title = subtitle = help = {};
     if (current.empty() || (g == nullptr && n == nullptr))
     {
         current.clear();
@@ -376,6 +388,33 @@ void Rack::rebuild()
         repaint();
         return;
     }
+    if (n != nullptr)
+        if (auto made = createNativeRack (session, current))
+        {
+            native = std::move (made);
+            shownType = n->type;
+            family = std::make_unique<osp::plugin::rack::Host> ([this] (osp::plugin::rack::Kind) { return native->make(); });
+            family->setFullBleed (true);
+            addAndMakeVisible (*family);
+            family->setShown (osp::plugin::rack::Kind::fx, true);
+            // its X (the rail's): the drawer closes (after the click has returned)
+            family->onLayoutChanged = [this] {
+                if (family != nullptr && family->shownKinds().empty())
+                    juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<Rack> (this)] {
+                        if (safe != nullptr && safe->onClose)
+                            safe->onClose();
+                    });
+            };
+            viewport.setVisible (false);
+            close.setVisible (false);
+            resized();
+            family->settle();
+            startTimerHz (30);
+            repaint();
+            return;
+        }
+    viewport.setVisible (true);
+    close.setVisible (true);
     auto button = [this] (const juce::String& text, std::function<void()> action) {
         auto b = std::make_unique<juce::TextButton> (text);
         b->onClick = std::move (action);
@@ -459,12 +498,20 @@ void Rack::rebuild()
 
 void Rack::refreshValues()
 {
+    if (native != nullptr)
+        native->host->pull();
     if (content != nullptr)
         content->refresh();
 }
 
 void Rack::timerCallback()
 {
+    if (family != nullptr)
+    {
+        if (isVisible())
+            family->refresh();   // (the family's racks pull their modes and pictures on this beat)
+        return;
+    }
     // its display follows the running graph
     if (isVisible() && isOpen())
         repaint (display);
@@ -474,6 +521,15 @@ void Rack::paint (juce::Graphics& g)
 {
     if (! isOpen())
         return;
+    if (family != nullptr)
+    {
+        // The device is its own face (full bleed): only its shadow on the board is drawn here.
+        const auto face = family->getBounds().toFloat().withTrimmedBottom (static_cast<float> (osp::plugin::rack::Host::bottomMargin));
+        juce::Path shape;
+        shape.addRoundedRectangle (face, design::layout::panelRadius);
+        design::CachedShadow (juce::Colour (0x30241d17), 10, { 0, 3 }).drawForPath (g, shape);
+        return;
+    }
     // A drawer of the board: the family's raised cream card across its foot.
     draw::raised (g, card.toFloat(), design::layout::cardRadius, colour::cardTop, colour::cardBottom);
 
@@ -521,6 +577,11 @@ void Rack::paint (juce::Graphics& g)
 
 void Rack::resized()
 {
+    if (family != nullptr)
+    {
+        family->setBounds (getLocalBounds().reduced (10, 0).withTrimmedTop (4).withHeight (juce::roundToInt (family->height())));
+        return;
+    }
     card = getLocalBounds().reduced (10, 0).withTrimmedTop (5).withTrimmedBottom (9);
     auto inner = card.reduced (18, 12);
     identity = inner.removeFromLeft (232);

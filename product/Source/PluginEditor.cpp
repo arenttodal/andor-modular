@@ -709,7 +709,7 @@ void Editor::layoutSurface()
         // A module's rack is a drawer along the board's foot: the canvas keeps the whole width
         // (and, as its origin is its top-left, its place: nothing under the pointer moves).
         if (rack.isOpen())
-            rack.setBounds (inner.removeFromBottom (Rack::height));
+            rack.setBounds (inner.removeFromBottom (rack.wantedHeight()));
         canvas.setBounds (inner);
         canvas.setBoardArea (boardArea().translated (static_cast<float> (-inner.getX()), static_cast<float> (-inner.getY())));
     }
