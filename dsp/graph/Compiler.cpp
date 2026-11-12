@@ -92,6 +92,24 @@ bool CompiledGraph::setParam (const std::string& node, const std::string& param,
     return true;
 }
 
+bool CompiledGraph::setEnabled (const std::string& node, bool on) noexcept
+{
+    const auto it = nodeIndexById.find (node);
+    if (it == nodeIndexById.end())
+        return false;
+    nodes[static_cast<std::size_t> (it->second)].live.store (on, std::memory_order_relaxed);
+    return true;
+}
+
+bool CompiledGraph::setGain (const std::string& node, float gain) noexcept
+{
+    const auto it = nodeIndexById.find (node);
+    if (it == nodeIndexById.end())
+        return false;
+    nodes[static_cast<std::size_t> (it->second)].gain.store (std::clamp (gain, 0.0f, 1.0f), std::memory_order_relaxed);
+    return true;
+}
+
 double CompiledGraph::getParam (const std::string& node, const std::string& param) const noexcept
 {
     const auto it = nodeIndexById.find (node);
@@ -151,6 +169,8 @@ std::unique_ptr<CompiledGraph> compileGraph (const Document& doc, const Registry
         n.desc = registry.find (m.type);
         n.domain = n.desc != nullptr && n.desc->role == NodeRole::event ? Domain::event : m.domain;
         n.enabled = m.enabled;
+        n.live.store (m.enabled, std::memory_order_relaxed);
+        n.gain.store (static_cast<float> (audibleGain (doc, registry, m)), std::memory_order_relaxed);
         g->nodeIndexById[m.id] = i;
         if (n.desc == nullptr)
             continue;
@@ -310,7 +330,7 @@ std::unique_ptr<CompiledGraph> compileGraph (const Document& doc, const Registry
         {
             const int idx = members[static_cast<std::size_t> (k)];
             lane.nodes.push_back (idx);
-            if (nodeAt (idx).desc->endsVoice && nodeAt (idx).enabled)
+            if (nodeAt (idx).desc->endsVoice)   // (bypassed ones hold no voice: the engine asks CompiledNode::live)
                 lane.endsVoice.push_back (idx);
         }
         std::vector<std::string> ids;

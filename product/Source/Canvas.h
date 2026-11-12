@@ -72,8 +72,8 @@ private:
     std::vector<Port> portList;
     std::vector<std::unique_ptr<juce::Component>> controls;
     ModuleLook look;
-    juce::Rectangle<int> face, telemetryArea, header, ledArea, nameArea, modeArea;
-    int hoverPort = -1;
+    juce::Rectangle<int> face, telemetryArea, header, ledArea, nameArea, modeArea, muteArea, soloArea;   ///< (M and S: sources and groups)
+    int hoverPort = -1, hoverKey = 0;   ///< (hoverKey: 1 M, 2 S)
     bool hover = false, hasMode = false;
 };
 

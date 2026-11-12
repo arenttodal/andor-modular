@@ -23,7 +23,7 @@ namespace
         const auto* pd = findParam (s, node, param);
         if (pd == nullptr)
             return;
-        auto* w = new juce::AlertWindow (pd->name, "Type a value (" + juce::String (pd->format (pd->min)) + " .. " + juce::String (pd->format (pd->max)) + ")",
+        auto* w = new juce::AlertWindow (juce::String (pd->name), "Type a value (" + juce::String (pd->format (pd->min)) + " .. " + juce::String (pd->format (pd->max)) + ")",
                                          juce::MessageBoxIconType::NoIcon, target);
         w->addTextEditor ("value", juce::String (docValue (s, node, param), 4));
         w->addButton ("SET", 1, juce::KeyPress (juce::KeyPress::returnKey));
@@ -148,8 +148,8 @@ ParamKnob::ParamKnob (Session& s, std::string n, std::string p, Style st) : sess
     {
         getProperties().set ("bipolar", pd->min < 0.0 && pd->max > 0.0);
         setDoubleClickReturnValue (true, pd->normalise (pd->def));
-        setTitle (pd->name);
-        setHelpText (pd->name);
+        setTitle (juce::String (pd->name));
+        setHelpText (juce::String (pd->name));
     }
     refresh();
 }
@@ -236,7 +236,7 @@ void ParamKnob::paint (juce::Graphics& g)
         const bool panel = style == Style::panel;
         g.setColour (captionInk);
         g.setFont (fonts::make (panel ? 11.5f : 10.5f, Weight::medium, 0.05f));
-        g.drawFittedText (pd->name, getLocalBounds().removeFromTop (panel ? 17 : 15), juce::Justification::centred, 1, 0.75f);
+        g.drawFittedText (juce::String (pd->name), getLocalBounds().removeFromTop (panel ? 17 : 15), juce::Justification::centred, 1, 0.75f);
         g.setColour (hot ? captionHotInk : captionHotInk.withAlpha (0.82f));
         g.setFont (fonts::make (panel ? 13.0f : 12.0f, Weight::medium));
         g.drawFittedText (value, getLocalBounds().removeFromBottom (panel ? 19 : 16), juce::Justification::centred, 1, 0.8f);
@@ -269,7 +269,7 @@ juce::String ParamKnob::getTooltip()
     const auto* pd = desc();
     if (pd == nullptr)
         return {};
-    return pd->name + ": " + pd->format (docValue (session, node, param)) + "  (" + pd->format (pd->min) + " .. " + pd->format (pd->max)
+    return juce::String (pd->name + ": " + pd->format (docValue (session, node, param)) + "  (" + pd->format (pd->min) + " .. " + pd->format (pd->max))
            + ")\nDrag; Shift for fine; double-click resets; right-click for macros, automation and modulation.";
 }
 
@@ -293,9 +293,9 @@ ParamChoice::ParamChoice (Session& s, std::string n, std::string p) : session (s
     if (const auto* pd = findParam (session, node, param))
     {
         for (std::size_t i = 0; i < pd->choices.size(); ++i)
-            addItem (pd->choices[i], static_cast<int> (i) + 1);
-        setTitle (pd->name);
-        setTooltip (pd->name);
+            addItem (juce::String (pd->choices[i]), static_cast<int> (i) + 1);
+        setTitle (juce::String (pd->name));
+        setTooltip (juce::String (pd->name));
     }
     onChange = [this] {
         if (updating)
@@ -318,7 +318,7 @@ ParamMode::ParamMode (Session& s, std::string n, std::string p) : session (s), n
 {
     if (const auto* pd = findParam (session, node, param))
     {
-        setTitle (pd->name);
+        setTitle (juce::String (pd->name));
         setTooltip (juce::String (pd->name) + ": click to choose");
     }
     setMouseCursor (juce::MouseCursor::PointingHandCursor);
@@ -369,10 +369,10 @@ void ParamMode::mouseDown (const juce::MouseEvent&)
     if (pd == nullptr)
         return;
     juce::PopupMenu menu;
-    menu.addSectionHeader (pd->name);
+    menu.addSectionHeader (juce::String (pd->name));
     const int now = static_cast<int> (std::lround (docValue (session, node, param)));
     for (std::size_t i = 0; i < pd->choices.size(); ++i)
-        menu.addItem (pd->choices[i], true, static_cast<int> (i) == now, [this, i] {
+        menu.addItem (juce::String (pd->choices[i]), true, static_cast<int> (i) == now, [this, i] {
             session.beginGesture ("choose");
             session.setParam (node, param, static_cast<double> (i));
         });
@@ -384,8 +384,8 @@ ParamToggle::ParamToggle (Session& s, std::string n, std::string p, bool onTile)
 {
     if (const auto* pd = findParam (session, node, param))
     {
-        setButtonText (pd->name);
-        setTitle (pd->name);
+        setButtonText (juce::String (pd->name));
+        setTitle (juce::String (pd->name));
     }
     setClickingTogglesState (false);
     refresh();

@@ -58,6 +58,13 @@ Editor::Editor (ModularProcessor& p)
     menuButton.onClick = [this] { showMainMenu(); };
     for (auto* c : std::initializer_list<juce::Component*> { &presetBar, &saveKey, &patchKey, &playKey, &volume, &menuButton })
         surface.addAndMakeVisible (*c);
+    // Only while a source is soloed: the one place that ends every solo.
+    clearSolo.setIcon (icon::Kind::close);
+    clearSolo.setInk (colour::accent.darker (0.2f));
+    clearSolo.setTooltip ("A source is soloed: click to hear every source again");
+    clearSolo.setTitle ("Clear solo");
+    clearSolo.onClick = [this] { session.clearSolo(); };
+    surface.addChildComponent (clearSolo);
 
     // The board.
     addModule.setIcon (icon::Kind::plus);
@@ -247,24 +254,40 @@ void Editor::choose (const std::string& type)
 {
     const auto ctx = pending;
     edit::Result r;
+    // A new source that plays a recording starts with one of ANDOR's own, so it sounds at once
+    // (an empty one is silent until something is dropped on it): the same transaction.
+    auto sounding = [] (Document& d, edit::Result made) {
+        static const std::pair<const char*, const char*> starters[] = { { "src.organic", "samples/bowed-c3.wav" },
+                                                                        { "src.granular", "samples/rain-texture.wav" },
+                                                                        { "src.rhythm", "samples/clockwork-120.wav" } };
+        if (made.ok)
+            if (auto* n = d.findNode (made.focus))
+                for (const auto& [sourceType, key] : starters)
+                    if (n->type == sourceType && n->strings["sample"].empty())
+                    {
+                        n->strings["sample"] = key;
+                        made.message += " with ANDOR's own recording: drop yours on it";
+                    }
+        return made;
+    };
     switch (ctx.kind)
     {
         case QuickAddContext::Kind::cable:
-            r = session.perform ("insert", [&] (Document& d) { return edit::insertOnConnection (d, session.registry(), ctx.connection, type); });
+            r = session.perform ("insert", [&] (Document& d) { return sounding (d, edit::insertOnConnection (d, session.registry(), ctx.connection, type)); });
             break;
         case QuickAddContext::Kind::port:
             r = session.perform ("add", [&] (Document& d) {
-                return edit::addConnectedTo (d, session.registry(), ctx.node, ctx.port, ctx.portIsOutput, type, ctx.world.x, ctx.world.y);
+                return sounding (d, edit::addConnectedTo (d, session.registry(), ctx.node, ctx.port, ctx.portIsOutput, type, ctx.world.x, ctx.world.y));
             });
             break;
         case QuickAddContext::Kind::selection:
-            r = session.perform ("replace", [&] (Document& d) { return edit::replaceNode (d, session.registry(), ctx.node, type); });
+            r = session.perform ("replace", [&] (Document& d) { return sounding (d, edit::replaceNode (d, session.registry(), ctx.node, type)); });
             break;
         case QuickAddContext::Kind::canvas:
         default:
         {
             const auto selected = canvas.primarySelection();
-            r = session.perform ("add " + juce::String (type), [&] (Document& d) { return edit::addModule (d, session.registry(), type, ctx.world.x, ctx.world.y, selected); });
+            r = session.perform ("add " + juce::String (type), [&] (Document& d) { return sounding (d, edit::addModule (d, session.registry(), type, ctx.world.x, ctx.world.y, selected)); });
             if (! r.choices.empty())
             {
                 // Several places it could go: a small placement chooser, never a guess.
@@ -473,11 +496,12 @@ void Editor::sessionMessage (const juce::String& text, bool canUndo, bool isErro
 void Editor::updateHeader()
 {
     const auto& d = session.document();
-    presetBar.setPatchName (d.name, session.history().canUndo());
+    presetBar.setPatchName (juce::String (d.name), session.history().canUndo());
     undo.setEnabled (session.history().canUndo());
     redo.setEnabled (session.history().canRedo());
     undo.setTooltip (session.history().canUndo() ? "Undo " + juce::String (session.history().undoLabel()) + " (Cmd/Ctrl + Z)" : juce::String ("Nothing to undo"));
     redo.setTooltip (session.history().canRedo() ? "Redo " + juce::String (session.history().redoLabel()) + " (Shift + Cmd/Ctrl + Z)" : juce::String ("Nothing to redo"));
+    clearSolo.setVisible (session.anySolo());
     const bool mono = d.settings.voiceMode > 0;
     voices.setText (mono ? (d.settings.voiceMode == 1 ? "MONO" : "LEGATO") : "POLY", mono ? juce::String ("1 VOICE") : juce::String (d.settings.polyphony) + (d.settings.polyphony == 1 ? " VOICE" : " VOICES"));
     surface.repaint (at (boardArea().withHeight (layout::boardHeader)));
@@ -595,6 +619,7 @@ void Editor::layoutSurface()
     playKey.setBounds (at (layout::viewKey.translated (48.0f, 0.0f)));
     volume.setBounds (at (layout::volume));
     menuButton.setBounds (at (layout::menu));
+    clearSolo.setBounds (juce::roundToInt (layout::viewKey.getRight() + 54.0f), juce::roundToInt (layout::viewKey.getY() + 9.0f), clearSolo.idealWidth(), 30);
 
     const auto board = at (boardArea());
     const int headerH = juce::roundToInt (layout::boardHeader);

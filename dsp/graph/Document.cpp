@@ -383,6 +383,10 @@ json::Value toJson (const Document& doc)
         v.set ("y", static_cast<double> (n.y));
         v.set ("size", n.size);
         v.set ("enabled", n.enabled);
+        if (n.muted)
+            v.set ("muted", true);
+        if (n.solo)
+            v.set ("solo", true);
         if (! n.label.empty())
             v.set ("label", n.label);
         if (! n.group.empty())
@@ -436,6 +440,10 @@ json::Value toJson (const Document& doc)
         v.set ("x", static_cast<double> (g.x));
         v.set ("y", static_cast<double> (g.y));
         v.set ("collapsed", g.collapsed);
+        if (g.muted)
+            v.set ("muted", true);
+        if (g.solo)
+            v.set ("solo", true);
         if (! g.module.empty())
             v.set ("module", g.module);
         auto ports = json::Value::array();
@@ -586,6 +594,8 @@ LoadResult fromJson (const json::Value& input, Document& out)
         m.y = clampCoord (n.get ("y", 0.0));
         m.size = std::clamp (n.getInt ("size", 1), 0, 2);
         m.enabled = n.getBool ("enabled", true);
+        m.muted = n.getBool ("muted", false);
+        m.solo = n.getBool ("solo", false);
         m.label = n.getString ("label");
         m.group = n.getString ("group");
         if (desc != nullptr)
@@ -647,6 +657,8 @@ LoadResult fromJson (const json::Value& input, Document& out)
         m.x = clampCoord (g.get ("x", 0.0));
         m.y = clampCoord (g.get ("y", 0.0));
         m.collapsed = g.getBool ("collapsed", true);
+        m.muted = g.getBool ("muted", false);
+        m.solo = g.getBool ("solo", false);
         m.module = g.getString ("module");
         for (const auto& p : g["ports"].elements())
             m.ports.push_back ({ p.getString ("name"), p.getString ("node"), p.getString ("port"), p.getBool ("input", true) });
@@ -762,6 +774,54 @@ LoadResult loadFromFile (const std::string& path, Document& doc)
     std::stringstream ss;
     ss << f.rdbuf();
     return loadFromString (ss.str(), doc);
+}
+
+//==============================================================================
+namespace
+{
+    bool isSource (const Registry& registry, const NodeModel& n)
+    {
+        const auto* d = registry.find (n.type);
+        return d != nullptr && d->role == NodeRole::source;
+    }
+
+    /** The node's own flag, or one of the groups it is in. */
+    template <typename Flag>
+    bool flagged (const Document& doc, const NodeModel& n, Flag&& of)
+    {
+        if (of (n.muted, n.solo))
+            return true;
+        std::string group = n.group;
+        for (int guard = 0; guard < 16 && ! group.empty(); ++guard)
+        {
+            const auto* g = doc.findGroup (group);
+            if (g == nullptr)
+                break;
+            if (of (g->muted, g->solo))
+                return true;
+            group = g->parent;
+        }
+        return false;
+    }
+}
+
+bool anySolo (const Document& doc, const Registry& registry)
+{
+    for (const auto& n : doc.nodes)
+        if (isSource (registry, n) && flagged (doc, n, [] (bool, bool solo) { return solo; }))
+            return true;
+    return false;
+}
+
+double audibleGain (const Document& doc, const Registry& registry, const NodeModel& node)
+{
+    if (! isSource (registry, node))
+        return 1.0;
+    if (flagged (doc, node, [] (bool muted, bool) { return muted; }))
+        return 0.0;   // mute wins
+    if (anySolo (doc, registry) && ! flagged (doc, node, [] (bool, bool solo) { return solo; }))
+        return 0.0;
+    return 1.0;
 }
 
 } // namespace andor::modular

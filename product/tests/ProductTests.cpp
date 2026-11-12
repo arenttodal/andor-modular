@@ -155,6 +155,111 @@ TEST_CASE ("0-to-sound through the interface: empty patch, Quick Add 'analog', R
     CHECK (saveToString (p.session().document()) == before);
 }
 
+TEST_CASE ("A recording whose path is not ASCII opens, plays and comes back from the saved session", "[product][organic][live]")
+{
+    // (A guard, not the cause of the reported silence: this JUCE reads a std::string as UTF-8.)
+    const std::string name = "Str\xc3\xb8k \xe2\x80\x93 caf\xc3\xa9.wav";   // "Strøk – café.wav"
+    const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile (juce::String ("andor-modular-\xc3\xa6\xc3\xb8\xc3\xa5"));
+    dir.createDirectory();
+    const auto file = dir.getChildFile (juce::String (name));
+    Session::installFactoryContent();
+    REQUIRE (Session::factoryDirectory().getChildFile ("samples/bowed-c3.wav").copyFileTo (file));
+
+    juce::MemoryBlock state;
+    {
+        ModularProcessor p;
+        p.prepareToPlay (48000.0, 512);
+        p.session().newPatch();
+        const auto made = p.session().perform ("add", [&] (Document& d) { return edit::addModule (d, p.session().registry(), "src.organic", 0, 0); });
+        REQUIRE (made.ok);
+        p.session().setNodeString (made.focus, "sample", p.session().keyFor (file));
+        p.session().assets().waitIdle (20.0);
+        settle (80);
+        const auto asset = p.session().assets().resolve (p.session().resolveKey (p.session().document().findNode (made.focus)->strings.at ("sample")).getFullPathName().toStdString());
+        REQUIRE (asset != nullptr);
+        CHECK (asset->status == SampleAsset::Status::ready);
+        const auto out = run (p, 1.0, { juce::MidiMessage::noteOn (1, 48, 0.8f) });
+        CHECK (rms (out, 9600) > 0.005);
+        // a patch name beyond ASCII too
+        p.session().perform ("rename", [] (Document& d) {
+            d.name = "R\xc3\xaaverie";
+            edit::Result r;
+            r.ok = true;
+            return r;
+        }, false);
+        p.getStateInformation (state);
+    }
+    ModularProcessor q;
+    q.prepareToPlay (48000.0, 512);
+    q.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
+    q.session().assets().waitIdle (20.0);
+    settle (80);
+    CHECK (q.session().document().name == "R\xc3\xaaverie");
+    const auto again = run (q, 1.0, { juce::MidiMessage::noteOn (1, 48, 0.8f) });
+    CHECK (rms (again, 9600) > 0.005);
+    dir.deleteRecursively();
+}
+
+TEST_CASE ("A sample source added from Quick Add sounds at once; M, S and the light never rebuild the graph", "[product][source][mute][solo]")
+{
+    ModularProcessor p;
+    p.prepareToPlay (48000.0, 512);
+    std::unique_ptr<juce::AudioProcessorEditor> base (p.createEditor());
+    auto* editor = dynamic_cast<Editor*> (base.get());
+    REQUIRE (editor != nullptr);
+    p.session().newPatch();
+    settle();
+    ui::QuickAddContext ctx;
+    ctx.world = { 200.0f, 200.0f };
+    editor->openQuickAdd (ctx, editor->getScreenBounds().getCentre());
+    editor->quickAddView().setQuery ("organic");
+    editor->quickAddView().chooseSelected();
+    p.session().assets().waitIdle (20.0);
+    settle (80);
+    std::string organic;
+    for (const auto& n : p.session().document().nodes)
+        if (n.type == "src.organic")
+            organic = n.id;
+    REQUIRE_FALSE (organic.empty());
+    CHECK (p.session().document().findNode (organic)->strings.at ("sample") == "samples/bowed-c3.wav");
+    auto out = run (p, 0.6, { juce::MidiMessage::noteOn (1, 48, 0.9f) });
+    CHECK (rms (out, 9600) > 0.005);
+
+    // M: silent, the same graph, the note still held; M again: back
+    const int swaps = p.engine().swapsCompleted();
+    p.session().setMuted (organic, true);
+    out = run (p, 0.3);
+    CHECK (rms (out, 7200) < 1.0e-5);
+    p.session().setMuted (organic, false);
+    out = run (p, 0.3);
+    CHECK (rms (out, 7200) > 0.005);
+    // S on the only source, then an oscillator beside it: soloed, the oscillator adds nothing
+    p.session().toggleSolo (organic, false);
+    CHECK (p.session().anySolo());
+    out = run (p, 0.3);
+    CHECK (rms (out, 7200) > 0.005);
+    p.session().toggleSolo (organic, false);   // the same key again: no solo
+    CHECK_FALSE (p.session().anySolo());
+    // the light of a processor: bypassed and back, live
+    std::string envelope;
+    for (const auto& n : p.session().document().nodes)
+        if (n.type == "proc.vca")
+            envelope = n.id;
+    REQUIRE_FALSE (envelope.empty());
+    p.session().setEnabled (envelope, false);
+    out = run (p, 0.2);
+    p.session().setEnabled (envelope, true);
+    out = run (p, 0.2);
+    CHECK (p.engine().swapsCompleted() == swaps);
+    CHECK (p.engine().activeVoices() == 1);
+    // each is one undo step
+    const auto before = saveToString (p.session().document());
+    p.session().setMuted (organic, true);
+    CHECK (p.session().document().findNode (organic)->muted);
+    p.session().undo();
+    CHECK (saveToString (p.session().document()) == before);
+}
+
 TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
 {
     ModularProcessor p;

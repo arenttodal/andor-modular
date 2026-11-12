@@ -203,9 +203,50 @@ namespace
     };
 
     //==========================================================================
+    /** What a note module let through, by the note's identity: the pitch its note-on became.
+        Its note-off ends exactly that, whatever the module's settings are by then (an octave,
+        a range, a split point or a scale changed while a key is down must never leave a note
+        hanging, and never end a different one). Fixed size, no allocation. */
+    struct NoteMemory
+    {
+        void remember (std::uint32_t id, std::uint8_t note) noexcept
+        {
+            int slot = -1;
+            for (int i = 0; i < size; ++i)
+                if (used[static_cast<std::size_t> (i)] && ids[static_cast<std::size_t> (i)] == id)
+                    slot = i;   // (the same identity again: its newest pitch)
+            for (int i = 0; slot < 0 && i < size; ++i)
+                if (! used[static_cast<std::size_t> (i)])
+                    slot = i;
+            if (slot < 0)
+                slot = static_cast<int> (next++ % static_cast<unsigned> (size));   // (more than 128 held: the oldest slot goes)
+            used[static_cast<std::size_t> (slot)] = true;
+            ids[static_cast<std::size_t> (slot)] = id;
+            notes[static_cast<std::size_t> (slot)] = note;
+        }
+        /** The pitch that identity sounds as, forgetting it; -1: its note-on never passed. */
+        int take (std::uint32_t id) noexcept
+        {
+            for (int i = 0; i < size; ++i)
+                if (used[static_cast<std::size_t> (i)] && ids[static_cast<std::size_t> (i)] == id)
+                {
+                    used[static_cast<std::size_t> (i)] = false;
+                    return notes[static_cast<std::size_t> (i)];
+                }
+            return -1;
+        }
+        void clear() noexcept { used.fill (false); }
+        static constexpr int size = 128;
+        std::array<std::uint32_t, size> ids {};
+        std::array<std::uint8_t, size> notes {};
+        std::array<bool, size> used {};
+        unsigned next = 0;
+    };
+
     class Keyboard final : public EventProcessor
     {
     public:
+        void reset() noexcept override { held.clear(); }
         void process (const EventBlock&, const EventList* const* inputs, int numInputs, const float* p, EventList& out, float* const*, int) noexcept override
         {
             if (numInputs < 1 || inputs[0] == nullptr)
@@ -216,23 +257,31 @@ namespace
             const int lo = static_cast<int> (p[3]), hi = static_cast<int> (p[4]);
             for (const auto& e : *inputs[0])
             {
-                if (channel > 0 && e.channel != channel && e.kind != NoteEvent::Kind::allNotesOff)
-                    continue;
                 NoteEvent t = e;
-                if (e.kind != NoteEvent::Kind::allNotesOff)
+                if (e.kind == NoteEvent::Kind::allNotesOff)
+                    held.clear();
+                else if (e.kind == NoteEvent::Kind::noteOn)
                 {
-                    if (e.note < lo || e.note > hi)
+                    // OCTAVE, RANGE and CHANNEL decide what a key *starts*: a held key keeps the
+                    // pitch it started (a new octave is for the next notes).
+                    if ((channel > 0 && e.channel != channel) || e.note < lo || e.note > hi)
                         continue;
                     const int n = e.note + 12 * octave;
                     if (n < 0 || n > 127)
                         continue;
                     t.note = static_cast<std::uint8_t> (n);
-                    if (e.kind == NoteEvent::Kind::noteOn)
-                    {
-                        const float v = std::clamp (e.velocity, 0.0f, 1.0f);
-                        t.velocity = curve == 0 ? std::sqrt (v) : (curve == 2 ? v * v : v);
-                        ++notesIn;
-                    }
+                    const float v = std::clamp (e.velocity, 0.0f, 1.0f);
+                    t.velocity = curve == 0 ? std::sqrt (v) : (curve == 2 ? v * v : v);
+                    held.remember (e.id, t.note);
+                    ++notesIn;
+                }
+                else
+                {
+                    // The release of exactly what its key started; nothing if that never passed.
+                    const int n = held.take (e.id);
+                    if (n < 0)
+                        continue;
+                    t.note = static_cast<std::uint8_t> (n);
                 }
                 out.add (t);
             }
@@ -245,6 +294,7 @@ namespace
 
     private:
         int notesIn = 0;
+        NoteMemory held;
     };
 
     //==========================================================================
@@ -564,9 +614,24 @@ namespace
             const int key = static_cast<int> (p[0]);
             const bool high = p[1] >= 0.5f;
             for (const auto& e : *inputs[0])
-                if (e.kind == NoteEvent::Kind::allNotesOff || ((e.note >= key) == high))
-                    out.add (e);
+            {
+                if (e.kind == NoteEvent::Kind::allNotesOff)
+                    held.clear();
+                else if (e.kind == NoteEvent::Kind::noteOn)
+                {
+                    if ((e.note >= key) != high)
+                        continue;
+                    held.remember (e.id, e.note);
+                }
+                else if (held.take (e.id) < 0)
+                    continue;   // (its note-on went to the other side, or never came)
+                out.add (e);
+            }
         }
+        void reset() noexcept override { held.clear(); }
+
+    private:
+        NoteMemory held;
     };
 
     //==========================================================================
@@ -592,33 +657,26 @@ namespace
                     if (n < 0 || n > 127)
                         continue;
                     t.note = static_cast<std::uint8_t> (n);
-                    remember (e.id, t.note);
+                    held.remember (e.id, t.note);
                 }
                 else if (e.kind == NoteEvent::Kind::noteOff)
                 {
-                    // The note-off ends the pitch its note-on became (a scale change in between
-                    // must not leave it hanging).
-                    int n = recall (e.id);
+                    // The note-off ends the pitch its note-on became (a scale or a transpose
+                    // changed in between must not leave it hanging, nor end another note).
+                    const int n = held.take (e.id);
                     if (n < 0)
-                        n = std::clamp (e.note + shift, 0, 127);
+                        continue;
                     t.note = static_cast<std::uint8_t> (n);
                 }
+                else
+                    held.clear();
                 out.add (t);
             }
         }
+        void reset() noexcept override { held.clear(); }
 
     private:
-        void remember (std::uint32_t id, std::uint8_t note) noexcept
-        {
-            const auto i = static_cast<std::size_t> (id * 2654435761u % table.size());
-            table[i] = { id, note };
-        }
-        int recall (std::uint32_t id) const noexcept
-        {
-            const auto& e = table[static_cast<std::size_t> (id * 2654435761u % table.size())];
-            return e.first == id ? e.second : -1;
-        }
-        std::array<std::pair<std::uint32_t, std::uint8_t>, 512> table {};
+        NoteMemory held;
     };
 
     //==========================================================================

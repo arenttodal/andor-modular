@@ -97,10 +97,10 @@ std::shared_ptr<ExternalInstrument> ExternalHost::instanceFor (const std::string
         std::unique_ptr<juce::AudioPluginInstance> instance;
         for (auto* format : manager.getFormats())
         {
-            if (! format->fileMightContainThisPluginType (path))
+            if (! format->fileMightContainThisPluginType (juce::String (path)))
                 continue;
             juce::OwnedArray<juce::PluginDescription> types;
-            format->findAllTypesForFile (types, path);
+            format->findAllTypesForFile (types, juce::String (path));
             for (auto* t : types)
                 if (t->isInstrument || types.size() == 1)
                 {

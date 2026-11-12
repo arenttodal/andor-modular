@@ -265,6 +265,12 @@ namespace
             asset = pc.asset;
             rate = pc.sampleRate;
             voice.prepare (pc.sampleRate);
+            // (a note starts before its first block is processed: START and REVERSE as set now)
+            if (pc.params != nullptr)
+            {
+                startFraction = pc.params[start_];
+                reverseOn = pc.params[reverse_] >= 0.5f;
+            }
         }
         void reset() noexcept override { voice.stop(); }
         void start (const VoiceInfo&, bool retrigger) noexcept override
@@ -282,7 +288,11 @@ namespace
             const float g = gain.next (p[level], 0.01f, ctx);
             const bool holding = ctx.voice != nullptr && ctx.voice->gate && p[loop] >= 0.5f;
             const double pitch = sourcePitch (ctx, p[keytrack], p[tune], io.in[0][0][0]);
-            const double step = voice.stepFor (pitch, p[root] < 0.0f ? -1.0 : static_cast<double> (p[root]));
+            // ROOT auto: the analysed root when the recording has a pitch; one without (speech,
+            // a texture, a drum: SampleAsset::pitched) takes C4, so middle C plays it as recorded
+            // instead of octaves away from a guessed root (inaudibly low, in the reported case).
+            const double autoRoot = asset != nullptr && ! asset->pitched() ? 60.0 : -1.0;
+            const double step = voice.stepFor (pitch, p[root] < 0.0f ? autoRoot : static_cast<double> (p[root]));
             float* o = io.out[0][0];
             for (int i = 0; i < ctx.numSamples; ++i)
                 o[i] = g * voice.next (step, holding);
@@ -360,7 +370,8 @@ namespace
             const auto& src = *model->original.source;
             const double played = global ? globalPitch : (ctx.voice != nullptr ? ctx.voice->pitch : 60.0);
             const double pitch = 60.0 + (played - 60.0) * p[keytrack] + p[tune] + 12.0 * io.in[0][0][0];
-            const double step = src.sampleRate() / rate * std::exp2 ((pitch - src.rootMidi()) / 12.0);
+            const double grainRoot = asset->pitched() ? src.rootMidi() : 60.0;   // (as ORGANIC SAMPLE: no pitch, C4 as recorded)
+            const double step = src.sampleRate() / rate * std::exp2 ((pitch - grainRoot) / 12.0);
             float* l = io.out[0][0];
             float* r = io.out[0][1];
             for (int i = 0; i < ctx.numSamples; ++i)

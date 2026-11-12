@@ -76,7 +76,7 @@ private:
     ui::KeyButton saveKey { {}, ui::skin::KeyRole::generic };
     ui::KeyButton patchKey { {}, ui::skin::KeyRole::modifier }, playKey { {}, ui::skin::KeyRole::modifier };
     ui::VolumeFader volume;
-    ui::InkButton menuButton { juce::String() };
+    ui::InkButton menuButton { juce::String() }, clearSolo { "SOLO" };
 
     // the board
     ui::InkButton addModule { "ADD MODULE" }, arrange { "ARRANGE" }, fit { "FIT" }, undo { juce::String() }, redo { juce::String() };

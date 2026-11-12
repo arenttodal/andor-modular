@@ -147,6 +147,13 @@ struct SampleAsset
     std::string name, path, hash, message;
     std::shared_ptr<const osp::InstrumentModel> model;   ///< OSP's prepared playable model
     double rootMidi = 60.0;
+    /** How sure OSP's analysis is of that root, 0..1 ("moderate" from 0.4). Below it the
+        recording has no pitch to speak of (speech, noise, a drum, a chord, a texture): a
+        guessed root can lie octaves from the keys and play it too low to hear, so ORGANIC
+        SAMPLE and GRANULAR then take C4 as the root (middle C plays it as recorded) until the
+        musician sets ROOT. */
+    double pitchConfidence = 0.0;
+    bool pitched() const noexcept { return pitchConfidence >= 0.4; }
     double durationSeconds = 0.0;
     /** Rhythmic analysis (onset grid): tempo estimate and onset times (seconds). */
     double tempoBpm = 0.0;

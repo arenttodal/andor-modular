@@ -78,8 +78,9 @@ private:
     juce::String summary;
 };
 
-/** One sound source on the front panel: ANDOR Analog's source card. Its badge, M (mute), its
-    name and switches; its graphite display (the wave it makes, the recording it plays, its
+/** One sound source on the front panel: ANDOR Analog's source card. Its badge, M and S (mute
+    and solo: Session::setMuted / toggleSolo, ramps at the source's own output), its name and
+    switches; its graphite display (the wave it makes, the recording it plays, its
     grains) with its modes in the corner; its knobs under it. Every control is the module's
     own parameter (the same one as on its tile in PATCH). The card's ceramic face is drawn
     by the surface below it (PlayView::cardAreas), so its shadow falls on the housing. */
@@ -98,8 +99,8 @@ private:
     Session& session;
     std::string node;
     ModuleLook look;
-    bool compact = false;
-    KeyButton mute { "M", skin::KeyRole::modifier };
+    bool compact = false, audible = true;
+    KeyButton mute { "M", skin::KeyRole::modifier }, solo { "S", skin::KeyRole::modifier };
     KeyButton edit { juce::String(), skin::KeyRole::generic };
     std::vector<std::unique_ptr<ParamKnob>> knobs;
     std::vector<std::unique_ptr<ParamMode>> modes;

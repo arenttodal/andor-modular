@@ -80,6 +80,88 @@ void Session::recompile()
     engine.publish (std::move (graph));
 }
 
+void Session::publishAudibility()
+{
+    if (auto* g = graph())
+        for (const auto& n : doc.nodes)
+            g->setGain (n.id, static_cast<float> (audibleGain (doc, registry(), n)));
+}
+
+bool Session::anySolo() const { return andor::modular::anySolo (doc, registry()); }
+
+void Session::setEnabled (const std::string& node, bool on)
+{
+    auto* n = doc.findNode (node);
+    if (n == nullptr || n->enabled == on)
+        return;
+    const auto* d = registry().find (n->type);
+    hist.push (doc, on ? "switch on" : "bypass");
+    gestureOpen = false;
+    n->enabled = on;
+    if (d == nullptr || d->role == NodeRole::event || d->role == NodeRole::output)
+        recompile();
+    else if (auto* g = graph())
+        g->setEnabled (node, on);
+    changed (false);
+    message (juce::String (doc.displayName (registry(), *n)) + (on ? " on" : " bypassed"), true, false);
+}
+
+void Session::setMuted (const std::string& id, bool muted)
+{
+    auto* n = doc.findNode (id);
+    auto* g = doc.findGroup (id);
+    if ((n == nullptr && g == nullptr) || (n != nullptr ? n->muted : g->muted) == muted)
+        return;
+    hist.push (doc, muted ? "mute" : "unmute");
+    gestureOpen = false;
+    (n != nullptr ? n->muted : g->muted) = muted;
+    publishAudibility();
+    changed (false);
+}
+
+void Session::toggleSolo (const std::string& id, bool additive)
+{
+    auto* n = doc.findNode (id);
+    auto* g = doc.findGroup (id);
+    if (n == nullptr && g == nullptr)
+        return;
+    const bool was = n != nullptr ? n->solo : g->solo;
+    int others = 0;
+    for (const auto& other : doc.nodes)
+        others += other.solo && other.id != id ? 1 : 0;
+    for (const auto& other : doc.groups)
+        others += other.solo && other.id != id ? 1 : 0;
+    hist.push (doc, "solo");
+    gestureOpen = false;
+    if (! additive)
+    {
+        // Alone: this one only; clicked again while it is the only one: no solo.
+        for (auto& other : doc.nodes)
+            other.solo = false;
+        for (auto& other : doc.groups)
+            other.solo = false;
+        (n != nullptr ? n->solo : g->solo) = ! (was && others == 0);
+    }
+    else
+        (n != nullptr ? n->solo : g->solo) = ! was;
+    publishAudibility();
+    changed (false);
+}
+
+void Session::clearSolo()
+{
+    if (! anySolo())
+        return;
+    hist.push (doc, "clear solo");
+    gestureOpen = false;
+    for (auto& n : doc.nodes)
+        n.solo = false;
+    for (auto& g : doc.groups)
+        g.solo = false;
+    publishAudibility();
+    changed (false);
+}
+
 void Session::setMasterDb (double dB)
 {
     doc.settings.masterDb = dB;
@@ -116,7 +198,7 @@ edit::Result Session::perform (const juce::String& label, const std::function<ed
     {
         doc = before;
         if (! result.message.empty())
-            message (result.message, false, true);
+            message (juce::String (result.message), false, true);
         return result;
     }
     hist.push (before, label.toStdString());
@@ -128,7 +210,7 @@ edit::Result Session::perform (const juce::String& label, const std::function<ed
         pushMacros();
     changed (structural);
     if (! result.message.empty())
-        message (result.message, true, false);
+        message (juce::String (result.message), true, false);
     return result;
 }
 
@@ -147,7 +229,9 @@ void Session::setParam (const std::string& node, const std::string& param, doubl
         return;
     const auto& pd = d->params[static_cast<std::size_t> (p)];
     n->params[param] = pd.clampNative (value);
-    if (pd.structural || d->role == NodeRole::event || param == "domain")
+    // (A note module's settings are read live too: an OCTAVE change must not rebuild the graph
+    // under held notes. Its held keys keep the pitch they started: EventNodes.cpp, NoteMemory.)
+    if (pd.structural || param == "domain")
         recompile();
     else if (auto* g = graph())
         g->setParam (node, param, value);
@@ -376,7 +460,7 @@ void Session::installFactoryContent()
 
 juce::File Session::resolveKey (const std::string& key) const
 {
-    const juce::String k (key);
+    const juce::String k { key };
     if (juce::File::isAbsolutePath (k))
         return juce::File (k);
     if (file != juce::File())

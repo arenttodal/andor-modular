@@ -197,6 +197,7 @@ void AssetLibrary::load (const std::string& key, bool withContinuation)
         first->status = SampleAsset::Status::provisional;
         first->model = provisional;
         first->rootMidi = provisional->rootMidi;
+        first->pitchConfidence = analysis.pitch.confidence;
         store (key, first);
         if (withContinuation)
         {

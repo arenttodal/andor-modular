@@ -229,6 +229,15 @@ void NodeView::resized()
     header = face.withHeight (tile::top);
     ledArea = juce::Rectangle<int> (face.getRight() - 24, face.getY() + 5, 20, 20);
     nameArea = juce::Rectangle<int> (face.getX() + nameX, face.getY() + 6, face.getWidth() - nameX - 26, 17);
+    muteArea = soloArea = {};
+    if (group || isSource())
+    {
+        // M and S: two small keys before the light (a group has no light: at the end).
+        const int right = group ? face.getRight() - 8 : ledArea.getX() - 1;
+        soloArea = juce::Rectangle<int> (right - 17, face.getY() + 8, 17, 15);
+        muteArea = soloArea.translated (-19, 0);
+        nameArea.setRight (muteArea.getX() - 4);
+    }
     modeArea = juce::Rectangle<int> (face.getX() + nameX, face.getY() + 22, face.getWidth() - nameX - 10, 15);
     auto area = face.withTrimmedTop (tile::top + rows * tile::portRow + (rows > 0 ? 4 : 0)).reduced (8, 0);
     std::vector<juce::Component*> knobs;
@@ -307,7 +316,21 @@ void NodeView::paint (juce::Graphics& g)
     const bool enabled = group || (n != nullptr && n->enabled);
     const bool missing = ! group && d == nullptr;
 
-    paintFace (g, r, look, hover, ! enabled);
+    // Silent by M, by another source's S, or bypassed: the face under its veil, truthfully.
+    bool muted = false, soloed = false, audible = enabled;
+    if (group)
+    {
+        const auto* gm = doc.findGroup (nodeId);
+        muted = gm != nullptr && gm->muted;
+        soloed = gm != nullptr && gm->solo;
+    }
+    else if (n != nullptr)
+    {
+        muted = n->muted;
+        soloed = n->solo;
+        audible = enabled && (d == nullptr || audibleGain (doc, s.registry(), *n) > 0.0);
+    }
+    paintFace (g, r, look, hover, ! audible);
     if (sel)
     {
         // The routing board's selection ring.
@@ -341,6 +364,28 @@ void NodeView::paint (juce::Graphics& g)
     }
     if (! group)
         paintLight (g, ledArea.toFloat(), look, enabled);
+    if (! muteArea.isEmpty())
+    {
+        // The family's small modifier keys: lit in the accent's soft face while on.
+        auto key = [&] (juce::Rectangle<int> area, const char* letter, bool on, bool hot) {
+            const auto k = area.toFloat();
+            if (look.face == ModuleLook::Face::stack)
+            {
+                g.setColour (on ? board::bone : board::bone.withAlpha (hot ? 0.22f : 0.12f));
+                g.fillRoundedRectangle (k, 3.5f);
+                g.setColour (on ? juce::Colour (0xff4a4640) : board::bone.withAlpha (0.85f));
+            }
+            else
+            {
+                draw::button (g, k, 3.5f, on, hot, colour::accentSoft);
+                g.setColour (on ? colour::text : colour::textSecondary);
+            }
+            g.setFont (fonts::make (9.0f, Weight::semibold, 0.02f));
+            g.drawText (letter, area, juce::Justification::centred, false);
+        };
+        key (muteArea, "M", muted, hoverKey == 1);
+        key (soloArea, "S", soloed, hoverKey == 2);
+    }
 
     // Sockets on the face's edges, their names inside.
     std::set<std::string> connectedIn, connectedOut;
@@ -559,19 +604,25 @@ void NodeView::mouseDown (const juce::MouseEvent& e)
         canvas.showNodeMenu (*this);
         return;
     }
-    if (ledArea.contains (e.getPosition()) && ! group)
+    if (muteArea.contains (e.getPosition()) || soloArea.contains (e.getPosition()))
     {
         auto& s = canvas.session();
-        s.perform ("bypass", [this] (Document& d) {
-            edit::Result r;
-            if (auto* n = d.findNode (nodeId))
-            {
-                n->enabled = ! n->enabled;
-                r.ok = true;
-                r.message = n->enabled ? "on" : "bypassed";
-            }
-            return r;
-        });
+        if (muteArea.contains (e.getPosition()))
+        {
+            const auto* nm = s.document().findNode (nodeId);
+            const auto* gm = s.document().findGroup (nodeId);
+            s.setMuted (nodeId, ! (nm != nullptr ? nm->muted : (gm != nullptr && gm->muted)));
+        }
+        else
+            s.toggleSolo (nodeId, e.mods.isShiftDown());
+        return;
+    }
+    if (ledArea.contains (e.getPosition()) && ! group)
+    {
+        // The light: on / bypassed. A cross-fade in the running graph (Session::setEnabled).
+        auto& s = canvas.session();
+        if (const auto* n = s.document().findNode (nodeId))
+            s.setEnabled (nodeId, ! n->enabled);
         return;
     }
     canvas.nodePressed (*this, e);
@@ -596,6 +647,16 @@ void NodeView::mouseEnter (const juce::MouseEvent&)
 
 void NodeView::mouseMove (const juce::MouseEvent& e)
 {
+    const int key = muteArea.contains (e.getPosition()) ? 1 : (soloArea.contains (e.getPosition()) ? 2 : 0);
+    if (key != hoverKey)
+    {
+        hoverKey = key;
+        if (key != 0)
+            setTooltip (key == 1 ? "Mute (it keeps running; mute wins over solo)" : "Solo: only this sounds. Shift-click adds or removes it; click again to end the solo.");
+        repaint (header);
+    }
+    if (key != 0)
+        return;
     const int p = portAt (e.position);
     if (p != hoverPort)
     {
@@ -617,6 +678,7 @@ void NodeView::mouseMove (const juce::MouseEvent& e)
 void NodeView::mouseExit (const juce::MouseEvent&)
 {
     hoverPort = -1;
+    hoverKey = 0;
     hover = false;
     repaint();
 }
@@ -728,7 +790,10 @@ void Canvas::rebuild()
 void Canvas::refreshValues()
 {
     for (auto& v : views)
+    {
         v->refreshControls();
+        v->repaint();   // (its light, its M and S: a tile's face is kept as an image)
+    }
     repaint();
 }
 

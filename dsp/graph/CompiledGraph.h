@@ -69,6 +69,9 @@ struct Instance
     std::vector<ModTerm> mods;
     std::vector<float> resolved;            ///< native parameter values this chunk
     ProcessIO io;
+    /** Where this instance is between bypassed (0) and running (1), and its audible gain: both
+        ramped by the engine over a few milliseconds (negative: not yet set). */
+    float mixNow = -1.0f, gainNow = -1.0f;
 };
 
 /** A boundary node's view of one lane: per voice, the voice-side inputs. */
@@ -111,7 +114,14 @@ struct CompiledNode
     std::string id;
     const NodeDesc* desc = nullptr;      ///< null: a missing module (inert)
     Domain domain = Domain::global;
-    bool enabled = true;
+    bool enabled = true;                 ///< at compile (event nodes: structural)
+    /** Audio and control nodes, now: on, or bypassed. Set without a recompile (setEnabled):
+        the engine crossfades between the processed signal and the bypass over ~12 ms, so a
+        bypass never restarts a note or an effect's tail. */
+    std::atomic<bool> live { true };
+    /** A source's audible contribution, 0..1 (mute and solo: setGain), ramped by the engine at
+        the source's own output, before anything downstream. */
+    std::atomic<float> gain { 1.0f };
     int lane = -1;                       ///< VOICE nodes
     std::vector<std::string> strings;
     std::unique_ptr<NodeShared> shared;
@@ -222,6 +232,10 @@ struct CompiledGraph
     double getParam (const std::string& node, const std::string& param) const noexcept;
     /** The value in effect (base, then macros, scenes and automation), as of the last block. */
     double effectiveParam (const std::string& node, const std::string& param) const noexcept;
+    /** Message thread: bypass / un-bypass an audio or control node, click-free (see CompiledNode::live). */
+    bool setEnabled (const std::string& node, bool on) noexcept;
+    /** Message thread: a source's audible gain 0..1 (mute, solo), ramped. */
+    bool setGain (const std::string& node, float gain) noexcept;
     /** Message thread: a group control's value (0..1). */
     bool setChannel (int channel, float value) noexcept;
     int channelIndex (const std::string& groupId, int control) const noexcept;

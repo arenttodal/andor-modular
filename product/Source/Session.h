@@ -55,6 +55,17 @@ public:
     void beginGesture (const juce::String& label);
     void setParam (const std::string& node, const std::string& param, double value);
     void setNodeString (const std::string& node, const std::string& key, const std::string& value);
+    /** A module's light: on, or bypassed. One undo step. Audio and control modules cross-fade
+        in the running graph (no rebuild: held notes and effect tails carry on); a note module's
+        bypass changes which notes exist, so the graph is rebuilt for it. */
+    void setEnabled (const std::string& node, bool on);
+    /** M on a source or a group (see andor::modular::audibleGain). Ramped, never a rebuild. */
+    void setMuted (const std::string& nodeOrGroup, bool muted);
+    /** S on a source or a group. A plain click solos it alone (again: no solo); `additive`
+        (Shift) adds it to, or takes it out of, the soloed set. */
+    void toggleSolo (const std::string& nodeOrGroup, bool additive);
+    void clearSolo();
+    bool anySolo() const;
     /** The patch's master level (dB), heard at once (VOLUME; beginGesture first for its undo). */
     void setMasterDb (double dB);
     bool undo();
@@ -108,6 +119,7 @@ public:
 
 private:
     void changed (bool structural);
+    void publishAudibility();   ///< every source's mute / solo gain, to the running graph
     void syncFromEngine();
 
     Engine& engine;

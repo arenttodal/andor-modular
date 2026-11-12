@@ -11,6 +11,17 @@ namespace andor::modular
 
 namespace
 {
+    inline bool same (float a, float b) noexcept { return ! (a < b) && ! (b < a); }
+
+    /** True while an envelope / VCA that ends voices is running in the lane (a bypassed one
+        holds no voice: the chain then ends like one without an envelope). */
+    inline bool endsLive (const CompiledGraph& g, const Lane& lane) noexcept
+    {
+        for (const int idx : lane.endsVoice)
+            if (g.nodes[static_cast<std::size_t> (idx)].live.load (std::memory_order_relaxed))
+                return true;
+        return false;
+    }
     std::uint32_t mixId (std::uint32_t id, std::uint32_t salt) noexcept
     {
         std::uint32_t x = id * 0x9E3779B1u ^ salt;
@@ -682,8 +693,8 @@ void Engine::laneNoteEvent (CompiledGraph& g, Lane& lane, const NoteEvent& e) no
     auto release = [&] (LaneVoice& voice) {
         voice.state = LaneVoice::State::released;
         voice.info.gate = false;
-        if (lane.endsVoice.empty())
-            voice.fadeRemaining = 256;   // no envelope in the chain: a short fade ends it
+        if (! endsLive (g, lane))
+            voice.fadeRemaining = 256;   // no (running) envelope in the chain: a short fade ends it
         for (const int idx : lane.nodes)
         {
             auto& inst = g.nodes[static_cast<std::size_t> (idx)].instances[static_cast<std::size_t> (voice.info.voiceIndex)];
@@ -859,20 +870,70 @@ void Engine::runInstance (CompiledNode& n, Instance& inst, const ChunkContext& c
                 inst.resolved[p] = static_cast<float> (d.params[p].denormalise (std::clamp (n.baseNorm[p] + sum[p], 0.0f, 1.0f)));
     }
 
-    if (! n.enabled || inst.processor == nullptr)
+    // On, bypassed, or between the two (CompiledNode::live): a bypass is a 12 ms crossfade
+    // between the processed signal and what passes (the first audio input to the first audio
+    // output where both exist, else silence), never a rebuilt graph.
+    const bool on = n.live.load (std::memory_order_relaxed);
+    const float mixTarget = on ? 1.0f : 0.0f;
+    if (inst.mixNow < 0.0f)
+        inst.mixNow = mixTarget;
+    const bool passes = d.role != NodeRole::source && ! d.inputs.empty() && ! d.outputs.empty() && isAudio (d.inputs[0].kind) && isAudio (d.outputs[0].kind)
+                        && inst.io.inConnected[0];
+    if (inst.processor == nullptr || (! on && inst.mixNow <= 0.0f))
     {
-        // Bypass: audio passes from the first input to the first output where both exist.
         for (std::size_t q = 0; q < d.outputs.size(); ++q)
             for (int c = 0; c < 2; ++c)
                 std::fill (inst.io.out[q][static_cast<std::size_t> (c)], inst.io.out[q][static_cast<std::size_t> (c)] + len, 0.0f);
-        if (n.enabled || d.role == NodeRole::source || d.inputs.empty() || d.outputs.empty())
-            return;
-        if (isAudio (d.inputs[0].kind) && isAudio (d.outputs[0].kind) && inst.io.inConnected[0])
+        if (passes && ! on)
             for (int c = 0; c < 2; ++c)
                 std::memcpy (inst.io.out[0][static_cast<std::size_t> (c)], inst.io.in[0][static_cast<std::size_t> (c)], sizeof (float) * static_cast<std::size_t> (len));
         return;
     }
     inst.processor->process (ctx, inst.io);
+
+    const float rampStep = static_cast<float> (1.0 / (0.012 * ctx.sampleRate));
+    if (! same (inst.mixNow, mixTarget))
+    {
+        float m = inst.mixNow;
+        for (std::size_t q = 0; q < d.outputs.size(); ++q)
+        {
+            if (d.outputs[q].kind == PortKind::notes)
+                continue;
+            m = inst.mixNow;
+            for (int i = 0; i < len; ++i)
+            {
+                m = mixTarget > m ? std::min (mixTarget, m + rampStep) : std::max (mixTarget, m - rampStep);
+                for (int c = 0; c < 2; ++c)
+                {
+                    float* o = inst.io.out[q][static_cast<std::size_t> (c)];
+                    const float pass = q == 0 && passes ? inst.io.in[0][static_cast<std::size_t> (c)][i] : 0.0f;
+                    o[i] = pass + (o[i] - pass) * m;
+                }
+            }
+        }
+        inst.mixNow = m;
+    }
+    // A source's audible contribution (mute, solo): ramped here, at its own output.
+    const float gainTarget = n.gain.load (std::memory_order_relaxed);
+    if (inst.gainNow < 0.0f)
+        inst.gainNow = gainTarget;
+    if (! same (inst.gainNow, gainTarget) || gainTarget < 1.0f)
+    {
+        float gNow = inst.gainNow;
+        for (std::size_t q = 0; q < d.outputs.size(); ++q)
+        {
+            if (! isAudio (d.outputs[q].kind))
+                continue;
+            gNow = inst.gainNow;
+            for (int i = 0; i < len; ++i)
+            {
+                gNow = gainTarget > gNow ? std::min (gainTarget, gNow + rampStep) : std::max (gainTarget, gNow - rampStep);
+                inst.io.out[q][0][i] *= gNow;
+                inst.io.out[q][1][i] *= gNow;
+            }
+        }
+        inst.gainNow = gNow;
+    }
 
     if (! d.outputs.empty() && d.outputs[0].kind != PortKind::notes)
     {
@@ -909,7 +970,7 @@ void Engine::renderLane (CompiledGraph& g, Lane& lane, int laneIndex, const Chun
 
         // Fades: a steal (64 samples) or the end of a chain with no envelope.
         info.fade = info.fadeEnd;
-        if (voice.state == LaneVoice::State::stealing || (voice.state == LaneVoice::State::released && lane.endsVoice.empty()))
+        if (voice.state == LaneVoice::State::stealing || (voice.state == LaneVoice::State::released && ! endsLive (g, lane)))
         {
             const int total = voice.state == LaneVoice::State::stealing ? 64 : 256;
             const int left = std::max (0, voice.fadeRemaining - base.numSamples);
@@ -966,7 +1027,7 @@ void Engine::renderLane (CompiledGraph& g, Lane& lane, int laneIndex, const Chun
         }
         else if (voice.state == LaneVoice::State::released)
         {
-            if (lane.endsVoice.empty())
+            if (! endsLive (g, lane))
             {
                 voice.fadeRemaining -= base.numSamples;
                 if (voice.fadeRemaining <= 0)
@@ -977,8 +1038,9 @@ void Engine::renderLane (CompiledGraph& g, Lane& lane, int laneIndex, const Chun
                 bool alive = false;
                 for (const int idx : lane.endsVoice)
                 {
-                    const auto& inst = g.nodes[static_cast<std::size_t> (idx)].instances[v];
-                    alive = alive || (inst.processor != nullptr && inst.processor->active());
+                    const auto& en = g.nodes[static_cast<std::size_t> (idx)];
+                    const auto& inst = en.instances[v];
+                    alive = alive || (en.live.load (std::memory_order_relaxed) && inst.processor != nullptr && inst.processor->active());
                 }
                 if (! alive)
                     voice.state = LaneVoice::State::free;

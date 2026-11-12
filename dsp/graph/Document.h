@@ -34,6 +34,10 @@ struct NodeModel
     std::string group;                  ///< the group it belongs to ("" top level)
     std::map<std::string, double> params;        ///< native values by ParamDesc::id
     std::map<std::string, std::string> strings;  ///< e.g. "sample" -> asset key
+    /** Sound sources: the musician's M and S. Not the same as `enabled` (a bypass): a muted or
+        un-soloed source keeps running and keeps its routing; only what it adds to the sound is
+        faded out at its own output (audibleGain). Saved only when set. */
+    bool muted = false, solo = false;
 
     double param (const std::string& key, double fallback) const
     {
@@ -89,6 +93,7 @@ struct GroupModel
     std::vector<ExposedPort> ports;
     std::vector<Macro> controls;        ///< the group's own front-panel controls (<= 8)
     std::string module;                 ///< the .andormodule it came from (name), "" if made here
+    bool muted = false, solo = false;   ///< M and S for every source inside it (theirs are kept)
 };
 
 struct Scene
@@ -179,6 +184,14 @@ struct Document
 };
 
 //==============================================================================
+/** What a node adds to the sound under the patch's mutes and solos, 0 or 1 (the engine ramps
+    it). Sources only (everything else: 1). Muted, itself or through a group it is in: 0. Else,
+    while any source is soloed (itself or through its group): 1 for the soloed ones, 0 for the
+    others. MUTE WINS over solo: a source someone muted never sounds by surprise. */
+double audibleGain (const Document& doc, const Registry& registry, const NodeModel& node);
+/** True while any source is soloed (itself or through a group). */
+bool anySolo (const Document& doc, const Registry& registry);
+
 // Persistence (deterministic JSON; migrations; fuzz-safe).
 
 json::Value toJson (const Document& doc);

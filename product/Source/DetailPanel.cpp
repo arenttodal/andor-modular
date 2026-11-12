@@ -145,7 +145,7 @@ public:
         const auto& doc = session.document();
         if (const auto* g = doc.findGroup (id))
         {
-            title = g->name;
+            title = juce::String (g->name);
             subtitle = "GROUP   " + juce::String (static_cast<int> (edit::groupMembers (doc, id).size())) + " modules, flattened for the budgets";
             help = "A group plays as its modules (each still counts against the patch's limits). Its controls appear on its card and can be mapped to the "
                    "patch's macros. Right-click its card to save it as a module (.andormodule).";
@@ -194,9 +194,9 @@ public:
             layout();
             return;
         }
-        title = doc.displayName (session.registry(), *n);
+        title = juce::String (doc.displayName (session.registry(), *n));
         subtitle = juce::String (d->name) + "  " + (n->domain == Domain::voice ? "PER VOICE" : (n->domain == Domain::event ? "NOTES" : "GLOBAL"));
-        help = d->help.empty() ? d->description : d->help;
+        help = juce::String (d->help.empty() ? d->description : d->help);
         // Recordings and plugins.
         if (n->strings.count ("sample") > 0)
         {
@@ -256,7 +256,7 @@ public:
             }
             addAndMakeVisible (*c);
             if (p.curve == ParamCurve::choice)
-                switchNames.push_back (p.name);
+                switchNames.push_back (juce::String (p.name));
             else if (p.curve == ParamCurve::toggle)
                 switchNames.push_back ({});
             (p.curve == ParamCurve::choice || p.curve == ParamCurve::toggle ? switches : knobs).push_back (std::move (c));

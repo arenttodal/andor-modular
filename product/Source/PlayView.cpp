@@ -524,20 +524,17 @@ SourceCard::SourceCard (Session& s, std::string nodeId, int ordinal, bool isComp
     look = lookFor (n != nullptr ? n->type : std::string(), ordinal);
     const auto& identity = colour::identity (std::max (0, look.badge));
 
-    mute.setFontHeight (11.5f);
-    mute.setTooltip ("Mute this source");
+    mute.setFontHeight (11.0f);
+    mute.setTooltip ("Mute this source (it keeps running; a muted source stays silent even when soloed)");
     mute.setTitle ("Mute");
+    solo.setFontHeight (11.0f);
+    solo.setTooltip ("Solo this source: only it sounds. Shift-click adds it to, or takes it out of, the soloed ones. Click again to end the solo.");
+    solo.setTitle ("Solo");
+    solo.onClick = [this] { session.toggleSolo (node, juce::ModifierKeys::currentModifiers.isShiftDown()); };
+    addAndMakeVisible (solo);
     mute.onClick = [this] {
-        session.perform ("mute", [this] (Document& doc) {
-            edit::Result r;
-            if (auto* target = doc.findNode (node))
-            {
-                target->enabled = ! target->enabled;
-                r.ok = true;
-                r.message = target->enabled ? "on" : "muted";
-            }
-            return r;
-        });
+        if (const auto* target = session.document().findNode (node))
+            session.setMuted (node, ! target->muted);
     };
     addAndMakeVisible (mute);
     edit.setIcon (icon::Kind::patch);
@@ -598,10 +595,13 @@ SourceCard::SourceCard (Session& s, std::string nodeId, int ordinal, bool isComp
 void SourceCard::refresh()
 {
     const auto* n = session.document().findNode (node);
-    const bool muted = n != nullptr && ! n->enabled;
-    if (muted != mute.getToggleState())
+    const bool muted = n != nullptr && n->muted, soloed = n != nullptr && n->solo;
+    const bool nowAudible = n != nullptr && n->enabled && audibleGain (session.document(), session.registry(), *n) > 0.0;
+    if (muted != mute.getToggleState() || soloed != solo.getToggleState() || nowAudible != audible)
     {
         mute.setToggleState (muted, juce::dontSendNotification);
+        solo.setToggleState (soloed, juce::dontSendNotification);
+        audible = nowAudible;
         repaint();
     }
     for (auto& k : knobs)
@@ -624,7 +624,13 @@ void SourceCard::resized()
     const int headerH = compact ? 54 : 72, badge = compact ? 34 : 48;
     auto header = r.removeFromTop (headerH).withTrimmedTop (compact ? 10 : 12);
     header.removeFromLeft (badge + 9);
-    mute.setBounds (header.removeFromLeft (28).withSizeKeepingCentre (28, 24).withY (header.getY() + (badge - 24) / 2));
+    {
+        // M over S beside the badge, as on ANDOR Analog's cards.
+        auto keys = header.removeFromLeft (28).withHeight (badge);
+        const int each = (badge - 2) / 2;
+        mute.setBounds (keys.removeFromTop (each));
+        solo.setBounds (keys.removeFromBottom (each));
+    }
     edit.setBounds (header.removeFromRight (40).withHeight (std::min (badge, 34)).translated (0, (badge - std::min (badge, 34)) / 2));
     for (auto it = toggles.rbegin(); it != toggles.rend(); ++it)
     {
@@ -666,7 +672,7 @@ void SourceCard::paint (juce::Graphics& g)
     // Its name, as the family writes a source's.
     const int nameX = mute.getRight() + 12;
     const int nameRight = (toggles.empty() ? edit.getX() : toggles.front()->getX()) - 8;
-    g.setColour (n->enabled ? colour::text : colour::textMicro);
+    g.setColour (audible ? colour::text : colour::textMicro);
     g.setFont (fonts::make (compact ? 13.5f : 15.0f, Weight::regular, 0.06f));
     g.drawFittedText (juce::String (doc.displayName (session.registry(), *n)).toUpperCase(), nameX, compact ? 10 : 12, std::max (20, nameRight - nameX), badge,
                       juce::Justification::centredLeft, 1, 0.7f);
@@ -676,13 +682,14 @@ void SourceCard::paint (juce::Graphics& g)
         juce::Graphics::ScopedSaveState clip (g);
         g.reduceClipRegion (well.reduced (2));
         paintDisplay (g, well.toFloat());
-        if (! n->enabled)
+        if (! audible)
         {
+            // Why it is silent, truthfully: muted, bypassed in PATCH, or another source is soloed.
             g.setColour (colour::wellA.withAlpha (0.6f));
             g.fillRect (well);
             g.setColour (colour::wellText);
             g.setFont (fonts::make (11.5f, Weight::medium, 0.14f));
-            g.drawText ("MUTED", well, juce::Justification::centred, false);
+            g.drawText (n->muted ? "MUTED" : (! n->enabled ? "BYPASSED" : "ANOTHER SOURCE IS SOLOED"), well, juce::Justification::centred, false);
         }
     }
 }
@@ -801,6 +808,8 @@ void SourceCard::paintDisplay (juce::Graphics& g, juce::Rectangle<float> area)
             corner (juce::String (asset->tempoBpm, 1) + " BPM", wave, juce::Justification::bottomRight);
         else if (type == "src.granular")
             corner (juce::String (static_cast<int> (live (node_, 0))) + " GRAINS", wave, juce::Justification::bottomRight);
+        else if (! asset->pitched() && doc.paramValue (session.registry(), node, "root") < 0.0)
+            corner ("NO CLEAR PITCH: C4 PLAYS IT AS RECORDED", colour::wellText, juce::Justification::bottomRight);
         return;
     }
     if (type == "src.external")

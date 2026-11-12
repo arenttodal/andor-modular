@@ -208,13 +208,13 @@ void QuickAdd::paintListBoxItem (int row, juce::Graphics& g, int width, int heig
 
     g.setColour (d->available ? colour::text : colour::textMicro);
     g.setFont (fonts::make (13.5f, Weight::medium, 0.05f));
-    g.drawText (d->name, 60, 5, width - 170, 18, juce::Justification::centredLeft, true);
+    g.drawText (juce::String (d->name), 60, 5, width - 170, 18, juce::Justification::centredLeft, true);
     g.setColour (colour::textSecondary.withAlpha (d->available ? 1.0f : 0.7f));
     g.setFont (type::micro (11.5f));
     g.drawText (d->available ? juce::String (d->description) : juce::String ("Not available: ") + d->unavailableReason, 60, 22, width - 74, 16,
                 juce::Justification::centredLeft, true);
     g.setFont (fonts::make (9.5f, Weight::medium, 0.12f));
-    const juce::String category (d->category);
+    const juce::String category (juce::String (d->category));
     juce::String tag = category == "Sources" ? "SOURCE" : category == "Processors" ? "PROCESSOR" : category == "Controllers" ? "CONTROLLER"
                      : category == "Utilities" ? "UTILITY" : category.toUpperCase();
     if (d->cost.heavy)
