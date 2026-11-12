@@ -16,7 +16,7 @@ Editor::Editor (ModularProcessor& p)
       session (p.session()),
       volume (p.session()),
       canvas (p.session()),
-      detail (p.session()),
+      rack (p.session()),
       play (p),
       scenes (p),
       pitchWheel ([&p] (float bend) {
@@ -83,7 +83,8 @@ Editor::Editor (ModularProcessor& p)
         canvas.fitAll();
     };
     fit.setIcon (icon::Kind::fit);
-    fit.setTooltip ("Show everything (F)");
+    fit.setTooltip ("Fit patch");
+    fit.setTitle ("Fit patch");
     fit.onClick = [this] { canvas.fitAll(); };
     undo.setIcon (icon::Kind::undo);
     undo.setTitle ("Undo");
@@ -92,7 +93,7 @@ Editor::Editor (ModularProcessor& p)
     redo.setTitle ("Redo");
     redo.onClick = [this] { session.redo(); };
     surface.addAndMakeVisible (canvas);
-    surface.addChildComponent (detail);
+    surface.addChildComponent (rack);
     surface.addChildComponent (play);
     for (auto* b : { &addModule, &arrange, &fit, &undo, &redo })
         surface.addAndMakeVisible (*b);
@@ -117,23 +118,13 @@ Editor::Editor (ModularProcessor& p)
     surface.addChildComponent (quickAdd);
 
     canvas.onQuickAdd = [this] (const QuickAddContext& ctx, juce::Point<int> screen) { openQuickAdd (ctx, screen); };
-    canvas.onOpenDetail = [this] (const std::string& id) { openDetail (id); };
-    canvas.onSelectionChanged = [this] {
-        if (detailShown)
-        {
-            const auto id = canvas.selection().size() == 1 ? *canvas.selection().begin() : std::string();
-            if (! id.empty())
-                detail.show (id);
-        }
-    };
-    detail.onClose = [this] {
-        detailShown = false;
-        layoutSurface();
-    };
+    canvas.onOpenDetail = [this] (const std::string& id) { openRack (id); };
+    canvas.onEscape = [this] { return dismissTopmost(); };
+    rack.onClose = [this] { openRack ({}); };
     play.onEdit = [this] (const std::string& id) {
         showPlay (false);
         canvas.select (id, false);
-        openDetail (id);
+        openRack (id);
     };
     play.onAddSource = [this] {
         showPlay (false);
@@ -141,6 +132,8 @@ Editor::Editor (ModularProcessor& p)
     };
     quickAdd.onChoose = [this] (const std::string& type) { choose (type); };
     quickAdd.onClose = [this] { canvas.grabKeyboardFocus(); };
+    quickAdd.onEscape = [this] { dismissTopmost(); };
+    loadPreferences();
 
     session.addListener (this);
     // One instrument, scaled as one piece: the window keeps the family's shape.
@@ -185,11 +178,68 @@ void Editor::showPlay (bool p)
     layoutSurface();
 }
 
-void Editor::openDetail (const std::string& id)
+void Editor::openRack (const std::string& id)
 {
-    detailShown = true;
-    detail.show (id);
+    // One rack at a time: another module's swaps it in place. The board keeps its zoom and its
+    // place; it only moves (by the least it takes) if the rack would cover the module.
+    rack.show (id);
     layoutSurface();
+    if (rack.isOpen())
+        canvas.ensureVisible (rack.shown());
+}
+
+bool Editor::dismissTopmost()
+{
+    if (! playShown && canvas.cancelGesture())
+        return true;
+    if (quickAdd.isOpen())
+    {
+        if (! quickAdd.closeSubmenu())
+            quickAdd.close();
+        return true;
+    }
+    if (evolvePanel != nullptr)
+    {
+        showEvolve (false);
+        return true;
+    }
+    if (playShown)
+        return false;
+    if (rack.isOpen())
+    {
+        openRack ({});
+        canvas.grabKeyboardFocus();
+        return true;
+    }
+    if (canvas.leaveGroup())
+        return true;
+    if (! canvas.selection().empty())
+    {
+        canvas.clearSelection();
+        return true;
+    }
+    return false;
+}
+
+namespace
+{
+    juce::File preferencesFile() { return Session::userDirectory().getChildFile ("Preferences.xml"); }
+}
+
+void Editor::loadPreferences()
+{
+    // The interface's own preferences (never a patch's, never the host's state).
+    if (const auto xml = juce::parseXML (preferencesFile()))
+        Canvas::traditionalScroll = xml->getStringAttribute ("scroll") == "traditional";
+}
+
+void Editor::savePreferences()
+{
+    juce::XmlElement xml ("AndorModularPreferences");
+    xml.setAttribute ("scroll", Canvas::traditionalScroll ? "traditional" : "natural");
+    const auto file = preferencesFile();
+    file.getParentDirectory().createDirectory();
+    xml.writeTo (file);
 }
 
 void Editor::showEvolve (bool show)
@@ -246,8 +296,8 @@ void Editor::addModuleFromHeader()
 {
     QuickAddContext ctx;
     ctx.world = canvas.toWorld (canvas.getLocalBounds().getCentre().toFloat());
-    const auto under = addModule.getBounds().getBottomLeft().translated (-QuickAdd::cardWidth + addModule.getWidth(), 8);
-    openQuickAdd (ctx, surface.localPointToGlobal (under));
+    // under the button (the menu keeps itself inside the instrument)
+    openQuickAdd (ctx, surface.localPointToGlobal (addModule.getBounds().getBottomLeft().translated (0, 6)));
 }
 
 void Editor::choose (const std::string& type)
@@ -403,6 +453,15 @@ void Editor::showMainMenu()
         size.addItem (juce::String (juce::roundToInt (100.0 * width / 1448.0)) + " %", true, std::abs (getWidth() - width) < 3,
                       [this, width] { setSize (width, juce::roundToInt (static_cast<float> (width) * layout::height / layout::width)); });
     menu.addSubMenu ("Size", size);
+    // The board's scrolling: with the gesture as the system delivers it, or the other way.
+    juce::PopupMenu scroll;
+    auto setScroll = [this] (bool traditional) {
+        Canvas::traditionalScroll = traditional;
+        savePreferences();
+    };
+    scroll.addItem ("Natural (the board follows the gesture)", true, ! Canvas::traditionalScroll, [setScroll] { setScroll (false); });
+    scroll.addItem ("Traditional (reversed)", true, Canvas::traditionalScroll, [setScroll] { setScroll (true); });
+    menu.addSubMenu ("Board scrolling", scroll);
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&menuButton));
 }
 
@@ -462,21 +521,17 @@ void Editor::sessionChanged (bool structural)
     if (structural)
     {
         canvas.rebuild();
-        if (detailShown)
+        if (rack.isOpen())
         {
-            detail.rebuild();
-            if (detail.shown().empty())
-            {
-                // what it showed is gone (another patch, a deleted module): the column closes
-                detailShown = false;
-                layoutSurface();
-            }
+            rack.rebuild();
+            if (! rack.isOpen())
+                layoutSurface();   // what it showed is gone (another patch, a deleted module): the rack closes
         }
     }
     else
     {
         canvas.refreshValues();
-        detail.refreshValues();
+        rack.refreshValues();
     }
     play.refresh();
     scenes.refresh();
@@ -626,7 +681,7 @@ void Editor::layoutSurface()
     for (auto* b : { &addModule, &arrange, &fit, &undo, &redo })
         b->setVisible (! playShown);
     canvas.setVisible (! playShown);
-    detail.setVisible (! playShown && detailShown);
+    rack.setVisible (! playShown && rack.isOpen());
     play.setVisible (playShown);
     for (auto& k : macros)
         k->setVisible (playShown);
@@ -650,8 +705,10 @@ void Editor::layoutSurface()
         addModule.setBounds (tools.removeFromRight (addModule.idealWidth()));
         // The canvas is the middle of the board's own face (see Canvas::setBoardArea).
         auto inner = board.reduced (2, 0).withTrimmedTop (headerH + 1).withTrimmedBottom (7);
-        if (detailShown)
-            detail.setBounds (inner.removeFromRight (juce::roundToInt (layout::detailWidth)));
+        // A module's rack is a drawer along the board's foot: the canvas keeps the whole width
+        // (and, as its origin is its top-left, its place: nothing under the pointer moves).
+        if (rack.isOpen())
+            rack.setBounds (inner.removeFromBottom (Rack::height));
         canvas.setBounds (inner);
         canvas.setBoardArea (boardArea().translated (static_cast<float> (-inner.getX()), static_cast<float> (-inner.getY())));
     }
@@ -669,11 +726,8 @@ void Editor::layoutSurface()
 bool Editor::keyPressed (const juce::KeyPress& k)
 {
     const auto mods = k.getModifiers();
-    if (k == juce::KeyPress::escapeKey && evolvePanel != nullptr)
-    {
-        showEvolve (false);
-        return true;
-    }
+    if (k == juce::KeyPress::escapeKey)
+        return dismissTopmost();
     if (mods.isCommandDown() && k.getKeyCode() == 'Z')
     {
         mods.isShiftDown() ? session.redo() : session.undo();

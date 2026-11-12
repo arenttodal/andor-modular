@@ -54,7 +54,7 @@ set(MODULAR_PRODUCT_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/Frame.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/Canvas.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/QuickAdd.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/Source/DetailPanel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/Rack.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/PlayView.cpp)
 set(MODULAR_PRODUCT_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/Source

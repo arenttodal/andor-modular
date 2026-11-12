@@ -56,6 +56,70 @@ namespace
     }
 
     void settle (int ms = 60) { juce::MessageManager::getInstance()->runDispatchLoopUntil (ms); }
+
+    /** The processor with its editor open, as in a host. */
+    struct Instrument
+    {
+        Instrument()
+        {
+            processor.prepareToPlay (48000.0, 512);
+            base.reset (processor.createEditor());
+            editor = dynamic_cast<Editor*> (base.get());
+            // (preferences belong to the musician's machine: tests start from the default)
+            ui::Canvas::traditionalScroll = false;
+        }
+        Session& session() { return processor.session(); }
+        bool loadFactory (const juce::String& name)
+        {
+            const auto& items = Session::factoryPatches();
+            for (int i = 0; i < static_cast<int> (items.size()); ++i)
+                if (items[static_cast<std::size_t> (i)].name == name)
+                    return session().loadFactory (i);
+            return false;
+        }
+        std::string firstOfType (const std::string& type)
+        {
+            for (const auto& n : session().document().nodes)
+                if (n.type == type)
+                    return n.id;
+            return {};
+        }
+        ModularProcessor processor;
+        std::unique_ptr<juce::AudioProcessorEditor> base;
+        Editor* editor = nullptr;
+    };
+
+    juce::MouseEvent mouseAt (juce::Component& c, juce::Point<float> p, juce::ModifierKeys mods = juce::ModifierKeys::leftButtonModifier)
+    {
+        const auto now = juce::Time::getCurrentTime();
+        return { juce::Desktop::getInstance().getMainMouseSource(), p, mods, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, &c, &c, now, p, now, 1, false };
+    }
+
+    /** The patch without where the board is looked at from (pan, zoom, the group shown: saved
+        with it, but never an edit). */
+    std::string patchOnly (Document doc)
+    {
+        doc.view = {};
+        return saveToString (doc);
+    }
+
+    /** Every pair of tiles on the board (the group being shown) that touch. */
+    int overlappingTiles (const Document& doc, const Registry& reg)
+    {
+        std::vector<edit::TileRect> rects;
+        for (const auto& n : doc.nodes)
+            if (n.group == doc.view.currentGroup)
+                rects.push_back (edit::tileRect (doc, reg, n.id));
+        for (const auto& g : doc.groups)
+            if (g.parent == doc.view.currentGroup)
+                rects.push_back (edit::tileRect (doc, reg, g.id));
+        int count = 0;
+        for (std::size_t a = 0; a < rects.size(); ++a)
+            for (std::size_t b = a + 1; b < rects.size(); ++b)
+                if (rects[a].x < rects[b].x + rects[b].w && rects[b].x < rects[a].x + rects[a].w && rects[a].y < rects[b].y + rects[b].h && rects[b].y < rects[a].y + rects[a].h)
+                    ++count;
+        return count;
+    }
 }
 
 TEST_CASE ("The processor plays its factory patch and every factory patch", "[product]")
@@ -260,6 +324,447 @@ TEST_CASE ("A sample source added from Quick Add sounds at once; M, S and the li
     CHECK (saveToString (p.session().document()) == before);
 }
 
+TEST_CASE ("Quick Add is a compact menu: categories, a submenu beside it, search, one module for each Return", "[product][ui][quickadd]")
+{
+    Instrument in;
+    REQUIRE (in.editor != nullptr);
+    in.editor->setSize (1448, 1086);
+    REQUIRE (in.loadFactory ("Analog Organic Morph"));
+    settle();
+    auto& menu = in.editor->quickAddView();
+    ui::QuickAddContext ctx;
+    ctx.world = { 900.0f, 40.0f };
+    in.editor->openQuickAdd (ctx, in.editor->getScreenBounds().getCentre());
+    REQUIRE (menu.isOpen());
+
+    // The root: narrow, short, the six categories in their order, at most three recent modules.
+    const auto names = menu.categories();
+    REQUIRE (names.size() == 6);
+    CHECK (names[0] == "Sources");
+    CHECK (names[1] == "Processors");
+    CHECK (names[2] == "Controllers");
+    CHECK (names[3] == "Spatial");
+    CHECK (names[4] == "Effects");
+    CHECK (names[5] == "Utilities");
+    CHECK (menu.rootBounds().getWidth() >= 246);
+    CHECK (menu.rootBounds().getWidth() <= 292);
+    CHECK (menu.rootBounds().getHeight() <= 400);   // never the catalogue of every module
+    CHECK (menu.visibleTypes().size() <= 3);
+    CHECK (menu.submenuBounds().isEmpty());
+    CHECK (in.editor->getLocalBounds().contains (menu.rootBounds()));
+
+    // A category opens its modules beside the root, inside the instrument; every module is in
+    // exactly one category.
+    std::size_t total = 0;
+    for (const auto& name : names)
+    {
+        menu.openCategory (name);
+        CHECK (menu.openCategoryName() == name);
+        const auto sub = menu.submenuBounds();
+        CHECK_FALSE (sub.isEmpty());
+        CHECK_FALSE (sub.intersects (menu.rootBounds()));
+        CHECK (menu.getLocalBounds().contains (sub));
+        const auto types = menu.visibleTypes();
+        CHECK_FALSE (types.empty());
+        for (const auto& t : types)
+            CHECK (ui::QuickAdd::categoryOf (*Registry::builtIn().find (t)) == name);
+        total += types.size();
+    }
+    CHECK (total == Registry::builtIn().all().size() - 1);   // (every module but OUTPUT, which a patch has once)
+
+    // Typing: the root becomes the best matches (a handful), the submenu goes.
+    menu.setQuery ("fil");
+    CHECK (menu.submenuBounds().isEmpty());
+    auto found = menu.visibleTypes();
+    REQUIRE_FALSE (found.empty());
+    CHECK (found.size() <= 8);
+    CHECK (found.front() == "proc.filter");
+    menu.setQuery ("zzzz");
+    CHECK (menu.visibleTypes().empty());
+    menu.setQuery ({});
+    CHECK (menu.visibleTypes().size() <= 3);
+
+    // The keyboard: Down to a category, Right into it, Left back, Right, Return: one module.
+    const auto nodesBefore = in.session().document().nodes.size();
+    int guard = 0;
+    while (menu.openCategoryName() != "Controllers" && guard++ < 12)
+    {
+        menu.pressKey (juce::KeyPress (juce::KeyPress::downKey));
+        menu.pressKey (juce::KeyPress (juce::KeyPress::rightKey));
+        if (menu.openCategoryName() != "Controllers")
+            menu.pressKey (juce::KeyPress (juce::KeyPress::leftKey));
+    }
+    REQUIRE (menu.openCategoryName() == "Controllers");
+    menu.pressKey (juce::KeyPress (juce::KeyPress::leftKey));
+    CHECK (menu.openCategoryName().isEmpty());
+    CHECK (menu.isOpen());
+    menu.pressKey (juce::KeyPress (juce::KeyPress::rightKey));
+    const auto offered = menu.visibleTypes();
+    REQUIRE_FALSE (offered.empty());
+    const int swaps = in.processor.engine().swapsCompleted();
+    menu.pressKey (juce::KeyPress (juce::KeyPress::returnKey));
+    CHECK_FALSE (menu.isOpen());
+    CHECK (in.session().document().nodes.size() == nodesBefore + 1);
+    menu.pressKey (juce::KeyPress (juce::KeyPress::returnKey));   // a second Return: the menu is gone, nothing more
+    CHECK (in.session().document().nodes.size() == nodesBefore + 1);
+    CHECK (in.session().document().nodes.back().type == offered.front());
+    CHECK (overlappingTiles (in.session().document(), in.session().registry()) == 0);
+    run (in.processor, 0.1);
+    CHECK (in.processor.engine().swapsCompleted() <= swaps + 1);
+    in.session().undo();
+    CHECK (in.session().document().nodes.size() == nodesBefore);
+    // ...and it is the first of the recent modules next time
+    in.editor->openQuickAdd (ctx, in.editor->getScreenBounds().getCentre());
+    REQUIRE_FALSE (menu.visibleTypes().empty());
+    CHECK (menu.visibleTypes().front() == offered.front());
+    menu.close();
+
+    // On a port: only what connects there.
+    const auto filter = in.firstOfType ("proc.filter");
+    REQUIRE_FALSE (filter.empty());
+    ui::QuickAddContext port;
+    port.kind = ui::QuickAddContext::Kind::port;
+    port.node = filter;
+    port.port = "env";
+    port.portIsOutput = false;
+    in.editor->openQuickAdd (port, in.editor->getScreenBounds().getCentre());
+    REQUIRE (menu.isOpen());
+    std::size_t offeredOnPort = 0;
+    for (const auto& name : menu.categories())
+    {
+        menu.openCategory (name);
+        offeredOnPort += menu.visibleTypes().size();
+    }
+    CHECK (offeredOnPort > 0);
+    CHECK (offeredOnPort < total);
+    menu.close();
+}
+
+TEST_CASE ("Escape closes one thing at a time, the topmost first, and never touches the history", "[product][ui][escape]")
+{
+    Instrument in;
+    REQUIRE (in.editor != nullptr);
+    in.editor->setSize (1448, 1086);
+    REQUIRE (in.loadFactory ("Analog Organic Morph"));
+    settle();
+    auto& editor = *in.editor;
+    auto& canvas = editor.canvasView();
+    const auto filter = in.firstOfType ("proc.filter");
+    REQUIRE_FALSE (filter.empty());
+    const auto patch = patchOnly (in.session().document());
+    const bool couldUndo = in.session().history().canUndo();
+
+    // Build the whole stack: a selection, the rack, EVOLVE, Quick Add with a submenu, a drag.
+    canvas.select (filter, false);
+    editor.openRack (filter);
+    editor.showEvolve (true);
+    ui::QuickAddContext ctx;
+    editor.openQuickAdd (ctx, editor.getScreenBounds().getCentre());
+    editor.quickAddView().openCategory ("Sources");
+    REQUIRE_FALSE (editor.quickAddView().submenuBounds().isEmpty());
+
+    // 1: Quick Add's submenu
+    CHECK (editor.dismissTopmost());
+    CHECK (editor.quickAddView().isOpen());
+    CHECK (editor.quickAddView().submenuBounds().isEmpty());
+    // 2: Quick Add
+    CHECK (editor.dismissTopmost());
+    CHECK_FALSE (editor.quickAddView().isOpen());
+    CHECK (editor.isEvolveShown());
+    // 3: EVOLVE
+    CHECK (editor.dismissTopmost());
+    CHECK_FALSE (editor.isEvolveShown());
+    CHECK (editor.rackView().isOpen());
+    // a drag under way (a selection box on the empty board) goes first, and only it
+    canvas.mouseDown (mouseAt (canvas, { 6.0f, static_cast<float> (canvas.getHeight()) - 6.0f }, juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::shiftModifier));
+    CHECK (editor.dismissTopmost());
+    CHECK (editor.rackView().isOpen());
+    CHECK (canvas.selection().count (filter) == 1);
+    // 4: the rack
+    CHECK (editor.dismissTopmost());
+    CHECK_FALSE (editor.rackView().isOpen());
+    CHECK (canvas.selection().count (filter) == 1);
+    // 5: the selection
+    CHECK (editor.dismissTopmost());
+    CHECK (canvas.selection().empty());
+    // nothing left
+    CHECK_FALSE (editor.dismissTopmost());
+    CHECK (patchOnly (in.session().document()) == patch);
+    CHECK (in.session().history().canUndo() == couldUndo);
+
+    // The same through the keys: Escape typed in Quick Add's search line, and on the board.
+    canvas.select (filter, false);
+    editor.openRack (filter);
+    editor.openQuickAdd (ctx, editor.getScreenBounds().getCentre());
+    editor.quickAddView().openCategory ("Effects");
+    editor.quickAddView().pressKey (juce::KeyPress (juce::KeyPress::escapeKey));
+    CHECK (editor.quickAddView().isOpen());
+    CHECK (editor.quickAddView().submenuBounds().isEmpty());
+    editor.quickAddView().pressKey (juce::KeyPress (juce::KeyPress::escapeKey));
+    CHECK_FALSE (editor.quickAddView().isOpen());
+    CHECK (editor.rackView().isOpen());
+    CHECK (canvas.keyPressed (juce::KeyPress (juce::KeyPress::escapeKey)));
+    CHECK_FALSE (editor.rackView().isOpen());
+    CHECK (canvas.selection().count (filter) == 1);
+    CHECK (canvas.keyPressed (juce::KeyPress (juce::KeyPress::escapeKey)));
+    CHECK (canvas.selection().empty());
+
+    // Inside a group: Escape leaves it (after anything open in it), one level.
+    in.session().perform ("group", [&] (Document& d) { return edit::group (d, in.session().registry(), { filter }, "G"); });
+    REQUIRE_FALSE (in.session().document().groups.empty());
+    const auto afterGroup = patchOnly (in.session().document());
+    const auto undoLabel = in.session().history().undoLabel();
+    canvas.enterGroup (in.session().document().groups.front().id);
+    CHECK_FALSE (in.session().document().view.currentGroup.empty());
+    CHECK (editor.dismissTopmost());
+    CHECK (in.session().document().view.currentGroup.empty());
+    CHECK (patchOnly (in.session().document()) == afterGroup);
+    CHECK (in.session().history().undoLabel() == undoLabel);
+}
+
+TEST_CASE ("The rack: one module's controls across the board's foot; the board keeps its width and its place", "[product][ui][rack]")
+{
+    Instrument in;
+    REQUIRE (in.editor != nullptr);
+    in.editor->setSize (1448, 1086);
+    REQUIRE (in.loadFactory ("Analog Organic Morph"));
+    settle();
+    auto& editor = *in.editor;
+    auto& canvas = editor.canvasView();
+    auto& rack = editor.rackView();
+    canvas.fitAll();
+    const auto closedBounds = canvas.getBounds();
+    const float zoom = canvas.zoomLevel();
+    CHECK_FALSE (rack.isOpen());
+    CHECK_FALSE (rack.isVisible());
+
+    const auto filter = in.firstOfType ("proc.filter"), osc = in.firstOfType ("osc.analog");
+    REQUIRE_FALSE (filter.empty());
+    REQUIRE_FALSE (osc.empty());
+    editor.openRack (filter);
+    REQUIRE (rack.isOpen());
+    CHECK (rack.isVisible());
+    CHECK (rack.shown() == filter);
+    // full width, under the canvas, above the keyboard; the canvas only gave up height
+    CHECK (rack.getWidth() == closedBounds.getWidth());
+    CHECK (canvas.getWidth() == closedBounds.getWidth());
+    CHECK (canvas.getX() == closedBounds.getX());
+    CHECK (canvas.getY() == closedBounds.getY());
+    CHECK (rack.getY() == canvas.getBottom());
+    CHECK (rack.getBottom() == closedBounds.getBottom());
+    CHECK (rack.getHeight() >= 210);
+    CHECK (rack.getHeight() <= 290);
+    CHECK (canvas.zoomLevel() == zoom);
+    // identity left, controls centre, live display right
+    CHECK (rack.identityArea().getRight() < rack.controlsArea().getX());
+    CHECK (rack.controlsArea().getRight() < rack.displayArea().getX());
+    CHECK (rack.displayArea().getWidth() > 150);
+    // every control of the module in its current mode
+    {
+        const auto* n = in.session().document().findNode (filter);
+        const auto* d = in.session().registry().find (n->type);
+        int shown = 0;
+        for (const auto& prm : d->params)
+            shown += d->paramShown (prm, n->params) ? 1 : 0;
+        CHECK (rack.controlCount() == shown);
+        CHECK (shown > 0);
+    }
+    // the module it shows stays in sight above it
+    for (int i = 0; i < canvas.getNumChildComponents(); ++i)
+        if (auto* tile = dynamic_cast<ui::NodeView*> (canvas.getChildComponent (i)); tile != nullptr && tile->id() == filter)
+            CHECK (canvas.getLocalBounds().expanded (2).contains (tile->getBoundsInParent()));
+
+    // another module: swapped in place (never two)
+    const auto origin = canvas.viewOrigin();
+    editor.openRack (osc);
+    CHECK (rack.shown() == osc);
+    CHECK (rack.getBounds().getHeight() == ui::Rack::height);
+    CHECK (canvas.zoomLevel() == zoom);
+    juce::ignoreUnused (origin);
+
+    // a value changed in the rack is the patch's value (the same parameter as on the tile)
+    const auto before = in.session().document().paramValue (in.session().registry(), filter, "cutoff");
+    in.session().beginGesture ("cutoff");
+    in.session().setParam (filter, "cutoff", before * 0.5);
+    CHECK (in.session().document().paramValue (in.session().registry(), filter, "cutoff") != before);
+    in.session().undo();
+
+    // deleting the module closes its rack; the canvas takes its room back
+    editor.openRack (filter);
+    const auto bounds = canvas.getBounds();
+    CHECK (bounds.getHeight() < closedBounds.getHeight());
+    editor.openRack ({});
+    CHECK_FALSE (rack.isOpen());
+    CHECK (canvas.getBounds() == closedBounds);
+    editor.openRack (filter);
+    in.session().perform ("delete", [&] (Document& d) {
+        d.removeNode (filter);
+        edit::Result r;
+        r.ok = true;
+        return r;
+    });
+    CHECK_FALSE (rack.isOpen());
+    CHECK (canvas.getBounds() == closedBounds);
+    in.session().undo();
+
+    // PLAY hides it; a source card's EDIT comes back to PATCH with that source's rack
+    editor.openRack (osc);
+    editor.showPlay (true);
+    CHECK_FALSE (rack.isVisible());
+    editor.showPlay (false);
+    CHECK (rack.isVisible());
+    CHECK (rack.shown() == osc);
+}
+
+TEST_CASE ("Modules never land on each other: added, inserted, connected from a port, loaded", "[product][ui][layout]")
+{
+    Instrument in;
+    REQUIRE (in.editor != nullptr);
+    auto& s = in.session();
+    for (int i = 0; i < static_cast<int> (Session::factoryPatches().size()); ++i)
+    {
+        INFO (Session::factoryPatches()[static_cast<std::size_t> (i)].name);
+        REQUIRE (s.loadFactory (i));
+        CHECK (overlappingTiles (s.document(), s.registry()) == 0);
+    }
+    REQUIRE (in.loadFactory ("Three Arps"));
+    settle();
+    auto& menu = in.editor->quickAddView();
+    // Twelve modules dropped on the same spot through the menu, some following the selection.
+    const char* const queries[] = { "lfo", "filter", "space", "analog", "envelope", "mixer", "echo", "random", "granular", "chorus", "drive", "clock" };
+    ui::QuickAddContext ctx;
+    ctx.world = { 240.0f, 120.0f };
+    for (const char* q : queries)
+    {
+        INFO (q);
+        const auto count = s.document().nodes.size();
+        in.editor->openQuickAdd (ctx, in.editor->getScreenBounds().getCentre());
+        menu.setQuery (q);
+        if (menu.visibleTypes().empty())
+        {
+            menu.close();
+            continue;
+        }
+        menu.chooseSelected();
+        if (juce::PopupMenu::dismissAllActiveMenus())
+            settle (20);
+        CHECK (overlappingTiles (s.document(), s.registry()) == 0);
+        if (s.document().nodes.size() > count)
+        {
+            // one step back is the patch as it was, tidy too
+            const auto after = saveToString (s.document());
+            s.undo();
+            CHECK (s.document().nodes.size() == count);
+            CHECK (overlappingTiles (s.document(), s.registry()) == 0);
+            s.redo();
+            CHECK (saveToString (s.document()) == after);
+        }
+    }
+    // A tile dragged onto another: where it was dropped stays, the other makes room.
+    const auto& nodes = s.document().nodes;
+    REQUIRE (nodes.size() > 2);
+    const auto mover = nodes[0].id, target = nodes[1].id;
+    const float tx = nodes[1].x, ty = nodes[1].y;
+    s.perform ("move", [&] (Document& d) {
+        auto* n = d.findNode (mover);
+        n->x = tx + 16.0f;
+        n->y = ty + 8.0f;
+        edit::Result r;
+        r.ok = true;
+        r.placed = { mover };
+        return r;
+    });
+    CHECK (s.document().findNode (mover)->x == tx + 16.0f);
+    CHECK (s.document().findNode (mover)->y == ty + 8.0f);
+    CHECK (overlappingTiles (s.document(), s.registry()) == 0);
+    juce::ignoreUnused (target);
+}
+
+TEST_CASE ("The board follows the scroll gesture; F is only a letter; FIT is the button", "[product][ui][gesture]")
+{
+    Instrument in;
+    REQUIRE (in.editor != nullptr);
+    in.editor->setSize (1448, 1086);
+    REQUIRE (in.loadFactory ("Analog Organic Morph"));
+    settle();
+    auto& canvas = in.editor->canvasView();
+    canvas.fitAll();
+    const auto tileOf = [&] (const std::string& id) -> juce::Rectangle<int> {
+        for (int i = 0; i < canvas.getNumChildComponents(); ++i)
+            if (auto* tile = dynamic_cast<ui::NodeView*> (canvas.getChildComponent (i)); tile != nullptr && tile->id() == id)
+                return tile->getBoundsInParent();
+        return {};
+    };
+    const auto id = in.session().document().nodes.front().id;
+    const auto start = tileOf (id);
+    REQUIRE_FALSE (start.isEmpty());
+
+    // Natural (the default): a positive delta, as the system delivers "content down / right",
+    // moves the modules down / right on screen; and back.
+    CHECK_FALSE (ui::Canvas::traditionalScroll);
+    canvas.panByWheel (0.0f, 0.1f);
+    CHECK (tileOf (id).getY() > start.getY());
+    CHECK (tileOf (id).getX() == start.getX());
+    canvas.panByWheel (0.0f, -0.1f);
+    CHECK (std::abs (tileOf (id).getY() - start.getY()) <= 1);
+    canvas.panByWheel (0.1f, 0.0f);
+    CHECK (tileOf (id).getX() > start.getX());
+    canvas.panByWheel (-0.1f, 0.0f);
+    // The real event takes the same path, whatever the system says about its own direction
+    // (it has already applied it: reading isReversed again was the double reversal).
+    for (const bool reversed : { false, true })
+    {
+        juce::MouseWheelDetails wheel;
+        wheel.deltaX = 0.0f;
+        wheel.deltaY = 0.1f;
+        wheel.isReversed = reversed;
+        wheel.isSmooth = true;
+        wheel.isInertial = false;
+        canvas.mouseWheelMove (mouseAt (canvas, { 300.0f, 200.0f }, {}), wheel);
+        CHECK (tileOf (id).getY() > start.getY());
+        wheel.deltaY = -0.1f;
+        canvas.mouseWheelMove (mouseAt (canvas, { 300.0f, 200.0f }, {}), wheel);
+        CHECK (std::abs (tileOf (id).getY() - start.getY()) <= 1);
+    }
+    // Traditional: the other way.
+    ui::Canvas::traditionalScroll = true;
+    canvas.panByWheel (0.0f, 0.1f);
+    CHECK (tileOf (id).getY() < start.getY());
+    canvas.panByWheel (0.0f, -0.1f);
+    ui::Canvas::traditionalScroll = false;
+
+    // Scrolling never zooms; Cmd / Ctrl + scroll does, around the pointer.
+    const float zoom = canvas.zoomLevel();
+    canvas.panByWheel (0.3f, 0.3f);
+    CHECK (canvas.zoomLevel() == zoom);
+    {
+        juce::MouseWheelDetails wheel;
+        wheel.deltaX = 0.0f;
+        wheel.deltaY = 0.2f;
+        wheel.isReversed = false;
+        wheel.isSmooth = false;
+        wheel.isInertial = false;
+        canvas.mouseWheelMove (mouseAt (canvas, { 300.0f, 200.0f }, juce::ModifierKeys::commandModifier), wheel);
+        CHECK (canvas.zoomLevel() > zoom);
+    }
+
+    // F does nothing (with or without Shift); the patch is not refitted, not edited.
+    canvas.panByWheel (0.4f, 0.4f);
+    const auto origin = canvas.viewOrigin();
+    const float zoomed = canvas.zoomLevel();
+    const auto patch = saveToString (in.session().document());
+    CHECK_FALSE (canvas.keyPressed (juce::KeyPress ('f')));
+    CHECK_FALSE (canvas.keyPressed (juce::KeyPress ('F', juce::ModifierKeys::shiftModifier, 'F')));
+    CHECK (canvas.viewOrigin() == origin);
+    CHECK (canvas.zoomLevel() == zoomed);
+    // FIT (the button's action) still does
+    canvas.fitAll();
+    CHECK ((canvas.viewOrigin() != origin || canvas.zoomLevel() != zoomed));
+    for (const auto& n : in.session().document().nodes)
+        if (n.group.empty())
+            CHECK (canvas.getLocalBounds().contains (tileOf (n.id)));
+}
+
 TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
 {
     ModularProcessor p;
@@ -298,25 +803,54 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
         settle();
         snapshot (*editor, "play-evolve-" + juce::String (width));
         editor->showEvolve (false);
-        // Quick Add open, and a module's detail column
+        // Quick Add: the root with a category open, then a search
         editor->showPlay (false);
         ui::QuickAddContext ctx;
         ctx.world = { 0.0f, 0.0f };
-        editor->openQuickAdd (ctx, editor->getScreenBounds().getCentre().translated (-300, -200));
-        editor->quickAddView().setQuery ("morph");
+        const auto anchor = editor->getScreenBounds().getCentre().translated (-width / 5, -height / 5);
+        editor->openQuickAdd (ctx, anchor);
+        editor->quickAddView().openCategory ("Processors");
         settle();
         snapshot (*editor, "quick-add-" + juce::String (width));
-        editor->quickAddView().close();
-        for (const auto& n : p.session().document().nodes)
-            if ((n.type == "event.stepseq" || n.type == "proc.filter" || n.type == "fx.space") && n.group == p.session().document().view.currentGroup)
-            {
-                editor->openDetail (n.id);
-                editor->canvasView().select (n.id, false);
-                break;
-            }
-        editor->canvasView().fitAll();
+        editor->quickAddView().setQuery ("mo");
         settle();
-        snapshot (*editor, "patch-detail-" + juce::String (width));
+        snapshot (*editor, "quick-add-search-" + juce::String (width));
+        editor->quickAddView().close();
+        // A module's rack along the board's foot (a filter, then the oscillator: swapped)
+        for (int i = 0; i < static_cast<int> (Session::factoryPatches().size()); ++i)
+            if (Session::factoryPatches()[static_cast<std::size_t> (i)].name == "Analog Organic Morph")
+                p.session().loadFactory (i);
+        p.session().assets().waitIdle (20.0);
+        for (const char* type : { "proc.filter", "osc.analog" })
+            for (const auto& n : p.session().document().nodes)
+                if (n.type == type && n.group == p.session().document().view.currentGroup)
+                {
+                    editor->canvasView().fitAll();
+                    editor->canvasView().select (n.id, false);
+                    editor->openRack (n.id);
+                    run (p, 0.3, { juce::MidiMessage::noteOn (1, 48, 0.8f) });
+                    settle();
+                    snapshot (*editor, juce::String ("patch-rack-") + (juce::String (type) == "proc.filter" ? "filter-" : "oscillator-") + juce::String (width));
+                    break;
+                }
+        editor->openRack ({});
+    }
+    // the step sequencer's rack (its step editor in the centre)
+    {
+        p.session().newPatch();
+        editor->setSize (1448, 1086);
+        editor->showPlay (false);
+        p.session().perform ("add", [&] (Document& d) { return edit::addModule (d, p.session().registry(), "osc.analog", 0, 0); });
+        const auto made = p.session().perform ("add", [&] (Document& d) { return edit::addModule (d, p.session().registry(), "event.stepseq", 0, 200); });
+        REQUIRE (made.ok);
+        editor->canvasView().fitAll();
+        editor->canvasView().select (made.focus, false);
+        editor->openRack (made.focus);
+        settle();
+        snapshot (*editor, "patch-rack-steps-1448");
+        CHECK (editor->rackView().controlsArea().getWidth() > 600);
+        CHECK_FALSE (editor->rackView().scrolls());   // the step editor takes the room that is left
+        editor->openRack ({});
     }
     // an empty patch: the first thing a musician sees after NEW
     p.session().newPatch();

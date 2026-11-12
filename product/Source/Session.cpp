@@ -201,6 +201,14 @@ edit::Result Session::perform (const juce::String& label, const std::function<ed
             message (juce::String (result.message), false, true);
         return result;
     }
+    // The board's one layout rule, as part of the same step (one undo): nothing overlaps; what
+    // was just placed stays and the others make room.
+    {
+        auto anchors = result.placed;
+        if (! result.focus.empty())
+            anchors.push_back (result.focus);
+        edit::resolveOverlaps (doc, registry(), anchors);
+    }
     hist.push (before, label.toStdString());
     recompile();
     bool macrosMoved = false;
@@ -318,6 +326,7 @@ void Session::newPatch()
 bool Session::loadDocument (const Document& d, const juce::String& text)
 {
     doc = d;
+    edit::resolveOverlaps (doc, registry());   // (a patch from before the rule: tidied once, on load)
     hist.clear();
     gestureOpen = false;
     pushMacros();

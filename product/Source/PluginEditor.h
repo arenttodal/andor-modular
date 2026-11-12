@@ -1,21 +1,21 @@
 #pragma once
 
 #include "Canvas.h"
-#include "DetailPanel.h"
 #include "Frame.h"
 #include "PlayView.h"
 #include "PluginProcessor.h"
 #include "QuickAdd.h"
+#include "Rack.h"
 
 namespace andor::modular
 {
 
 /**
     ANDOR Modular's window: the ANDOR instrument (andor-design-system/guide), laid out once on
-    the family's 1448 x 1086 canvas and scaled to the window as one piece. The walnut housing,
-    the identity and the preset bar, VOLUME; the band where OSP and Analog keep their sources
-    is the board: PATCH (ANDOR Analog's routing board, grown: every module of the patch, with
-    the detail column) or PLAY (ANDOR Analog's front panel: one card for each sound source,
+    the family's 1448 x 1086 canvas and scaled to the window as one piece. The housing, the
+    identity and the preset bar, VOLUME; the band where OSP and Analog keep their sources is
+    the board: PATCH (ANDOR Analog's routing board, grown: every module of the patch across its
+    whole width, one module's rack opening along its foot) or PLAY (ANDOR Analog's front panel: one card for each sound source,
     over the family's macro panel: eight macros with their ivory knobs, the scenes); then the
     keyboard row with PITCH, the voices card, Evolve, and the status line.
 */
@@ -34,10 +34,17 @@ public:
     bool isPlayShown() const noexcept { return playShown; }
     ui::Canvas& canvasView() noexcept { return canvas; }
     ui::QuickAdd& quickAddView() noexcept { return quickAdd; }
-    ui::DetailPanel& detailView() noexcept { return detail; }
+    ui::Rack& rackView() noexcept { return rack; }
     void openQuickAdd (const ui::QuickAddContext& ctx, juce::Point<int> screen);
-    void openDetail (const std::string& id);
+    /** Opens a module's rack along the board's foot (another one open: swapped). "" closes. */
+    void openRack (const std::string& id);
     void showEvolve (bool show);
+    bool isEvolveShown() const noexcept { return evolvePanel != nullptr; }
+    /** Escape, decided in one place: closes exactly one thing, the topmost, in this order:
+        a drag under way (cable, selection box, move), Quick Add's submenu, Quick Add, EVOLVE,
+        the rack, the group being edited, the selection. Never an undo step. False: nothing
+        was open. (A parameter's popup menu is modal and takes its own Escape first.) */
+    bool dismissTopmost();
 
 private:
     /** The instrument, in reference pixels. */
@@ -62,6 +69,8 @@ private:
     void save();
     void saveAs();
     void addModuleFromHeader();
+    void loadPreferences();
+    void savePreferences();
     void updateHeader();
     void updateStatus();
 
@@ -81,7 +90,7 @@ private:
     // the board
     ui::InkButton addModule { "ADD MODULE" }, arrange { "ARRANGE" }, fit { "FIT" }, undo { juce::String() }, redo { juce::String() };
     ui::Canvas canvas;
-    ui::DetailPanel detail;
+    ui::Rack rack;
     ui::PlayView play;
 
     // the macro panel (PLAY)
@@ -100,7 +109,7 @@ private:
     std::unique_ptr<ui::EvolvePanel> evolvePanel;
 
     ui::QuickAddContext pending;
-    bool playShown = false, detailShown = false;
+    bool playShown = false;
 };
 
 } // namespace andor::modular

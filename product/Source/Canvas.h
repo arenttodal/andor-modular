@@ -13,6 +13,12 @@ namespace andor::modular::ui
 
 class Canvas;
 
+/** What a module is doing now, drawn on a graphite glass of any size (its tile's, its rack's):
+    the oscillator's pitch, an arpeggiator's steps, grains, a recording and its playhead, both
+    sides of a morph, levels. Read from the running graph's telemetry: never an animation of
+    its own. */
+void paintModuleDisplay (juce::Graphics&, juce::Rectangle<float> area, Session&, const std::string& nodeId, bool group, const ModuleLook&, float scale = 1.0f);
+
 /** What Quick Add was opened on (the canvas decides what a chosen type does there). */
 struct QuickAddContext
 {
@@ -88,6 +94,8 @@ public:
     std::function<void (const QuickAddContext&, juce::Point<int> screen)> onQuickAdd;
     std::function<void (const std::string& id)> onOpenDetail;
     std::function<void()> onSelectionChanged;
+    /** Escape on the board: the owner closes the topmost thing (true: handled). */
+    std::function<bool()> onEscape;
 
     void rebuild();                     ///< modules or cables changed
     void refreshValues();               ///< values changed
@@ -107,6 +115,19 @@ public:
     juce::Point<float> toWorld (juce::Point<float> p) const noexcept;
     juce::Point<float> toCanvas (juce::Point<float> w) const noexcept;
     void fitAll();
+    /** Ordinary scrolling pans (Cmd / Ctrl + scroll zooms at the pointer). */
+    void panByWheel (float deltaX, float deltaY);
+    /** False (default): the board follows the gesture as the system delivers it (natural
+        scrolling moves it like a finger would). True: the other way. A preference, not saved
+        with patches. */
+    static bool traditionalScroll;
+    /** Escape, in order: a cable, a selection box or a move being dragged (the move goes back);
+        the group being edited. */
+    bool cancelGesture();
+    bool leaveGroup();
+    /** Pans by the least it takes to bring a tile fully into view (the rack opening under it). */
+    void ensureVisible (const std::string& id);
+    juce::Point<float> viewOrigin() const noexcept { return pan; }
     void resetZoom();
     float zoomLevel() const noexcept { return zoom; }
 

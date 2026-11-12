@@ -439,12 +439,12 @@ void NodeView::paint (juce::Graphics& g)
     }
 }
 
-void NodeView::paintTelemetry (juce::Graphics& g, juce::Rectangle<float> area)
+void paintModuleDisplay (juce::Graphics& g, juce::Rectangle<float> area, Session& s, const std::string& nodeId, bool group, const ModuleLook& look, float scale)
 {
-    auto& s = canvas.session();
-    const auto inner = area.reduced (6.0f, 4.0f);
+    // (scale: 1 on a tile; larger on the rack's glass: thicker bars, larger words)
+    const auto inner = area.reduced (6.0f * scale, 4.0f * scale);
     const auto lit = look.trace, dim = look.trace.withAlpha (0.28f), words = colour::wellText.brighter (0.25f);
-    g.setFont (fonts::make (9.5f, Weight::medium, 0.08f));
+    g.setFont (fonts::make (9.5f * std::min (scale, 1.35f), Weight::medium, 0.08f));
     auto label = [&] (const juce::String& t, juce::Colour c) {
         g.setColour (c);
         g.drawText (t, inner, juce::Justification::centredLeft, false);
@@ -457,9 +457,9 @@ void NodeView::paintTelemetry (juce::Graphics& g, juce::Rectangle<float> area)
             if (const auto* live = liveNode (s, id))
                 level = std::max (level, live->peak.load (std::memory_order_relaxed));
         g.setColour (dim);
-        g.fillRoundedRectangle (inner.withHeight (3.0f).withCentre (inner.getCentre()), 1.5f);
+        g.fillRoundedRectangle (inner.withHeight (3.0f * scale).withCentre (inner.getCentre()), 1.5f);
         g.setColour (lit);
-        g.fillRoundedRectangle (inner.withHeight (3.0f).withCentre (inner.getCentre()).withWidth (inner.getWidth() * juce::jlimit (0.0f, 1.0f, level)), 1.5f);
+        g.fillRoundedRectangle (inner.withHeight (3.0f * scale).withCentre (inner.getCentre()).withWidth (inner.getWidth() * juce::jlimit (0.0f, 1.0f, level)), 1.5f);
         return;
     }
     const auto* n = s.document().findNode (nodeId);
@@ -585,14 +585,25 @@ void NodeView::paintTelemetry (juce::Graphics& g, juce::Rectangle<float> area)
     float level = live != nullptr ? live->peak.load (std::memory_order_relaxed) : 0.0f;
     if (type == "ctl.lfo" || type == "ctl.random" || type == "ctl.env" || type == "ctl.follower" || type == "proc.vca")
         level = std::abs (tel (live, 0));
-    if (live != nullptr)
-        const_cast<CompiledNode*> (live)->peak.store (level * 0.8f, std::memory_order_relaxed);   // decays between frames
-    const auto bar = inner.withHeight (3.0f).withCentre (inner.getCentre());
+    if (live != nullptr && scale <= 1.0f)
+        const_cast<CompiledNode*> (live)->peak.store (level * 0.8f, std::memory_order_relaxed);   // decays between frames (the tile's: once)
+    const auto bar = inner.withHeight (3.0f * scale).withCentre (inner.getCentre());
     g.setColour (dim);
     g.fillRoundedRectangle (bar, 1.5f);
     g.setColour (level > 0.95f ? juce::Colour (0xffe2684a) : lit);
     g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * juce::jlimit (0.0f, 1.0f, level)), 1.5f);
+    if (scale > 1.5f)
+    {
+        // on the rack's glass there is room to say it
+        const bool control = type.rfind ("ctl.", 0) == 0 || type == "proc.vca";
+        g.setColour (words);
+        g.drawText (control ? "VALUE" : "OUTPUT", inner, juce::Justification::topLeft, false);
+        g.drawText (control ? juce::String (juce::roundToInt (level * 100.0f)) + " %" : (level > 0.0005f ? juce::String (juce::Decibels::gainToDecibels (level), 1) + " dB" : juce::String ("SILENT")),
+                    inner, juce::Justification::topRight, false);
+    }
 }
+
+void NodeView::paintTelemetry (juce::Graphics& g, juce::Rectangle<float> area) { paintModuleDisplay (g, area, canvas.session(), nodeId, group, look); }
 
 void NodeView::mouseDown (const juce::MouseEvent& e)
 {
@@ -1223,8 +1234,87 @@ void Canvas::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDe
         pan = before - e.position / zoom;
     }
     else
-        pan -= juce::Point<float> (w.deltaX, w.deltaY) * (360.0f / zoom) * (w.isReversed ? -1.0f : 1.0f);
+        panByWheel (w.deltaX, w.deltaY);
     model.document().view.zoom = zoom;
+    model.document().view.panX = pan.x;
+    model.document().view.panY = pan.y;
+    updateNodeTransforms();
+}
+
+bool Canvas::traditionalScroll = false;
+
+void Canvas::panByWheel (float deltaX, float deltaY)
+{
+    // The board moves with the gesture, as the system delivers it: with macOS natural scrolling
+    // two fingers moving down bring the board down (touch-direct); with a classic wheel setting
+    // the wheel does what it does everywhere else. (The system has already applied the user's
+    // direction to the deltas: MouseWheelDetails::isReversed only reports it. Multiplying by it,
+    // as this did, reversed the direction a second time.) TRADITIONAL flips it for those who
+    // want the board to behave like a scroll bar.
+    const float way = traditionalScroll ? -1.0f : 1.0f;
+    pan -= juce::Point<float> (deltaX, deltaY) * (360.0f / zoom) * way;
+    model.document().view.panX = pan.x;
+    model.document().view.panY = pan.y;
+    updateNodeTransforms();
+}
+
+bool Canvas::cancelGesture()
+{
+    if (drag == Drag::move && moved)
+    {
+        // A move under way goes back where it started: nothing reaches the history.
+        auto& doc = model.document();
+        for (const auto& [id, start] : startPositions)
+        {
+            if (auto* n = doc.findNode (id))
+            {
+                n->x = start.x;
+                n->y = start.y;
+            }
+            else if (auto* g = doc.findGroup (id))
+            {
+                g->x = start.x;
+                g->y = start.y;
+            }
+        }
+        drag = Drag::none;
+        moved = false;
+        updateNodeTransforms();
+        return true;
+    }
+    if (drag != Drag::cable && drag != Drag::rubber)
+        return false;
+    drag = Drag::none;
+    repaint();
+    return true;
+}
+
+bool Canvas::leaveGroup()
+{
+    if (model.document().view.currentGroup.empty())
+        return false;
+    breadcrumbClick ({});
+    return true;
+}
+
+void Canvas::ensureVisible (const std::string& id)
+{
+    auto* v = viewFor (id);
+    if (v == nullptr)
+        return;
+    const auto r = v->getBoundsInParent().toFloat();
+    juce::Point<float> shift;
+    if (r.getBottom() > static_cast<float> (getHeight()))
+        shift.y = r.getBottom() - static_cast<float> (getHeight());
+    if (r.getY() - shift.y < 0.0f)
+        shift.y = r.getY();
+    if (r.getRight() > static_cast<float> (getWidth()))
+        shift.x = r.getRight() - static_cast<float> (getWidth());
+    if (r.getX() - shift.x < 0.0f)
+        shift.x = r.getX();
+    if (shift.isOrigin())
+        return;
+    pan += shift / zoom;
     model.document().view.panX = pan.x;
     model.document().view.panY = pan.y;
     updateNodeTransforms();
@@ -1390,8 +1480,10 @@ void Canvas::nodeReleased (NodeView& v, const juce::MouseEvent& e)
         }
         edit::Result r;
         r.ok = true;
+        for (const auto& [id, at] : finals)
+            r.placed.push_back (id);   // (what was dropped stays where it was dropped: the others make room)
         return r;
-    }, false);
+    }, true);
     updateNodeTransforms();
     if (target != nullptr)
     {
@@ -1743,11 +1835,7 @@ bool Canvas::keyPressed (const juce::KeyPress& k)
             onSelectionChanged();
         return true;
     }
-    if (k.getKeyCode() == 'F' && ! k.getModifiers().isAnyModifierKeyDown())
-    {
-        fitAll();
-        return true;
-    }
+    // (No key fits the patch: F is a letter like any other. FIT is the board's button.)
     if (k.getKeyCode() == '0' && ! k.getModifiers().isAnyModifierKeyDown())
     {
         resetZoom();
@@ -1755,9 +1843,10 @@ bool Canvas::keyPressed (const juce::KeyPress& k)
     }
     if (k == juce::KeyPress::escapeKey)
     {
-        if (! model.document().view.currentGroup.empty())
-            breadcrumbClick ({});
-        else
+        // One Escape, one level, decided in one place (Editor::dismissTopmost).
+        if (onEscape)
+            return onEscape();
+        if (! cancelGesture() && ! leaveGroup())
             clearSelection();
         return true;
     }

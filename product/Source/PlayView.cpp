@@ -694,10 +694,14 @@ void SourceCard::paint (juce::Graphics& g)
     }
 }
 
-void SourceCard::paintDisplay (juce::Graphics& g, juce::Rectangle<float> area)
+void SourceCard::paintDisplay (juce::Graphics& g, juce::Rectangle<float> area) { paintSourceDisplay (g, area, session, node, look, compact); }
+
+void paintSourceDisplay (juce::Graphics& g, juce::Rectangle<float> area, Session& session, const std::string& node, const ModuleLook& look, bool compact, bool owner)
 {
     const auto& doc = session.document();
     const auto* n = doc.findNode (node);
+    if (n == nullptr)
+        return;
     const auto* node_ = liveSource (session, node);
     const auto& identity = colour::identity (std::max (0, look.badge));
     const auto wave = identity.wave;
@@ -816,7 +820,7 @@ void SourceCard::paintDisplay (juce::Graphics& g, juce::Rectangle<float> area)
         corner (session.externals().status (node).toUpperCase(), colour::wellText, juce::Justification::centred);
     // any other source: what leaves it now
     float level = node_ != nullptr ? node_->peak.load (std::memory_order_relaxed) : 0.0f;
-    if (node_ != nullptr)
+    if (node_ != nullptr && owner)
         const_cast<CompiledNode*> (node_)->peak.store (level * 0.8f, std::memory_order_relaxed);   // decays between frames
     const auto bar = juce::Rectangle<float> (inner.getX(), area.getBottom() - 22.0f, inner.getWidth(), 4.0f);
     g.setColour (wave.withAlpha (0.25f));

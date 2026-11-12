@@ -69,7 +69,6 @@ namespace layout
     const R voicesCard = design::layout::arpControl;
     const R evolveKey = design::layout::advanced;
     const R status { 48.0f, 1038.0f, 1250.0f, 24.0f };
-    constexpr float detailWidth = 332.0f;
     constexpr float boardHeader = 46.0f;
 }
 

@@ -78,6 +78,11 @@ private:
     juce::String summary;
 };
 
+/** A sound source's display (the family's source well: the oscillator's wave, a recording with
+    its playhead and grains, what leaves any other source), in `area` of a graphite well: the
+    front panel's card and the source's rack. `owner`: the one painter that lets the meter fall. */
+void paintSourceDisplay (juce::Graphics&, juce::Rectangle<float> area, Session&, const std::string& nodeId, const ModuleLook&, bool compact, bool owner = true);
+
 /** One sound source on the front panel: ANDOR Analog's source card. Its badge, M and S (mute
     and solo: Session::setMuted / toggleSolo, ramps at the source's own output), its name and
     switches; its graphite display (the wave it makes, the recording it plays, its
