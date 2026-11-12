@@ -550,6 +550,13 @@ TEST_CASE ("The rack: one module's controls across the board's foot; the board k
     const auto filter = in.firstOfType ("proc.filter"), osc = in.firstOfType ("osc.analog");
     REQUIRE_FALSE (filter.empty());
     REQUIRE_FALSE (osc.empty());
+    // (the patch's recording loads in the background and the graph is built again when it
+    // arrives: that is the patch settling, not the rack; wait for it before counting)
+    in.session().assets().waitIdle (20.0);
+    settle (150);
+    run (in.processor, 0.1);
+    settle (50);
+    run (in.processor, 0.05);
     const int swapsBefore = in.processor.engine().swapsCompleted();
     const auto opening = juce::Time::getMillisecondCounterHiRes();
     editor.openRack (filter);
