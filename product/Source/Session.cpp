@@ -76,7 +76,14 @@ void Session::recompile()
     for (const auto& n : doc.nodes)
         ids.push_back (n.id);
     host.retain (ids);
+    engine.setMasterDb (static_cast<float> (doc.settings.masterDb));
     engine.publish (std::move (graph));
+}
+
+void Session::setMasterDb (double dB)
+{
+    doc.settings.masterDb = dB;
+    engine.setMasterDb (static_cast<float> (dB));
 }
 
 void Session::pushMacros()

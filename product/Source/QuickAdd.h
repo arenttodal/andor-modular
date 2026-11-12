@@ -6,7 +6,7 @@ namespace andor::modular::ui
 {
 
 /**
-    Quick Add: a floating search at the cursor. Type (fuzzy: "anlg" finds ANALOG OSC), arrows to
+    Quick Add: a floating search at the cursor (the family's cream popover). Type (fuzzy: "anlg" finds ANALOG OSC), arrows to
     move, Return to add, Escape to close. Empty: recent modules, then every category. Opened on a
     port or a cable, it lists only modules that fit there.
 */
@@ -25,6 +25,8 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     static void remember (const std::string& type);
+    static constexpr int margin = 26;   ///< room around the card for its shadow
+    static constexpr int cardWidth = 420, cardHeight = 452;
 
     // tests
     void setQuery (const juce::String& q);

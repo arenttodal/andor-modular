@@ -1,12 +1,13 @@
 # ANDOR Modular — user guide (prototype)
 
 ## Your first sound (60 seconds)
-1. **PATCHES → New (empty).**
-2. Right-click the canvas (or press **Cmd/Ctrl + K**), type `analog`, press **Return**.
+1. **Click the patch's name in the header → New (empty).**
+2. Right-click the board (or press **+ ADD MODULE** / **Cmd/Ctrl + K**), type `analog`, press **Return**.
    KEYBOARD → ANALOG OSC → AMP ENVELOPE → VOICE MIX → OUTPUT appears, connected. Play.
 3. Select the oscillator, right-click the canvas, type `filter`, Return: a FILTER is inserted
    after it. Turn CUTOFF on its card.
-4. Press **PLAY**: right-click a knob in PATCH → *Assign to macro* to put it on the front panel.
+4. Right-click a knob → *Assign to macro*, then press the **PLAY** key in the header (or
+   **Ctrl + Tab**): the instrument's face, with its eight macros and its scenes.
 
 ## The canvas
 - **Add**: right-click empty space; on a **port**, only modules that fit are listed; on a
@@ -18,25 +19,27 @@
 - **Drop a recording** (WAV, AIFF, FLAC) on the canvas: ORGANIC SAMPLE, GRANULAR or RHYTHMIC
   SOURCE; on a recording module: relink. Analysis runs in the background; the card shows
   LOADING, then PLAYABLE, ANALYSING, then the waveform.
-- **Move** by dragging a card's header; **pan** by scrolling (or Alt / middle-drag); **zoom**
+- **Move** by dragging a tile; **pan** by scrolling (or Alt / middle-drag); **zoom**
   with Cmd/Ctrl + scroll or a pinch; **F** fits, **0** is 100 %.
 - **Select** with a click, Shift-click, or a rubber band; **Delete**; **Cmd+D** duplicate
   (**Shift** with links); **Cmd+G** group; **Tab** next module; **Return** opens its detail.
-- The LED on a card bypasses it. The chip says where it runs: VOICE (per note), GLOBAL (once),
-  NOTES (note streams). Flexible modules switch in their menu.
-- Every action undoes in one step (**Cmd+Z**); the message at the bottom has its own UNDO.
+- The light on a tile bypasses it. Under its name: its mode (click to change it), or where it
+  runs: PER VOICE (each note), GLOBAL (once), NOTES (note streams).
+- Every action undoes in one step (**Cmd+Z**); the status line at the bottom says what
+  happened, with its own UNDO.
+- The keyboard and the PITCH wheel at the bottom play the patch; VOLUME (top right) is its level.
 
 ## Notes and voices
 - KEYBOARD is the host's MIDI. ARPEGGIATOR, STEP SEQUENCER and GENERATIVE make note streams;
   add an ARP while a source is selected and it goes between the keyboard and that source.
 - Each chain of per-note modules has its **own voices and its own notes**: two oscillators
   with two arpeggiators play independently. A per-voice MORPH joins two chains (one note).
-- POLY 1–16, MONO (retrigger) and LEGATO (glide while held) in the top bar.
+- POLY 1–16, MONO (retrigger) and LEGATO (glide while held) on the card to the right of the keyboard.
 - A notes cable can transpose (right-click it).
 
 ## Groups and modules
 Select modules → **Cmd+G**. Double-click a group to enter it (breadcrumb at the top left, Esc
-to leave). In the detail panel: rename its controls, **Save as module**. **PATCHES → Add a
+to leave). In the detail panel: rename its controls, **Save as module**. **The patch's name → Add a
 module** brings back the factory and your saved modules. Groups count their modules against
 the limits (6 sources, 32 modules).
 

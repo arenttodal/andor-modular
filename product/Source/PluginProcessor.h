@@ -54,6 +54,12 @@ public:
     void setScene (float position);
     float cpuLoad() const noexcept { return load.load (std::memory_order_relaxed); }
 
+    /** A note, a bend or a pedal played on the instrument's own keyboard and wheel (message
+        thread): queued without a lock and played at the start of the next block. */
+    void playFromInterface (const MidiMessage& m) noexcept;
+    /** True while the host holds this note (the interface's keyboard shows it). */
+    bool hostHolds (int note) const noexcept { return hostNotes[static_cast<std::size_t> (note & 127)].load (std::memory_order_relaxed) != 0; }
+
     static juce::String macroId (int i) { return "macro" + juce::String (i + 1); }
     static juce::String slotId (int i) { return "assign" + juce::String (i + 1).paddedLeft ('0', 2); }
 
@@ -69,6 +75,10 @@ private:
     std::array<std::atomic<float>*, hostBankSize> slotParams {};
     std::array<float, hostBankSize> slotValues {};
     std::vector<MidiMessage> midi;
+    static constexpr int interfaceQueueSize = 256;
+    juce::AbstractFifo interfaceFifo { interfaceQueueSize };   // one writer (message thread), one reader (audio thread)
+    std::array<MidiMessage, interfaceQueueSize> interfaceQueue {};
+    std::array<std::atomic<std::uint8_t>, 128> hostNotes {};
     std::atomic<float> load { 0.0f };
     double rate = 48000.0;
     int reportedLatency = -1;

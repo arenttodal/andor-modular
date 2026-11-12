@@ -82,3 +82,37 @@ impulses are the likeliest).
 ## D-15 Factory recordings are synthesised by ANDOR
 No third-party library audio: `tools/make-samples` synthesises a bowed C3, a clockwork loop at
 120 BPM and a rain texture deterministically.
+
+## D-16 The interface is the ANDOR interface, composed, not copied
+The first prototype had its own dark look. **Decision (2026-11-12, owner request):** Modular is
+drawn only with the family's design system, in ANDOR Analog's walnut finish. `product/` compiles
+the shared sources it needs from the pinned submodules (`Design`, `OspLookAndFeel`,
+`CeramicSkin`, `SpriteKnobRenderer`, `RackFaceplate`, Analog's `FxIdentity`), links `AndorUiData`
+(fonts, ceramic skin, ivory knob sprites) and embeds Analog's `walnut-skin.zip` straight from
+the submodule. Nothing is copied into this repository and nothing in the submodules is edited.
+Parts whose shared implementation is tied to OSP's parameters (`InstrumentFrame.cpp`,
+`MainSections.cpp`: the keyboard, the wheel, VOLUME, the preset bar) are re-bound in
+`product/Source/Frame.*` with the same pieces, tokens and drawing recipe, each citing its source.
+*Consequence:* a move of those recipes upstream is not followed automatically; a later OSP PR
+could split them from OSP's bindings so Modular links them directly (listed under NEXT).
+
+## D-17 The instrument's shape: 1448 × 1086, one piece; the board grows in PATCH
+The window is the family's canvas scaled uniformly (869–1810 px wide). PLAY is the family's
+layout (band, macro panel, keyboard row). In PATCH the board takes the band *and* the macro
+panel's room (771 instead of 525 reference px): a patch needs it, and the macros are a
+performance surface. Mapping a macro from PATCH is confirmed in the status line.
+
+## D-18 Module faces come from the family's vocabulary
+`ui::lookFor` maps each module type to an existing face: Analog's device enamels and motifs for
+processors and effects, a source card with its layer badge for sources, the modulation panel's
+cream for modulators, the arpeggiator's key and amber for note modules, the routing board's
+terminal for OUTPUT and its fanned stack for groups. No module has a face invented here; a type
+without its own device wears UTILITY's.
+
+## D-19 The keyboard, the wheel and VOLUME are real
+The interface's keys and PITCH wheel play the patch through a lock-free single-writer queue
+drained at the start of the next block (`ModularProcessor::playFromInterface`); held host notes
+are mirrored to the keys from atomics. VOLUME is the patch's `masterDb`, heard while it moves
+(`Engine::setMasterDb`, glided over 10 ms; a level that never moves is applied exactly as
+before, so renders are unchanged). There is no MOD wheel: nothing would listen to it (rule 6).
+

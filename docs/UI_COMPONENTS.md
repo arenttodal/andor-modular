@@ -1,24 +1,70 @@
 # Interface components
 
-Tokens (`product/Source/Theme.h`): Peat `#100D0C` ground, card `#1B1716`, card header
-`#25201E`, hairline `#3B3430`, Bone `#E8E3DA` text (dim `#A39C92`, faint `#6E675F`), Spore
-`#A8AE9C` for values/arcs/cables, ANDOR ember `#E8692A` only for live, selected and
-modulation. 8 px grid; Inter (UI) and Outfit (identity), OFL. Port glyphs differ by shape
-and colour (never colour alone). Focus is an ember outline on every control.
+ANDOR Modular's interface is the ANDOR interface (`external/osp/andor-design-system/guide`),
+in ANDOR Analog's walnut finish. It is composed from the family's own code and rendered
+assets, never copied and never redrawn:
+
+| What | From | How Modular uses it |
+|---|---|---|
+| Tokens, materials, drawing (`design::colour`, `design::draw`, `CachedShadow`) | `external/osp/shared/andor-ui/Source/Design.*` | every colour, radius, shadow, knob, key, well and light |
+| Look-and-feel, Inter and Outfit, type roles | `OspLookAndFeel.*` | knobs (`"mini"`, `"arc"`, `"thinArc"`, `"sprite"`), menus, combo boxes, text |
+| Ceramic skin (housing, keys in four states, lenses, rail and fader cap, keybed, badges) | `CeramicSkin.*`, `AndorUiData` | the housing, every key, the macro lenses, VOLUME and the scene fader, the keyboard's bed, source badges |
+| Ivory macro knob sprites | `SpriteKnobRenderer.*`, `AndorUiData` | the eight macros |
+| Walnut housing pack and copper materials | `external/analog/product/Resources/walnut-skin.zip`, Analog's `docs/WALNUT_VISUAL_DESIGN.md` | `ui::applyMaterials()` (once per process) |
+| Device enamels and motifs | `external/analog/product/Source/FxIdentity.*` | the face of every processor and effect tile |
+| The ROUTING board (face, wires with arrowheads, sage selection ring, group stack, OUTPUT terminal) | Analog's `FxRouting.cpp` (recipe) | the patch board |
+
+`product/Source/Theme.h` only *names* what Modular uses and maps its modules onto that
+vocabulary (`ui::lookFor`); it defines no colour, font, knob, key or texture of its own.
+
+## Layout
+
+One instrument on the family's 1448 × 1086 canvas, scaled to the window as one piece
+(869 … 1810 px wide, fixed shape; `ui::layout`).
+
+| Row | Parts |
+|---|---|
+| Header | ANDOR/MODULAR and its tagline · preset bar (‹ name ⌄ ›) · SAVE (cassette) · PATCH / PLAY keys · VOLUME · menu |
+| Band, PATCH | the board down to the macro panel's foot: header (PATCH, counts, + ADD MODULE, ARRANGE, FIT, undo, redo), the canvas, the detail column (332 px) |
+| Band, PLAY | the instrument's face (name, description, sources with their badges, the graphite display of the output) over the family's macro panel: eight macros, the scenes bay |
+| Keyboard row | PITCH wheel · 88 keys in their bed · voices card (POLY / MONO / LEGATO) · Evolve key |
+| Footer | status line: what the last action did, with UNDO; otherwise voices, CPU, module and source counts, problems |
+
+## What a module wears (`ui::lookFor`)
+
+| Module | Face |
+|---|---|
+| Sound sources (`osc.*`, `src.*`) | a source card in miniature: cream ceramic, the layer badge (A copper, B slate, C sage, then again), knob arcs in that layer's colour |
+| Processors and effects | their device's enamel and motif from Analog (DRIVE, MOVEMENT, ECHO, SPACE, CONVOLUTION, SPREAD / SATELLITE, COMPRESSOR, TONE → EQ, FX FILTER, PHASER, FLANGER / CHORUS, SHIFTER, RETRO; voice FILTER and MORPH from the synth racks) |
+| Mixers, gains, switches, VOICE MIX, pan, meters | the UTILITY device (graphite enamel, meter-bridge motif) |
+| Modulators (`ctl.*`), VCA | the modulation panel's cream face, the live accent |
+| Note modules (`event.*`) | the arpeggiator's key face and amber |
+| OUTPUT | the routing board's terminal |
+| A group | the routing board's group summary: a graphite card on a fanned stack |
+
+Ports are sockets on the tile's edges, told apart by shape and colour (never colour alone):
+notes a triangle (amber), audio a dot (stereo ringed), control a diamond (moss), pitch a
+barred diamond (mineral blue), gate / trigger / clock a square (verdigris). Wires are the
+routing board's: 1.6 px warm grey with an arrowhead where the signal arrives, stereo 2.4 px,
+notes amber, control sage, a modulation dashed and landing on its knob from above.
+
+## Components
 
 | Component | File | Notes |
 |---|---|---|
-| Editor | PluginEditor.* | top bar (PATCHES, name, UNDO/REDO, PATCH/PLAY, EVOLVE, POLY, ARRANGE, FIT, status); 869 px narrow layout; shortcuts Cmd/Ctrl+K (Quick Add), Z / Shift+Z, S, E, Ctrl+Tab |
-| Canvas + NodeView | Canvas.* | world pan/zoom (75–125 % fit, 30–250 % manual, zoom at cursor, trackpad pinch), 8 px snap, rubber-band selection, Tab navigation, Delete, Cmd+D (+Shift: with links), Cmd+G, F, 0, Esc; cables with hover info, moving dots only when the source is active; breadcrumbs inside groups, cables to modules outside drawn to the edge |
-| Quick face | Canvas.cpp NodeView | header (category tick, name, VOICE/GLOBAL/NOTES chip, power LED = bypass), typed ports with names, one mode menu + up to four knobs (only those that apply), live strip |
-| Live strips | Canvas.cpp paintTelemetry | oscillator Hz, arp / sequencer steps, grain dots + position, recording waveform + playhead + status (LOADING / PLAYABLE, ANALYSING / MISSING), morph partials of both sides, satellite position, voices, host status, meters |
-| Quick Add | QuickAdd.* | at the cursor; fuzzy search; recent + categories; CPU tag for heavy modules; filtered to compatible modules from a port; Return / Esc / arrows |
-| Detail panel | DetailPanel.* | title, mode, help; labelled modes; controls (progressive disclosure); recording / plugin sections; 16-step editor; incoming modulation with depth sliders |
-| ParamKnob | Widgets.* | drag, Shift fine, double-click default, wheel; right-click: reset, type a value, assign to macro 1–8, automate from a host slot 1–32, modulate from…, remove modulation; ember ring shows the live value |
-| Toast | Widgets.* | what an action did, with UNDO |
-| PLAY | PlayView.* | instrument name and description, live output trace, eight macros (one row or two), scenes I–IV + STORE + scene fader, EVOLVE / SAVE / PATCH |
-| MacroKnob | PlayView.* | host parameter attachment; colour per slot; menu: rename, colour, default, each mapping's range / curve / remove |
-| EvolvePanel | PlayView.* | SUBTLE / MODERATE / WILD, locks (scale, rhythm, routing, levels), seed + NEW SEED, EVOLVE, A / B, KEEP, list of changes |
+| Editor | PluginEditor.* | the scaled surface and its layout; menus (patches, main, voices); shortcuts Cmd/Ctrl+K (Quick Add), Z / Shift+Z, S, E (Evolve), Ctrl+Tab (PATCH / PLAY) |
+| PresetBar, VolumeFader, PitchWheel, Keyboard, VoicesCard, RailFader | Frame.* | the family's parts (same pieces and recipes as `InstrumentFrame.cpp` / `MainSections.cpp`), bound to the patch; the keyboard and wheel reach the audio thread through a lock-free queue (`ModularProcessor::playFromInterface`), VOLUME through `Engine::setMasterDb` |
+| Canvas + NodeView | Canvas.* | world pan/zoom (60–110 % fit, 30–250 % manual, zoom at cursor, pinch), 8 px snap, rubber-band selection, Tab navigation, Delete, Cmd+D, Cmd+G, F, 0, Esc; the tile's face is cached (`setBufferedToImage`), only its glass repaints at 25 Hz; breadcrumbs inside groups |
+| Tile | Canvas.cpp NodeView | name band (motif or badge, name, mode with its chevron or PER VOICE / GLOBAL / NOTES, status light = bypass), sockets, up to four mini knobs (only those that apply), the glass |
+| Glass | Canvas.cpp paintTelemetry | oscillator Hz, arp / sequencer steps, grain dots + position, recording waveform + playhead + status, both sides of a morph, satellite position, voices, host status, levels |
+| Quick Add | QuickAdd.* | cream popover at the cursor; fuzzy search; recent + categories; each row a thumbnail of the tile it adds; CPU tag; filtered to compatible modules from a port |
+| Detail column | DetailPanel.* | title, mode, help; modes (mode keys, toggles as ceramic keys); knobs with their scale, label above and value below; recording / plugin keys; the 16-step graphite display; incoming modulation with depth on the rail |
+| ParamKnob / ParamMode / ParamToggle / ParamChoice | Widgets.* | drag, Shift fine, double-click default, wheel; right-click: reset, type a value, assign to macro 1–8, automate from a host slot 1–32, modulate from…; a bead on the value ring shows where macros, scenes and modulation hold it |
+| KeyButton, InkButton, StatusLine | Widgets.* | ceramic keys drawn by the surface they sit on (`skin::KeyFace`); ink-only board tools; the status line |
+| PLAY | PlayView.* | instrument name in the identity face, description, sources, live output trace |
+| MacroKnob | PlayView.* | host parameter; ivory cap, identity on a thin ring, lens lit while mapped; menu: rename, colour (the six mineral identities), default, each mapping's range / curve / remove |
+| ScenePanel | PlayView.* | I–IV keys, STORE, the morph on the family's rail |
+| EvolvePanel | PlayView.* | popover: SUBTLE / MODERATE / WILD, locks, seed + NEW SEED, EVOLVE, A / B, KEEP, list of changes |
 
 Screenshots of the reference states at 869 / 1448 / 1810: `docs/screenshots/` (regenerate with
 `MODULAR_SCREENSHOT_DIR=dir modular_product_tests "[screens]"`).

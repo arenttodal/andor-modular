@@ -5,7 +5,9 @@
 namespace andor::modular::ui
 {
 
-/** One consistent inspector for the selected module (or group): every control, grouped;
+/** The board's detail column: one consistent inspector for the selected module (or group),
+    in the family's controls (knobs with their scale, mode keys, the graphite step display):
+    every control, grouped;
     its recording or hosted plugin; its incoming modulation with depths; its help. Changing
     the selection updates it in place; Escape or X closes it. */
 class DetailPanel final : public juce::Component
@@ -27,7 +29,7 @@ private:
     std::string current;
     juce::Viewport viewport;
     std::unique_ptr<Content> content;
-    juce::TextButton close { "X" };
+    InkButton close { juce::String() };
 };
 
 } // namespace andor::modular::ui

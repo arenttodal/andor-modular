@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 
 #include "PluginEditor.h"
+#include "Theme.h"
 
 namespace andor::modular
 {
@@ -23,6 +24,8 @@ ModularProcessor::ModularProcessor()
       apvts (*this, nullptr, "PARAMETERS", layout()),
       sessionModel (audioEngine)
 {
+    // ANDOR Modular's finish (walnut, aged copper, bone ceramic): once, before any window.
+    ui::applyMaterials();
     for (int i = 0; i < maxMacros; ++i)
         macroParams[static_cast<std::size_t> (i)] = apvts.getRawParameterValue (macroId (i));
     sceneParam = apvts.getRawParameterValue ("scene");
@@ -61,6 +64,19 @@ void ModularProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     const auto started = juce::Time::getHighResolutionTicks();
     const int n = buffer.getNumSamples();
     int count = 0;
+    // The instrument's own keyboard and wheel first (they were played before this block).
+    {
+        const auto scope = interfaceFifo.read (interfaceFifo.getNumReady());
+        auto take = [&] (int start, int size) {
+            for (int i = 0; i < size && count < static_cast<int> (midi.size()); ++i)
+            {
+                midi[static_cast<std::size_t> (count)] = interfaceQueue[static_cast<std::size_t> (start + i)];
+                midi[static_cast<std::size_t> (count++)].offset = 0;
+            }
+        };
+        take (scope.startIndex1, scope.blockSize1);
+        take (scope.startIndex2, scope.blockSize2);
+    }
     for (const auto meta : midiIn)
     {
         if (count >= static_cast<int> (midi.size()))
@@ -74,11 +90,13 @@ void ModularProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
             e.kind = MidiMessage::Kind::noteOn;
             e.note = static_cast<std::uint8_t> (m.getNoteNumber());
             e.value = m.getFloatVelocity();
+            hostNotes[e.note & 127].store (1, std::memory_order_relaxed);
         }
         else if (m.isNoteOff())
         {
             e.kind = MidiMessage::Kind::noteOff;
             e.note = static_cast<std::uint8_t> (m.getNoteNumber());
+            hostNotes[e.note & 127].store (0, std::memory_order_relaxed);
         }
         else if (m.isPitchWheel())
         {
@@ -91,7 +109,11 @@ void ModularProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
             e.value = m.isSustainPedalOn() ? 1.0f : 0.0f;
         }
         else if (m.isAllNotesOff() || m.isAllSoundOff())
+        {
             e.kind = MidiMessage::Kind::allNotesOff;
+            for (auto& held : hostNotes)
+                held.store (0, std::memory_order_relaxed);
+        }
         else if (m.isController())
         {
             e.kind = MidiMessage::Kind::controller;
@@ -149,6 +171,15 @@ void ModularProcessor::timerCallback()
     // CPU admission: sustained overload trims the voice pool (oldest notes are stolen first).
     const float l = cpuLoad();
     audioEngine.setVoiceCap (l > 0.85f ? std::max (2, audioEngine.activeVoices() - 2) : 0);
+}
+
+void ModularProcessor::playFromInterface (const MidiMessage& m) noexcept
+{
+    const auto scope = interfaceFifo.write (1);
+    if (scope.blockSize1 > 0)
+        interfaceQueue[static_cast<std::size_t> (scope.startIndex1)] = m;
+    else if (scope.blockSize2 > 0)
+        interfaceQueue[static_cast<std::size_t> (scope.startIndex2)] = m;
 }
 
 void ModularProcessor::setMacro (int index, float value)

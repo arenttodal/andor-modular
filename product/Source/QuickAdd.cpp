@@ -21,17 +21,21 @@ void QuickAdd::remember (const std::string& type)
 QuickAdd::QuickAdd (const Registry& reg) : registry (reg)
 {
     setWantsKeyboardFocus (false);
-    search.setFont (text (15.0f));
-    search.setTextToShowWhenEmpty ("Type a sound, a process, a controller...", colour::boneFaint);
+    search.setFont (fonts::make (15.5f, Weight::regular, 0.01f));
+    search.setTextToShowWhenEmpty ("Type a sound, a process, a controller...", colour::textMicro);
+    search.setColour (juce::TextEditor::backgroundColourId, colour::buttonTop);
+    search.setColour (juce::TextEditor::outlineColourId, colour::hairline);
+    search.setColour (juce::TextEditor::focusedOutlineColourId, colour::accent.withAlpha (0.75f));
+    search.setColour (juce::TextEditor::textColourId, colour::text);
     search.addListener (this);
     search.addKeyListener (this);
     search.setEscapeAndReturnKeysConsumed (true);
     search.setTitle ("Quick Add search");
-    search.setIndents (10, 8);
+    search.setIndents (11, 9);
     addAndMakeVisible (search);
     list.setModel (this);
-    list.setRowHeight (40);
-    list.setColour (juce::ListBox::backgroundColourId, colour::cardHigh);
+    list.setRowHeight (44);
+    list.setColour (juce::ListBox::backgroundColourId, juce::Colours::transparentBlack);
     list.setTitle ("Modules");
     addAndMakeVisible (list);
     setVisible (false);
@@ -45,11 +49,10 @@ void QuickAdd::open (juce::Point<int> p, const juce::String& title, std::vector<
     restriction = std::move (only);
     search.clear();
     update();
-    const int w = 380, h = 420;
-    auto* parent = getParentComponent();
-    auto bounds = juce::Rectangle<int> (p.x, p.y, w, h);
-    if (parent != nullptr)
-        bounds = bounds.constrainedWithin (parent->getLocalBounds().reduced (8));
+    // The card, with room around it for its shadow.
+    auto bounds = juce::Rectangle<int> (p.x - margin, p.y - margin, cardWidth + 2 * margin, cardHeight + 2 * margin);
+    if (auto* parent = getParentComponent())
+        bounds = bounds.constrainedWithin (parent->getLocalBounds());
     setBounds (bounds);
     setVisible (true);
     toFront (true);
@@ -128,28 +131,24 @@ void QuickAdd::update()
 
 void QuickAdd::paint (juce::Graphics& g)
 {
-    auto r = getLocalBounds().toFloat();
-    g.setColour (juce::Colours::black.withAlpha (0.45f));
-    g.fillRoundedRectangle (r.translated (0.0f, 6.0f), 8.0f);
-    g.setColour (colour::cardHigh);
-    g.fillRoundedRectangle (r, 8.0f);
-    g.setColour (colour::ember.withAlpha (0.7f));
-    g.drawRoundedRectangle (r.reduced (0.5f), 8.0f, 1.0f);
-    g.setColour (colour::boneDim);
-    g.setFont (text (10.5f, 600));
-    g.drawText (heading.isEmpty() ? juce::String ("ADD A MODULE") : heading.toUpperCase(), getLocalBounds().removeFromTop (24).reduced (12, 0), juce::Justification::centredLeft);
-    g.setFont (text (10.0f));
-    g.setColour (colour::boneFaint);
-    g.drawText ("RETURN adds   ESC closes", getLocalBounds().removeFromTop (24).reduced (12, 0), juce::Justification::centredRight);
+    const auto c = getLocalBounds().reduced (margin);
+    paintPopover (g, c.toFloat());
+    const auto top = c.withHeight (34).reduced (18, 0).translated (0, 4);
+    g.setColour (colour::textSecondary);
+    g.setFont (type::popupTitle (12.5f));
+    g.drawText (heading.isEmpty() ? juce::String ("ADD A MODULE") : heading.toUpperCase(), top, juce::Justification::centredLeft, false);
+    g.setFont (fonts::make (10.5f, Weight::regular, 0.08f));
+    g.setColour (colour::textMicro);
+    g.drawText ("RETURN ADDS    ESC CLOSES", top, juce::Justification::centredRight, false);
 }
 
 void QuickAdd::resized()
 {
-    auto r = getLocalBounds().reduced (8);
-    r.removeFromTop (16);
-    search.setBounds (r.removeFromTop (34));
-    r.removeFromTop (6);
-    list.setBounds (r);
+    auto r = getLocalBounds().reduced (margin).reduced (12, 0);
+    r.removeFromTop (38);
+    search.setBounds (r.removeFromTop (38).reduced (4, 0));
+    r.removeFromTop (8);
+    list.setBounds (r.withTrimmedBottom (10));
 }
 
 void QuickAdd::paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool selected)
@@ -159,34 +158,69 @@ void QuickAdd::paintListBoxItem (int row, juce::Graphics& g, int width, int heig
     const auto& item = rows[static_cast<std::size_t> (row)];
     if (item.desc == nullptr)
     {
-        g.setColour (colour::ember);
-        g.setFont (text (10.0f, 600));
-        g.drawText (item.header, 10, height - 18, width - 20, 16, juce::Justification::bottomLeft);
+        // A section: small, tracked, a rule to the right of it.
+        const auto font = fonts::make (10.5f, Weight::medium, 0.14f);
+        g.setColour (colour::textMicro.darker (0.2f));
+        g.setFont (font);
+        g.drawText (item.header, 8, height - 20, width - 16, 16, juce::Justification::centredLeft, false);
+        const float textW = juce::GlyphArrangement::getStringWidth (font, item.header);
+        g.setColour (colour::hairline);
+        g.fillRect (juce::Rectangle<float> (18.0f + textW, static_cast<float> (height) - 12.0f, static_cast<float> (width) - textW - 30.0f, 1.0f));
         return;
     }
     if (selected)
     {
-        g.setColour (colour::raised);
-        g.fillRoundedRectangle (2.0f, 1.0f, static_cast<float> (width - 4), static_cast<float> (height - 2), 4.0f);
-        g.setColour (colour::ember);
-        g.fillRect (2, 6, 2, height - 12);
+        // The chosen row: a raised key under it.
+        draw::button (g, juce::Rectangle<float> (3.0f, 2.0f, static_cast<float> (width - 10), static_cast<float> (height - 4)), 8.0f, false, true, colour::accentSoft);
     }
     const auto* d = item.desc;
-    g.setColour (d->available ? colour::bone : colour::boneFaint);
-    g.setFont (text (13.0f, 600));
-    g.drawText (d->name, 12, 3, width - 120, 18, juce::Justification::centredLeft);
-    g.setColour (colour::boneDim);
-    g.setFont (text (11.0f));
-    g.drawText (d->available ? juce::String (d->description) : juce::String ("NOT AVAILABLE: ") + d->unavailableReason, 12, 20, width - 24, 16,
+    // What it will look like on the board, in miniature: a device's enamel and motif, a
+    // source's ceramic and badge, a modulator's cream face.
+    const auto look = lookFor (d->type, d->role == NodeRole::source ? 0 : -1);
+    const auto thumb = juce::Rectangle<float> (12.0f, 0.5f * static_cast<float> (height) - 13.0f, 38.0f, 26.0f);
+    {
+        juce::Path shape;
+        shape.addRoundedRectangle (thumb, 5.0f);
+        g.setColour (juce::Colours::black.withAlpha (0.14f));
+        g.fillRoundedRectangle (thumb.translated (0.0f, 1.2f), 5.0f);
+        juce::Graphics::ScopedSaveState state (g);
+        g.reduceClipRegion (shape);
+        if (look.face == ModuleLook::Face::enamel && look.id != nullptr)
+        {
+            g.setGradientFill (juce::ColourGradient (look.id->enamel.brighter (0.06f), 0.0f, thumb.getY(), look.id->enamel.darker (0.07f), 0.0f, thumb.getBottom(), false));
+            g.fillRect (thumb);
+            andor::analog::paintFxMotif (g, look.id->motif, thumb.reduced (1.0f, 2.0f), *look.id, andor::analog::MotifScale::thumb);
+        }
+        else
+        {
+            const bool terminal = look.face == ModuleLook::Face::terminal;
+            g.setGradientFill (juce::ColourGradient (terminal ? board::terminalFace : colour::cardTop, 0.0f, thumb.getY(), terminal ? board::terminalFace : colour::cardBottom, 0.0f,
+                                                     thumb.getBottom(), false));
+            g.fillRect (thumb);
+            if (look.badge >= 0)
+                paintBadge (g, thumb.withSizeKeepingCentre (17.0f, 17.0f), 0, "A");
+            else
+                drawSocket (g, thumb.getCentre(), look.face == ModuleLook::Face::key ? PortKind::notes : PortKind::control, true, false, 13.0f);
+        }
+    }
+    g.setColour ((look.face == ModuleLook::Face::enamel ? look.edge : colour::knobRim).withAlpha (0.9f));
+    g.drawRoundedRectangle (thumb.reduced (0.5f), 5.0f, 1.0f);
+
+    g.setColour (d->available ? colour::text : colour::textMicro);
+    g.setFont (fonts::make (13.5f, Weight::medium, 0.05f));
+    g.drawText (d->name, 60, 5, width - 170, 18, juce::Justification::centredLeft, true);
+    g.setColour (colour::textSecondary.withAlpha (d->available ? 1.0f : 0.7f));
+    g.setFont (type::micro (11.5f));
+    g.drawText (d->available ? juce::String (d->description) : juce::String ("Not available: ") + d->unavailableReason, 60, 22, width - 74, 16,
                 juce::Justification::centredLeft, true);
-    g.setFont (text (9.0f, 600));
+    g.setFont (fonts::make (9.5f, Weight::medium, 0.12f));
     const juce::String category (d->category);
     juce::String tag = category == "Sources" ? "SOURCE" : category == "Processors" ? "PROCESSOR" : category == "Controllers" ? "CONTROLLER"
                      : category == "Utilities" ? "UTILITY" : category.toUpperCase();
     if (d->cost.heavy)
         tag = "CPU  " + tag;
-    g.setColour (d->cost.heavy ? colour::warn : colour::boneFaint);
-    g.drawText (tag, width - 110, 4, 98, 16, juce::Justification::centredRight);
+    g.setColour (d->cost.heavy ? colour::arp.darker (0.25f) : colour::textMicro);
+    g.drawText (tag, width - 118, 6, 100, 16, juce::Justification::centredRight, false);
 }
 
 void QuickAdd::chooseSelected()

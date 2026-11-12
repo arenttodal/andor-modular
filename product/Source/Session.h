@@ -55,6 +55,8 @@ public:
     void beginGesture (const juce::String& label);
     void setParam (const std::string& node, const std::string& param, double value);
     void setNodeString (const std::string& node, const std::string& key, const std::string& value);
+    /** The patch's master level (dB), heard at once (VOLUME; beginGesture first for its undo). */
+    void setMasterDb (double dB);
     bool undo();
     bool redo();
     edit::History& history() noexcept { return hist; }

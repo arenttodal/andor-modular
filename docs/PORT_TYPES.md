@@ -2,14 +2,14 @@
 
 | Kind | Glyph (shape + muted colour) | Carries | Units | Rate |
 |---|---|---|---|---|
-| NOTES | triangle, clay | note on/off with id, velocity 0..1, channel, sample offset | MIDI | event (per block) |
-| PITCH | diamond with a bar, lilac | pitch offset | 1.0 = one octave | control |
-| GATE | square, slate | held level | 0 / 1 | control |
-| TRIGGER | square, slate | one-sample pulses | 0 / 1 | control |
-| CLOCK | square, slate | pulses at a musical division | 0 / 1 | control |
-| CONTROL | diamond, spore | modulation | unipolar 0..1 or bipolar −1..1 (declared per port) | control (per sample buffers; parameters read once per chunk) |
-| AUDIO | circle, bone | audio; mono per voice, stereo when the module is global | linear | audio |
-| STEREO | circle with a ring, bone | stereo audio | linear | audio |
+| NOTES | triangle, the arpeggiator's amber | note on/off with id, velocity 0..1, channel, sample offset | MIDI | event (per block) |
+| PITCH | diamond with a bar, mineral blue | pitch offset | 1.0 = one octave | control |
+| GATE | square, verdigris | held level | 0 / 1 | control |
+| TRIGGER | square, verdigris | one-sample pulses | 0 / 1 | control |
+| CLOCK | square, verdigris | pulses at a musical division | 0 / 1 | control |
+| CONTROL | diamond, moss | modulation | unipolar 0..1 or bipolar −1..1 (declared per port) | control (per sample buffers; parameters read once per chunk) |
+| AUDIO | dot, ink | audio; mono per voice, stereo when the module is global | linear | audio |
+| STEREO | dot with a ring, ink | stereo audio | linear | audio |
 
 ## Domains
 

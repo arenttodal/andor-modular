@@ -35,6 +35,11 @@ Keep both green on every commit.
 7. **Every smart action is one undoable transaction** that reports what it did.
 8. Features shared with OSP/Analog (SPACE, ECHO, ARP) come from their shared code; Modular
    wraps, it does not fork.
+9. **The interface is the ANDOR interface** (`external/osp/andor-design-system/guide`), composed
+   from the family's code and rendered assets in the submodules (docs/UI_COMPONENTS.md). No new
+   colour, font, knob, key, texture or radius is defined here: `product/Source/Theme.h` names
+   and maps what exists. Lay out in reference pixels (1448 x 1086, scaled as one piece). After a
+   visual change, regenerate `docs/screenshots` and look at 869 / 1448 / 1810.
 
 ## Conventions
 

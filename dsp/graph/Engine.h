@@ -49,6 +49,14 @@ public:
     void setScenePosition (float position) noexcept;      ///< 0..3
     float scenePosition() const noexcept { return scenePos.load (std::memory_order_relaxed); }
     void allNotesOff() noexcept { panic.store (true, std::memory_order_relaxed); }
+    /** The master level while it is being moved (the VOLUME fader): replaces the published
+        graph's settings.masterDb until the next publish carries it, glided over a few
+        milliseconds. Never set: the graph's own level, exactly. */
+    void setMasterDb (float dB) noexcept
+    {
+        liveMasterDb.store (dB, std::memory_order_relaxed);
+        liveMasterSet.store (true, std::memory_order_relaxed);
+    }
     /** Runtime voice cap (CPU admission): voices beyond it are not started (0: no cap). */
     void setVoiceCap (int cap) noexcept { voiceCap.store (cap, std::memory_order_relaxed); }
     void resetTransportMemory() noexcept { restart.store (true, std::memory_order_relaxed); }
@@ -133,6 +141,9 @@ private:
     std::atomic<std::uint64_t> generationNow { 0 };
     std::atomic<float> peakNow { 0.0f };
     float limiterGain = 1.0f;
+    float masterNow = -1.0f;   ///< the glided master gain (negative: not yet set)
+    std::atomic<float> liveMasterDb { 0.0f };
+    std::atomic<bool> liveMasterSet { false };
     const float* liveLeft = nullptr;
     const float* liveRight = nullptr;
 

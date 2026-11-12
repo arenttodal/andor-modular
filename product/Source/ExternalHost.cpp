@@ -17,7 +17,7 @@ public:
             return;
         // Prepared once per rate: a patch edit never re-prepares (and so never resets) the
         // instrument.
-        if (preparedRate == sampleRate && preparedBlock >= maxBlock)
+        if (juce::exactlyEqual (preparedRate, sampleRate) && preparedBlock >= maxBlock)
             return;
         instance->setRateAndBufferSizeDetails (sampleRate, std::max (maxBlock, 32));
         instance->prepareToPlay (sampleRate, std::max (maxBlock, 32));

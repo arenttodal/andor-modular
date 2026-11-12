@@ -8,6 +8,7 @@
 | Catch2 v3.9.1 | BSL-1.0 | tests only | not shipped |
 | Signalsmith Stretch 1.4.0 (OSP dependency) | MIT | linked into osp_dsp (OSP's offline pitch engines) | keep its notice |
 | Inter, Outfit typefaces | SIL Open Font License 1.1 (`external/osp/shared/andor-ui/Resources/fonts/*-OFL.txt`) | embedded UI fonts | ship the OFL texts with the product |
+| Rendered interface assets (ceramic skin, ivory knob sprites, walnut housing) | ANDOR's own (OSP `shared/andor-ui/Resources`, Analog `product/Resources`), offline-rendered by the owner's tools | the interface | referenced from the pinned submodules, not copied into this repository |
 | Factory recordings (`presets/factory/samples`) | ANDOR's own, synthesised by `tools/make-samples` | factory patches | free of third-party rights |
 | Factory convolution impulses | ANDOR Analog's synthesised impulses | CONVOLUTION | ANDOR's own |
 | Hosted plugins (e.g. Kontakt) | the user's licence | EXTERNAL INSTRUMENT loads what the user owns | Modular never bundles third-party plugins or libraries; patches store only the file path and the plugin's own state |

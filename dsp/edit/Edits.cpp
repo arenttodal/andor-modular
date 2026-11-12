@@ -743,8 +743,8 @@ void removeNodes (Document& doc, const std::vector<std::string>& nodes)
 
 namespace
 {
-    /** A card's height on the canvas (the editor's NodeView layout: header, port rows, one mode
-        row, one knob row, the live strip), so arranged cards never overlap. */
+    /** A tile's height on the board (the editor's NodeView layout), so arranged tiles never
+        overlap. */
     float cardHeight (const Document& doc, const Registry& reg, const std::string& id)
     {
         int rows = 0, knobs = 0, choices = 0;
@@ -769,7 +769,10 @@ namespace
                 knobs = std::min (knobs, 4);
             }
         }
-        return 28.0f + 6.0f + 20.0f * static_cast<float> (rows) + (choices > 0 ? 28.0f : 0.0f) + (knobs > 0 ? 54.0f : 0.0f) + 30.0f;
+        // (product/Source/Theme.h, ui::tile: the name band with the mode in it, 17 px a port row,
+        // one knob row, the glass)
+        (void) choices;
+        return 42.0f + 17.0f * static_cast<float> (rows) + (rows > 0 ? 4.0f : 0.0f) + (knobs > 0 ? 48.0f : 0.0f) + 34.0f;
     }
 }
 
@@ -860,7 +863,7 @@ void autoArrange (Document& doc, const Registry& reg, const std::vector<std::str
             if (std::find (keep.begin(), keep.end(), id) == keep.end())
             {
                 auto [x, yy] = positionOf (id);
-                *x = static_cast<float> (col) * 256.0f;
+                *x = static_cast<float> (col) * 240.0f;   // a 184 px tile, room for a wire and its arrowhead
                 *yy = std::round (y / 8.0f) * 8.0f;
             }
             y += cardHeight (doc, reg, id) + 32.0f;

@@ -1,5 +1,7 @@
 #include "DetailPanel.h"
 
+#include "Frame.h"
+
 namespace andor::modular::ui
 {
 
@@ -12,6 +14,7 @@ namespace
         StepGrid (Session& s, std::string n) : session (s), node (std::move (n)) { setTitle ("Step editor"); }
         void paint (juce::Graphics& g) override
         {
+            // The family's graphite display: sixteen steps, pitch as a bar, the gate row under it.
             const auto& doc = session.document();
             const auto* live = session.graph();
             int current = -1;
@@ -19,24 +22,27 @@ namespace
                 if (const auto it = live->nodeIndexById.find (node); it != live->nodeIndexById.end())
                     current = static_cast<int> (live->nodes[static_cast<std::size_t> (it->second)].telemetry[0].load());
             const int length = static_cast<int> (doc.paramValue (session.registry(), node, "length"));
-            const float w = static_cast<float> (getWidth()) / 16.0f, h = static_cast<float> (getHeight()) - 20.0f;
+            draw::well (g, getLocalBounds().toFloat(), 7.0f, colour::wellA);
+            const auto inner = getLocalBounds().toFloat().reduced (5.0f, 5.0f);
+            const float w = inner.getWidth() / 16.0f, h = inner.getHeight() - 18.0f;
+            const auto lit = colour::arpOnDark;
             for (int s = 0; s < 16; ++s)
             {
                 const auto id = std::to_string (s + 1);
                 const double pitch = doc.paramValue (session.registry(), node, "p" + id);
                 const bool gate = doc.paramValue (session.registry(), node, "g" + id) >= 0.5;
                 const double vel = doc.paramValue (session.registry(), node, "v" + id);
-                const auto cell = juce::Rectangle<float> (w * static_cast<float> (s) + 1.0f, 0.0f, w - 2.0f, h);
-                g.setColour (s < length ? colour::peatDeep : colour::peat);
-                g.fillRect (cell);
+                const auto cell = juce::Rectangle<float> (inner.getX() + w * static_cast<float> (s) + 1.0f, inner.getY(), w - 2.0f, h);
+                g.setColour (colour::wellGrid.withAlpha (s < length ? 0.75f : 0.25f));
+                g.fillRoundedRectangle (cell, 1.5f);
+                g.setColour (colour::wellRim.withAlpha (0.8f));
+                g.fillRect (juce::Rectangle<float> (cell.getX(), cell.getCentreY() - 0.5f, cell.getWidth(), 1.0f));
                 const float y = cell.getCentreY() - static_cast<float> (pitch / 24.0) * h * 0.5f;
-                g.setColour (s == current ? colour::ember : (gate ? colour::spore : colour::sporeDim));
-                g.fillRect (cell.getX() + 2.0f, y - 2.0f, cell.getWidth() - 4.0f, 4.0f);
-                g.setColour (colour::line);
-                g.drawHorizontalLine (static_cast<int> (cell.getCentreY()), cell.getX(), cell.getRight());
-                // velocity under the cell, gate as a square
-                g.setColour (gate ? colour::ember.withAlpha (static_cast<float> (0.3 + 0.7 * vel)) : colour::line);
-                g.fillRect (cell.getX() + 2.0f, h + 4.0f, cell.getWidth() - 4.0f, 12.0f);
+                g.setColour (s == current ? juce::Colours::white : (gate ? lit : lit.withAlpha (0.3f)));
+                g.fillRoundedRectangle (cell.getX() + 1.5f, y - 2.0f, cell.getWidth() - 3.0f, 4.0f, 1.5f);
+                // the gate (its velocity as its light)
+                g.setColour (gate ? lit.withAlpha (static_cast<float> (0.35 + 0.65 * vel)) : colour::wellGrid);
+                g.fillRoundedRectangle (cell.getX() + 1.5f, inner.getY() + h + 5.0f, cell.getWidth() - 3.0f, 10.0f, 2.0f);
             }
         }
         void mouseDown (const juce::MouseEvent& e) override
@@ -49,10 +55,11 @@ namespace
     private:
         void edit (const juce::MouseEvent& e, bool press)
         {
-            const int s = juce::jlimit (0, 15, static_cast<int> (e.position.x / (static_cast<float> (getWidth()) / 16.0f)));
+            const auto inner = getLocalBounds().toFloat().reduced (5.0f, 5.0f);
+            const int s = juce::jlimit (0, 15, static_cast<int> ((e.position.x - inner.getX()) / (inner.getWidth() / 16.0f)));
             const auto id = std::to_string (s + 1);
-            const float h = static_cast<float> (getHeight()) - 20.0f;
-            if (e.position.y > h)
+            const float h = inner.getHeight() - 18.0f;
+            if (e.position.y > inner.getY() + h)
             {
                 if (press)
                     session.setParam (node, "g" + id, session.document().paramValue (session.registry(), node, "g" + id) >= 0.5 ? 0.0 : 1.0);
@@ -73,9 +80,8 @@ namespace
     public:
         ModRow (Session& s, std::string connection) : session (s), id (std::move (connection))
         {
-            depth.setSliderStyle (juce::Slider::LinearHorizontal);
-            depth.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
             depth.setRange (-1.0, 1.0);
+            depth.setDoubleClickReturnValue (true, 0.0);
             if (const auto* c = session.document().findConnection (id))
                 depth.setValue (c->depth, juce::dontSendNotification);
             depth.onDragStart = [this] { session.beginGesture ("modulation depth"); };
@@ -88,6 +94,8 @@ namespace
             };
             depth.setTitle ("Modulation depth");
             addAndMakeVisible (depth);
+            remove.setIcon (icon::Kind::close);
+            remove.setTooltip ("Remove this modulation");
             remove.onClick = [this] {
                 session.perform ("remove modulation", [this] (Document& d) {
                     d.disconnect (id);
@@ -105,25 +113,26 @@ namespace
             if (c == nullptr)
                 return;
             const auto* from = session.document().findNode (c->from);
-            g.setColour (colour::bone);
-            g.setFont (text (11.0f, 500));
-            g.drawText ((from != nullptr ? juce::String (session.document().displayName (session.registry(), *from)) : juce::String()) + "  >  " + c->toPort,
-                        getLocalBounds().removeFromTop (16), juce::Justification::centredLeft);
-            g.setColour (colour::boneDim);
-            g.drawText (juce::String (juce::roundToInt (depth.getValue() * 100.0)) + " %", getLocalBounds().removeFromTop (16), juce::Justification::centredRight);
+            g.setColour (board::ink);
+            g.setFont (fonts::make (11.5f, Weight::medium, 0.04f));
+            g.drawText ((from != nullptr ? juce::String (session.document().displayName (session.registry(), *from)) : juce::String()).toUpperCase() + "   >   "
+                            + juce::String (c->toPort).toUpperCase(),
+                        getLocalBounds().removeFromTop (16).withTrimmedRight (50), juce::Justification::centredLeft, true);
+            g.setColour (board::soft);
+            g.drawText (juce::String (juce::roundToInt (depth.getValue() * 100.0)) + " %", getLocalBounds().removeFromTop (16).withTrimmedRight (26), juce::Justification::centredRight);
         }
         void resized() override
         {
             auto r = getLocalBounds().withTrimmedTop (16);
-            remove.setBounds (r.removeFromRight (24).reduced (2));
+            remove.setBounds (r.removeFromRight (28));
             depth.setBounds (r);
         }
 
     private:
         Session& session;
         std::string id;
-        juce::Slider depth;
-        juce::TextButton remove { "X" };
+        RailFader depth;
+        InkButton remove { juce::String() };
     };
 }
 
@@ -137,7 +146,7 @@ public:
         if (const auto* g = doc.findGroup (id))
         {
             title = g->name;
-            subtitle = "GROUP  " + juce::String (static_cast<int> (edit::groupMembers (doc, id).size())) + " modules, flattened for the budgets";
+            subtitle = "GROUP   " + juce::String (static_cast<int> (edit::groupMembers (doc, id).size())) + " modules, flattened for the budgets";
             help = "A group plays as its modules (each still counts against the patch's limits). Its controls appear on its card and can be mapped to the "
                    "patch's macros. Right-click its card to save it as a module (.andormodule).";
             for (std::size_t c = 0; c < g->controls.size(); ++c)
@@ -234,7 +243,17 @@ public:
                 continue;   // in the step editor
             if (! d->paramShown (p, n->params))
                 continue;   // does not apply in the current mode
-            auto c = makeControl (session, target, p);
+            std::unique_ptr<juce::Component> c;
+            if (p.curve == ParamCurve::choice)
+                c = std::make_unique<ParamChoice> (session, target, p.id);
+            else if (p.curve == ParamCurve::toggle)
+                c = std::make_unique<ParamToggle> (session, target, p.id, false);
+            else
+            {
+                auto knob = std::make_unique<ParamKnob> (session, target, p.id, ParamKnob::Style::detail);
+                knob->setInks (board::soft, board::ink, colour::accent);
+                c = std::move (knob);
+            }
             addAndMakeVisible (*c);
             if (p.curve == ParamCurve::choice)
                 switchNames.push_back (p.name);
@@ -254,103 +273,117 @@ public:
 
     void layout()
     {
-        const int w = space::detailWidth - 16;
-        int y = 64;
-        helpHeight = 16 + 15 * (1 + static_cast<int> (juce::GlyphArrangement::getStringWidth (text (12.0f), help) / static_cast<float> (w - 16)));
-        y += helpHeight + 8;
+        const int w = static_cast<int> (layout::detailWidth) - 14, x0 = 16, inner = w - 2 * x0;
+        const auto helpFont = type::micro (12.5f);
+        int y = 66;
+        juce::GlyphArrangement lines;
+        lines.addFittedText (helpFont, help, 0.0f, 0.0f, static_cast<float> (inner), 400.0f, juce::Justification::topLeft, 12, 1.0f);
+        helpHeight = help.isEmpty() ? 0 : juce::roundToInt (lines.getBoundingBox (0, -1, true).getHeight()) + 6;
+        y += helpHeight + 10;
         for (auto& b : buttons)
         {
-            b->setBounds (8, y, w - 16, 28);
-            y += 34;
+            b->setBounds (x0, y, inner, 32);
+            y += 38;
         }
         for (auto& l : labels)
         {
-            l->setBounds (8, y, w - 16, 24);
-            y += 28;
+            l->setBounds (x0, y, inner, 26);
+            y += 30;
         }
+        auto section = [&] (const juce::String& name) {
+            y += 8;
+            sectionY.push_back ({ y, name });
+            y += 26;
+        };
         if (! switches.empty())
         {
-            y += 4;
-            sectionY.push_back ({ y, "MODES" });
-            y += 18;
+            section ("MODES");
             int col = 0;
+            const int cw = (inner - 10) / 2;
             for (std::size_t i = 0; i < switches.size(); ++i)
             {
-                // a choice gets its name above it; a toggle carries its own
+                // a choice gets its name above it; a toggle is a key that carries its own
                 const bool named = i < switchNames.size() && switchNames[i].isNotEmpty();
-                const int x = 8 + col * (w - 16) / 2;
+                const int x = x0 + col * (cw + 10);
                 if (named)
-                    switchLabels.push_back ({ juce::Rectangle<int> (x, y, (w - 16) / 2 - 6, 13), switchNames[i] });
-                switches[i]->setBounds (x, y + 14, (w - 16) / 2 - 6, 24);
+                    switchLabels.push_back ({ juce::Rectangle<int> (x + 2, y, cw, 14), switchNames[i] });
+                switches[i]->setBounds (x, y + 16, cw, 30);
                 if (++col == 2)
                 {
                     col = 0;
-                    y += 44;
+                    y += 54;
                 }
             }
             if (col != 0)
-                y += 44;
+                y += 54;
         }
         if (! knobs.empty())
         {
-            sectionY.push_back ({ y + 4, "CONTROLS" });
-            y += 22;
+            section ("CONTROLS");
             int col = 0;
-            const int cw = (w - 16) / 4;
+            const int cw = inner / 4;
             for (auto& c : knobs)
             {
-                c->setBounds (8 + col * cw, y, cw, 64);
+                c->setBounds (x0 + col * cw, y, cw, 90);
                 if (++col == 4)
                 {
                     col = 0;
-                    y += 70;
+                    y += 98;
                 }
             }
             if (col != 0)
-                y += 70;
+                y += 98;
         }
         if (steps != nullptr)
         {
-            sectionY.push_back ({ y + 4, "STEPS  drag pitch, Shift-drag velocity, click the row below for gates" });
-            y += 22;
-            steps->setBounds (8, y, w - 16, 120);
-            y += 128;
+            section ("STEPS");
+            stepsHint = y - 22;
+            steps->setBounds (x0, y, inner, 124);
+            y += 132;
         }
         if (! mods.empty())
         {
-            sectionY.push_back ({ y + 4, "MODULATED BY" });
-            y += 22;
+            section ("MODULATED BY");
             for (auto& m : mods)
             {
-                m->setBounds (8, y, w - 16, 40);
-                y += 44;
+                m->setBounds (x0, y, inner, 44);
+                y += 48;
             }
         }
-        setSize (w, y + 16);
+        setSize (w, y + 18);
     }
 
     void paint (juce::Graphics& g) override
     {
-        g.setColour (colour::bone);
-        g.setFont (text (18.0f, 600));
-        g.drawText (title, 8, 8, getWidth() - 16, 24, juce::Justification::centredLeft);
-        g.setColour (colour::ember);
-        g.setFont (text (10.0f, 600));
-        g.drawText (subtitle, 8, 34, getWidth() - 16, 16, juce::Justification::centredLeft);
-        g.setColour (colour::boneDim);
-        g.setFont (text (12.0f));
-        g.drawFittedText (help, 8, 60, getWidth() - 16, helpHeight, juce::Justification::topLeft, 8, 1.0f);
-        g.setFont (text (9.5f, 500));
-        g.setColour (colour::boneDim);
+        // Ceramic keys (the toggles) are drawn by the surface they sit on.
+        skin::drawKeys (g, *this);
+        const int x0 = 16, inner = getWidth() - 2 * x0;
+        g.setColour (board::ink);
+        g.setFont (fonts::make (19.0f, Weight::bold, 0.05f));
+        g.drawFittedText (title.toUpperCase(), x0, 12, inner - 30, 26, juce::Justification::centredLeft, 1, 0.7f);
+        g.setColour (board::soft);
+        g.setFont (fonts::make (10.5f, Weight::medium, 0.12f));
+        g.drawText (subtitle.toUpperCase(), x0, 38, inner, 16, juce::Justification::centredLeft, true);
+        g.setColour (board::soft);
+        g.setFont (type::micro (12.5f));
+        g.drawFittedText (help, x0, 64, inner, helpHeight, juce::Justification::topLeft, 12, 1.0f);
+        g.setFont (fonts::make (10.5f, Weight::medium, 0.06f));
+        g.setColour (board::soft);
         for (const auto& [area, name] : switchLabels)
-            g.drawText (name, area, juce::Justification::centredLeft);
-        g.setFont (text (9.5f, 600));
+            g.drawText (name.toUpperCase(), area, juce::Justification::centredLeft, true);
         for (const auto& [y, name] : sectionY)
         {
-            g.setColour (colour::boneFaint);
-            g.drawText (name, 8, y, getWidth() - 16, 14, juce::Justification::centredLeft);
-            g.setColour (colour::line);
-            g.drawHorizontalLine (y - 3, 8.0f, static_cast<float> (getWidth() - 8));
+            g.setColour (board::rule);
+            g.fillRect (x0, y, inner, 1);
+            g.setColour (board::weak.darker (0.25f));
+            g.setFont (fonts::make (10.5f, Weight::medium, 0.14f));
+            g.drawText (name, x0, y + 6, inner, 14, juce::Justification::centredLeft, false);
+        }
+        if (steps != nullptr)
+        {
+            g.setColour (board::weak);
+            g.setFont (type::micro (10.5f));
+            g.drawText ("drag pitch   Shift: velocity   lower row: gates", x0 + 56, stepsHint + 2, inner - 56, 14, juce::Justification::centredRight, false);
         }
     }
 
@@ -368,7 +401,7 @@ private:
     Session& session;
     std::string target;
     juce::String title, subtitle, help;
-    int helpHeight = 40;
+    int helpHeight = 40, stepsHint = 0;
     std::vector<std::unique_ptr<juce::Component>> knobs, switches, buttons, labels, mods;
     std::unique_ptr<juce::Component> steps;
     std::vector<std::pair<int, juce::String>> sectionY;
@@ -380,8 +413,10 @@ private:
 DetailPanel::DetailPanel (Session& s) : session (s)
 {
     viewport.setScrollBarsShown (true, false);
-    viewport.setScrollBarThickness (8);
+    viewport.setScrollBarThickness (7);
+    viewport.getVerticalScrollBar().setColour (juce::ScrollBar::thumbColourId, board::column);
     addAndMakeVisible (viewport);
+    close.setIcon (icon::Kind::close);
     close.setTooltip ("Close (Esc)");
     close.onClick = [this] {
         show ({});
@@ -424,21 +459,21 @@ void DetailPanel::refreshValues()
 
 void DetailPanel::paint (juce::Graphics& g)
 {
-    g.fillAll (colour::card);
-    g.setColour (colour::line);
-    g.drawVerticalLine (0, 0.0f, static_cast<float> (getHeight()));
+    // A column of the board (its face shows through): one rule on its left.
+    g.setColour (board::rule);
+    g.fillRect (0, 10, 1, getHeight() - 20);
     if (content == nullptr)
     {
-        g.setColour (colour::boneFaint);
-        g.setFont (text (12.5f));
+        g.setColour (board::weak);
+        g.setFont (type::micro (13.0f));
         g.drawFittedText ("Select a module to see every control.\nDouble-click a module, or press Return.", getLocalBounds().reduced (24), juce::Justification::centred, 4);
     }
 }
 
 void DetailPanel::resized()
 {
-    viewport.setBounds (getLocalBounds().withTrimmedLeft (1));
-    close.setBounds (getWidth() - 34, 8, 26, 24);
+    viewport.setBounds (getLocalBounds().withTrimmedLeft (2).withTrimmedBottom (6));
+    close.setBounds (getWidth() - 44, 10, 32, 30);
 }
 
 } // namespace andor::modular::ui

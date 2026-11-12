@@ -24,8 +24,11 @@ struct QuickAddContext
     bool portIsOutput = true;
 };
 
-/** One module (or a collapsed group) on the canvas: a compact card with its typed ports, its
-    Quick controls and a live strip of what it is doing. */
+/** One module (or a collapsed group) on the board: the routing board's tile, grown. Its face
+    is what the module is in the family (ui::lookFor: a device's enamel and motif, a source's
+    ceramic card and badge...), with its typed sockets on its edges, its quick controls and a
+    small glass of what it is doing. The component is the face plus tile::pad all round (its
+    shadow, its sockets, its selection ring). */
 class NodeView final : public juce::Component, public juce::SettableTooltipClient
 {
 public:
@@ -38,8 +41,12 @@ public:
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
+    void mouseEnter (const juce::MouseEvent&) override;
     void mouseMove (const juce::MouseEvent&) override;
     void mouseExit (const juce::MouseEvent&) override;
+    bool hitTest (int x, int y) override;
+    /** What moves on the tile between edits (its glass). */
+    void repaintLive();
 
     struct Port
     {
@@ -64,10 +71,14 @@ private:
     bool group = false;
     std::vector<Port> portList;
     std::vector<std::unique_ptr<juce::Component>> controls;
-    juce::Rectangle<int> telemetryArea, header, ledArea;
+    ModuleLook look;
+    juce::Rectangle<int> face, telemetryArea, header, ledArea, nameArea, modeArea;
     int hoverPort = -1;
+    bool hover = false, hasMode = false;
 };
 
+/** The patch board: ANDOR Analog's ROUTING board (its face, its wires with their arrowheads,
+    its sage selection ring), with every module of the patch on it. */
 class Canvas final : public juce::Component, public juce::FileDragAndDropTarget, public juce::SettableTooltipClient, private juce::Timer
 {
 public:
@@ -103,6 +114,11 @@ public:
     void select (const std::string& id, bool add);
     void clearSelection();
     Session& session() noexcept { return model; }
+    /** The board this canvas is the middle of, in its own coordinates (the same face, drawn
+        without a seam). */
+    void setBoardArea (juce::Rectangle<float> boardInCanvas);
+    /** A source's place among the patch's sources (its badge letter), else -1. */
+    int sourceOrdinal (const std::string& nodeId) const;
 
     /** Called by NodeViews. */
     void nodePressed (NodeView&, const juce::MouseEvent&);
@@ -121,6 +137,7 @@ private:
     void timerCallback() override;
     void paintCables (juce::Graphics&);
     juce::Path cablePath (juce::Point<float> a, juce::Point<float> b) const;
+    void forEachCable (const std::function<void (const Connection&, const juce::Path&, PortKind, bool hot, juce::Point<float> a, juce::Point<float> b)>&) const;
     std::string cableAt (juce::Point<float> p) const;
     void showCableMenu (const std::string& connection, juce::Point<int> screen);
     NodeView* viewFor (const std::string& nodeOrGroup) const;
@@ -148,7 +165,8 @@ private:
         PortKind kind = PortKind::audioMono;
     } cable;
     std::string hoverCable;
-    juce::Rectangle<float> breadcrumbArea;
+    juce::Rectangle<float> breadcrumbArea, boardArea;
+    std::vector<juce::Point<float>> activity;   ///< the beads on the hot wires, this frame
     int frame = 0;
 };
 

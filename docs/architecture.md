@@ -58,7 +58,7 @@
 
 `ModularProcessor` (fixed parameter bank, state) → `Session` (document + history + assets +
 external host; compile on every edit, ~0.1–6 ms) → `Editor` (PATCH: `Canvas` + `NodeView`s,
-`QuickAdd`, `DetailPanel`, macro strip; PLAY: `PlayView` with `MacroKnob`s, scenes, EVOLVE).
+`QuickAdd`, `DetailPanel`; PLAY: `PlayView`, `MacroKnob`s, `ScenePanel`; `Frame` for the family's header and keyboard row). The look is the family's own (docs/UI_COMPONENTS.md).
 
 ## Why these choices (details in DECISIONS.md)
 

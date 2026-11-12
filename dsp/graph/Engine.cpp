@@ -336,12 +336,18 @@ void Engine::renderEngineBlock (float* left, float* right, int numSamples, const
     }
 
     // Master: level, safety limiter (instant attack, 120 ms release), scope, peak.
-    const float master = static_cast<float> (std::pow (10.0, current->settings.masterDb / 20.0));
+    const double masterDb = liveMasterSet.load (std::memory_order_relaxed) ? static_cast<double> (liveMasterDb.load (std::memory_order_relaxed)) : current->settings.masterDb;
+    const float masterTarget = static_cast<float> (std::pow (10.0, masterDb / 20.0));
+    if (masterNow < 0.0f)
+        masterNow = masterTarget;   // (a level that never moves is applied exactly, as before)
+    const float masterGlide = static_cast<float> (1.0 - std::exp (-1.0 / (0.01 * rate)));
     const bool limit = current->settings.limiter;
     const float release = static_cast<float> (1.0 - std::exp (-1.0 / (0.12 * rate)));
     float peak = 0.0f;
     for (int i = 0; i < numSamples; ++i)
     {
+        masterNow += (masterTarget - masterNow) * masterGlide;
+        const float master = masterNow;
         float l = left[i] * master, r = right[i] * master;
         if (! std::isfinite (l) || ! std::isfinite (r))
             l = r = 0.0f;   // never pass NaN/inf to the host

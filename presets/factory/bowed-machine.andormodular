@@ -49,7 +49,7 @@
       "version": 1,
       "domain": "event",
       "x": 0,
-      "y": -96,
+      "y": -88,
       "size": 1,
       "enabled": true,
       "params": {
@@ -84,7 +84,7 @@
       "type": "util.voicemix",
       "version": 1,
       "domain": "global",
-      "x": 512,
+      "x": 480,
       "y": -96,
       "size": 1,
       "enabled": true,
@@ -99,7 +99,7 @@
       "type": "util.output",
       "version": 1,
       "domain": "global",
-      "x": 1024,
+      "x": 960,
       "y": -88,
       "size": 1,
       "enabled": true,
@@ -179,8 +179,8 @@
       "type": "fx.space",
       "version": 1,
       "domain": "global",
-      "x": 768,
-      "y": -96,
+      "x": 720,
+      "y": -88,
       "size": 1,
       "enabled": true,
       "params": {
@@ -267,7 +267,7 @@
     {
       "id": "g-0016",
       "name": "BOWED MACHINE",
-      "x": 256,
+      "x": 240,
       "y": -96,
       "collapsed": true,
       "ports": [

@@ -5,51 +5,66 @@ namespace andor::modular
 
 using namespace ui;
 
+namespace
+{
+    juce::Rectangle<int> at (juce::Rectangle<float> r) { return r.toNearestInt(); }
+}
+
 Editor::Editor (ModularProcessor& p)
-    : AudioProcessorEditor (p), processor (p), session (p.session()), canvas (p.session()), detail (p.session()), play (p), quickAdd (Registry::builtIn())
+    : AudioProcessorEditor (p),
+      processor (p),
+      session (p.session()),
+      volume (p.session()),
+      canvas (p.session()),
+      detail (p.session()),
+      play (p),
+      scenes (p),
+      pitchWheel ([&p] (float bend) {
+          MidiMessage m;
+          m.kind = MidiMessage::Kind::pitchBend;
+          m.value = bend;
+          p.playFromInterface (m);
+      }),
+      keyboard (p),
+      quickAdd (Registry::builtIn())
 {
     setLookAndFeel (&lookAndFeel);
     juce::LookAndFeel::setDefaultLookAndFeel (&lookAndFeel);
     setWantsKeyboardFocus (true);
     setTitle ("ANDOR Modular");
+    setOpaque (true);
+    addAndMakeVisible (surface);
 
-    addAndMakeVisible (canvas);
-    addChildComponent (detail);
-    addChildComponent (play);
-    addChildComponent (quickAdd);
-    addChildComponent (toast);
-    for (int i = 0; i < maxMacros; ++i)
-    {
-        strip.push_back (std::make_unique<MacroKnob> (p, i, false));
-        addAndMakeVisible (*strip.back());
-    }
+    // Header.
+    presetBar.onMenu = [this] { showPatchesMenu(); };
+    presetBar.onPrevious = [this] { stepFactory (-1); };
+    presetBar.onNext = [this] { stepFactory (1); };
+    saveKey.setIcon (icon::Kind::cassette);
+    saveKey.setTooltip ("Save the patch (Cmd/Ctrl + S)");
+    saveKey.setTitle ("Save");
+    saveKey.onClick = [this] { save(); };
+    patchKey.setIcon (icon::Kind::patch);
+    patchKey.setTooltip ("PATCH: the modules and their cables (Ctrl + Tab)");
+    patchKey.setTitle ("Patch");
+    patchKey.onClick = [this] { showPlay (false); };
+    playKey.setIcon (icon::Kind::performance);
+    playKey.setTooltip ("PLAY: the instrument's face, its macros and scenes (Ctrl + Tab)");
+    playKey.setTitle ("Play");
+    playKey.onClick = [this] { showPlay (true); };
+    menuButton.setIcon (icon::Kind::dots);
+    menuButton.setInk (colour::text.withAlpha (0.75f));
+    menuButton.setTooltip ("More");
+    menuButton.setTitle ("Menu");
+    menuButton.onClick = [this] { showMainMenu(); };
+    for (auto* c : std::initializer_list<juce::Component*> { &presetBar, &saveKey, &patchKey, &playKey, &volume, &menuButton })
+        surface.addAndMakeVisible (*c);
 
-    name.setEditable (false, true);
-    name.setFont (text (15.0f, 600));
-    name.setColour (juce::Label::textColourId, colour::bone);
-    name.setTooltip ("Double-click to rename the instrument");
-    name.onTextChange = [this] {
-        const auto n = name.getText().toStdString();
-        session.perform ("rename", [&] (Document& d) {
-            d.name = n;
-            edit::Result r;
-            r.ok = true;
-            return r;
-        }, false);
-    };
-    addAndMakeVisible (name);
-    for (auto* b : { &patches, &undo, &redo, &arrange, &fit, &patchTab, &playTab, &evolve })
-        addAndMakeVisible (*b);
-    patchTab.setClickingTogglesState (true);
-    playTab.setClickingTogglesState (true);
-    patchTab.setRadioGroupId (9);
-    playTab.setRadioGroupId (9);
-    patchTab.setToggleState (true, juce::dontSendNotification);
-    patchTab.onClick = [this] { showPlay (false); };
-    playTab.onClick = [this] { showPlay (true); };
-    patches.onClick = [this] { showPatchesMenu(); };
-    undo.onClick = [this] { session.undo(); };
-    redo.onClick = [this] { session.redo(); };
+    // The board.
+    addModule.setIcon (icon::Kind::plus);
+    addModule.setTooltip ("Add a module (Cmd/Ctrl + K, or right-click the board)");
+    addModule.onClick = [this] { addModuleFromHeader(); };
+    arrange.setIcon (icon::Kind::arrange);
+    arrange.setTooltip ("Lay the patch out left to right (signal flow)");
     arrange.onClick = [this] {
         session.perform ("arrange", [this] (Document& d) {
             edit::autoArrange (d, session.registry());
@@ -60,37 +75,39 @@ Editor::Editor (ModularProcessor& p)
         });
         canvas.fitAll();
     };
+    fit.setIcon (icon::Kind::fit);
+    fit.setTooltip ("Show everything (F)");
     fit.onClick = [this] { canvas.fitAll(); };
-    evolve.onClick = [this] { juce::CallOutBox::launchAsynchronously (std::make_unique<EvolvePanel> (session), evolve.getScreenBounds(), nullptr); };
-    voices.addItem ("POLY 1", 1);
-    voices.addItem ("POLY 2", 2);
-    voices.addItem ("POLY 4", 4);
-    voices.addItem ("POLY 8", 8);
-    voices.addItem ("POLY 16", 16);
-    voices.addItem ("MONO", 101);
-    voices.addItem ("LEGATO", 102);
-    voices.setTooltip ("Voices per independent chain (each note stream has its own)");
-    voices.onChange = [this] {
-        const int id = voices.getSelectedId();
-        session.perform ("voices", [id] (Document& d) {
-            if (id > 100)
-            {
-                d.settings.voiceMode = id - 100;
-                if (d.settings.glideSeconds <= 0.0)
-                    d.settings.glideSeconds = 0.06;
-            }
-            else
-            {
-                d.settings.voiceMode = 0;
-                d.settings.polyphony = id;
-            }
-            edit::Result r;
-            r.ok = true;
-            r.message = id > 100 ? (id == 101 ? "mono" : "legato") : std::to_string (id) + " voices";
-            return r;
-        });
-    };
-    addAndMakeVisible (voices);
+    undo.setIcon (icon::Kind::undo);
+    undo.setTitle ("Undo");
+    undo.onClick = [this] { session.undo(); };
+    redo.setIcon (icon::Kind::redo);
+    redo.setTitle ("Redo");
+    redo.onClick = [this] { session.redo(); };
+    surface.addAndMakeVisible (canvas);
+    surface.addChildComponent (detail);
+    surface.addChildComponent (play);
+    for (auto* b : { &addModule, &arrange, &fit, &undo, &redo })
+        surface.addAndMakeVisible (*b);
+
+    // The macro panel.
+    for (int i = 0; i < maxMacros; ++i)
+    {
+        macros.push_back (std::make_unique<MacroKnob> (p, i));
+        surface.addChildComponent (*macros.back());
+    }
+    surface.addChildComponent (scenes);
+
+    // The keyboard row.
+    voices.onClick = [this] { showVoicesMenu(); };
+    evolveKey.setIcon (icon::Kind::chevron, true);
+    evolveKey.setFontHeight (14.0f);
+    evolveKey.setTooltip ("EVOLVE: a seeded variation of the patch (Cmd/Ctrl + E)");
+    evolveKey.onClick = [this] { showEvolve (evolvePanel == nullptr); };
+    status.onUndo = [this] { session.undo(); };
+    for (auto* c : std::initializer_list<juce::Component*> { &pitchWheel, &keyboard, &voices, &evolveKey, &status })
+        surface.addAndMakeVisible (*c);
+    surface.addChildComponent (quickAdd);
 
     canvas.onQuickAdd = [this] (const QuickAddContext& ctx, juce::Point<int> screen) { openQuickAdd (ctx, screen); };
     canvas.onOpenDetail = [this] (const std::string& id) { openDetail (id); };
@@ -104,59 +121,89 @@ Editor::Editor (ModularProcessor& p)
     };
     detail.onClose = [this] {
         detailShown = false;
-        detail.setVisible (false);
-        resized();
+        layoutSurface();
     };
     quickAdd.onChoose = [this] (const std::string& type) { choose (type); };
     quickAdd.onClose = [this] { canvas.grabKeyboardFocus(); };
-    toast.onUndo = [this] { session.undo(); };
-    play.onPatch = [this] { showPlay (false); };
-    play.onSave = [this] { saveAs(); };
 
     session.addListener (this);
+    // One instrument, scaled as one piece: the window keeps the family's shape.
     setResizable (true, true);
-    setResizeLimits (869, 560, 2600, 1700);
-    setSize (1448, 868);
+    getConstrainer()->setFixedAspectRatio (static_cast<double> (layout::width) / static_cast<double> (layout::height));
+    setResizeLimits (869, 652, 1810, 1358);
+    setSize (1280, 960);
     showPlay (session.document().view.playView);
-    updateBar();
+    updateHeader();
+    updateStatus();
     startTimerHz (10);
 }
 
 Editor::~Editor()
 {
     session.removeListener (this);
-    juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
+    if (&juce::LookAndFeel::getDefaultLookAndFeel() == &lookAndFeel)
+        juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
     setLookAndFeel (nullptr);
+}
+
+juce::Rectangle<float> Editor::boardArea() const
+{
+    // PATCH: the board takes the band down to the macro panel's foot (a patch needs the room);
+    // PLAY: the family's sources band, the macro panel under it.
+    return playShown ? layout::board : layout::board.withBottom (layout::macroPanel.getBottom());
 }
 
 void Editor::showPlay (bool p)
 {
     playShown = p;
     session.document().view.playView = p;
-    play.setVisible (p);
-    canvas.setVisible (! p);
-    detail.setVisible (! p && detailShown);
-    for (auto& k : strip)
-        k->setVisible (! p);
-    arrange.setVisible (! p);
-    fit.setVisible (! p);
-    patchTab.setToggleState (! p, juce::dontSendNotification);
-    playTab.setToggleState (p, juce::dontSendNotification);
     if (p)
+        quickAdd.close();
+    patchKey.setToggleState (! p, juce::dontSendNotification);
+    playKey.setToggleState (p, juce::dontSendNotification);
+    if (p)
+    {
         play.refresh();
-    resized();
+        scenes.refresh();
+    }
+    layoutSurface();
 }
 
 void Editor::openDetail (const std::string& id)
 {
     detailShown = true;
     detail.show (id);
-    detail.setVisible (! playShown);
-    resized();
+    layoutSurface();
+}
+
+void Editor::showEvolve (bool show)
+{
+    if (! show)
+    {
+        evolvePanel.reset();
+        evolveKey.setToggleState (false, juce::dontSendNotification);
+        skin::repaintKey (evolveKey);
+        return;
+    }
+    evolvePanel = std::make_unique<EvolvePanel> (session);
+    evolvePanel->onClose = [this] { juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<Editor> (this)] {
+                                        if (safe != nullptr)
+                                            safe->showEvolve (false);
+                                    }); };
+    surface.addAndMakeVisible (*evolvePanel);
+    // Over the instrument, its foot above the keyboard row's cards (the key that opened it
+    // stays in sight, lit).
+    const auto card = at (layout::voicesCard);
+    evolvePanel->setTopLeftPosition (card.getRight() - EvolvePanel::cardWidth - EvolvePanel::margin, card.getY() - 10 - EvolvePanel::cardHeight - EvolvePanel::margin);
+    evolvePanel->toFront (true);
+    evolveKey.setToggleState (true, juce::dontSendNotification);
+    skin::repaintKey (evolveKey);
 }
 
 void Editor::openQuickAdd (const QuickAddContext& ctx, juce::Point<int> screen)
 {
+    if (playShown)
+        showPlay (false);
     pending = ctx;
     std::vector<const NodeDesc*> only;
     juce::String title;
@@ -176,7 +223,15 @@ void Editor::openQuickAdd (const QuickAddContext& ctx, juce::Point<int> screen)
         session.message ("nothing connects to that port here", false, true);
         return;
     }
-    quickAdd.open (getLocalPoint (nullptr, screen), title, only);
+    quickAdd.open (surface.getLocalPoint (nullptr, screen), title, only);
+}
+
+void Editor::addModuleFromHeader()
+{
+    QuickAddContext ctx;
+    ctx.world = canvas.toWorld (canvas.getLocalBounds().getCentre().toFloat());
+    const auto under = addModule.getBounds().getBottomLeft().translated (-QuickAdd::cardWidth + addModule.getWidth(), 8);
+    openQuickAdd (ctx, surface.localPointToGlobal (under));
 }
 
 void Editor::choose (const std::string& type)
@@ -226,6 +281,21 @@ void Editor::choose (const std::string& type)
     canvas.grabKeyboardFocus();
 }
 
+void Editor::stepFactory (int delta)
+{
+    const auto& items = Session::factoryPatches();
+    if (items.empty())
+        return;
+    const int count = static_cast<int> (items.size());
+    int current = -1;
+    for (int i = 0; i < count; ++i)
+        if (items[static_cast<std::size_t> (i)].name == juce::String (session.document().name))
+            current = i;
+    if (current < 0)
+        current = delta > 0 ? -1 : 0;
+    session.loadFactory (((current + delta) % count + count) % count);
+}
+
 void Editor::showPatchesMenu()
 {
     juce::PopupMenu menu;
@@ -237,24 +307,38 @@ void Editor::showPatchesMenu()
                 session.loadFile (fc.getResult());
         });
     });
-    menu.addItem ("Save", [this] {
-        if (session.currentFile() != juce::File())
-            session.saveFile (session.currentFile());
-        else
-            saveAs();
-    });
+    menu.addItem ("Save", [this] { save(); });
     menu.addItem ("Save as...", [this] { saveAs(); });
+    menu.addItem ("Rename...", [this] {
+        auto* w = new juce::AlertWindow ("The instrument's name", {}, juce::MessageBoxIconType::NoIcon, this);
+        w->addTextEditor ("name", juce::String (session.document().name));
+        w->addButton ("RENAME", 1, juce::KeyPress (juce::KeyPress::returnKey));
+        w->addButton ("CANCEL", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        w->enterModalState (true, juce::ModalCallbackFunction::create ([this, w] (int result) {
+                                if (result != 1)
+                                    return;
+                                const auto n = w->getTextEditorContents ("name").trim().toStdString();
+                                session.perform ("rename", [&] (Document& d) {
+                                    d.name = n;
+                                    edit::Result r;
+                                    r.ok = ! n.empty();
+                                    return r;
+                                }, false);
+                            }),
+                            true);
+    });
     menu.addSeparator();
-    juce::PopupMenu factory;
+    menu.addSectionHeader ("FACTORY PATCHES");
     const auto& items = Session::factoryPatches();
     for (int i = 0; i < static_cast<int> (items.size()); ++i)
-        factory.addItem (items[static_cast<std::size_t> (i)].name, [this, i] { session.loadFactory (i); });
-    menu.addSubMenu ("Factory patches", factory);
+        menu.addItem (items[static_cast<std::size_t> (i)].name, true, items[static_cast<std::size_t> (i)].name == juce::String (session.document().name),
+                      [this, i] { session.loadFactory (i); });
+    menu.addSeparator();
     juce::PopupMenu modules;
     for (const auto& m : Session::factoryModules())
         modules.addItem (m.name, [this, text = m.text] {
-            const auto at = canvas.toWorld (canvas.getLocalBounds().getCentre().toFloat());
-            session.perform ("add module", [&] (Document& d) { return edit::importModule (d, session.registry(), text, at.x, at.y); });
+            const auto where = canvas.toWorld (canvas.getLocalBounds().getCentre().toFloat());
+            session.perform ("add module", [&] (Document& d) { return edit::importModule (d, session.registry(), text, where.x, where.y); });
         });
     const auto userModules = Session::userDirectory().getChildFile ("Modules").findChildFiles (juce::File::findFiles, false, "*.andormodule");
     if (! userModules.isEmpty())
@@ -262,13 +346,72 @@ void Editor::showPatchesMenu()
     for (const auto& f : userModules)
         modules.addItem (f.getFileNameWithoutExtension(), [this, f] {
             const auto text = f.loadFileAsString().toStdString();
-            const auto at = canvas.toWorld (canvas.getLocalBounds().getCentre().toFloat());
-            session.perform ("add module", [&] (Document& d) { return edit::importModule (d, session.registry(), text, at.x, at.y); });
+            const auto where = canvas.toWorld (canvas.getLocalBounds().getCentre().toFloat());
+            session.perform ("add module", [&] (Document& d) { return edit::importModule (d, session.registry(), text, where.x, where.y); });
         });
     menu.addSubMenu ("Add a module (group)", modules);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&presetBar));
+}
+
+void Editor::showMainMenu()
+{
+    juce::PopupMenu menu;
+    menu.addItem ("Undo" + (session.history().canUndo() ? "  " + juce::String (session.history().undoLabel()) : juce::String()), session.history().canUndo(), false,
+                  [this] { session.undo(); });
+    menu.addItem ("Redo" + (session.history().canRedo() ? "  " + juce::String (session.history().redoLabel()) : juce::String()), session.history().canRedo(), false,
+                  [this] { session.redo(); });
+    menu.addSeparator();
+    menu.addItem ("Add a module...", [this] { addModuleFromHeader(); });
+    menu.addItem ("Evolve...", [this] { showEvolve (true); });
     menu.addSeparator();
     menu.addItem ("All notes off", [this] { processor.engine().allNotesOff(); });
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&patches));
+    menu.addSeparator();
+    juce::PopupMenu size;
+    for (const int width : { 869, 1086, 1280, 1448, 1810 })
+        size.addItem (juce::String (juce::roundToInt (100.0 * width / 1448.0)) + " %", true, std::abs (getWidth() - width) < 3,
+                      [this, width] { setSize (width, juce::roundToInt (static_cast<float> (width) * layout::height / layout::width)); });
+    menu.addSubMenu ("Size", size);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&menuButton));
+}
+
+void Editor::showVoicesMenu()
+{
+    const auto& settings = session.document().settings;
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("VOICES (for each independent chain)");
+    auto choose = [this] (int id) {
+        session.perform ("voices", [id] (Document& d) {
+            if (id > 100)
+            {
+                d.settings.voiceMode = id - 100;
+                if (d.settings.glideSeconds <= 0.0)
+                    d.settings.glideSeconds = 0.06;
+            }
+            else
+            {
+                d.settings.voiceMode = 0;
+                d.settings.polyphony = id;
+            }
+            edit::Result r;
+            r.ok = true;
+            r.message = id > 100 ? (id == 101 ? "mono" : "legato") : std::to_string (id) + " voices";
+            return r;
+        });
+    };
+    for (const int n : { 1, 2, 4, 8, 16 })
+        menu.addItem ("Poly " + juce::String (n), true, settings.voiceMode == 0 && settings.polyphony == n, [choose, n] { choose (n); });
+    menu.addSeparator();
+    menu.addItem ("Mono", true, settings.voiceMode == 1, [choose] { choose (101); });
+    menu.addItem ("Legato", true, settings.voiceMode == 2, [choose] { choose (102); });
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&voices));
+}
+
+void Editor::save()
+{
+    if (session.currentFile() != juce::File())
+        session.saveFile (session.currentFile());
+    else
+        saveAs();
 }
 
 void Editor::saveAs()
@@ -288,134 +431,213 @@ void Editor::sessionChanged (bool structural)
     {
         canvas.rebuild();
         if (detailShown)
+        {
             detail.rebuild();
-        play.refresh();
-        for (auto& k : strip)
-            k->refresh();
+            if (detail.shown().empty())
+            {
+                // what it showed is gone (another patch, a deleted module): the column closes
+                detailShown = false;
+                layoutSurface();
+            }
+        }
     }
     else
     {
         canvas.refreshValues();
         detail.refreshValues();
-        play.refresh();
-        for (auto& k : strip)
-            k->refresh();
     }
-    updateBar();
+    play.refresh();
+    scenes.refresh();
+    for (auto& k : macros)
+        k->refresh();
+    volume.refresh();
+    updateHeader();
+    updateStatus();
 }
 
 void Editor::sessionMessage (const juce::String& text, bool canUndo, bool isError)
 {
-    toast.show (text, canUndo, isError);
-    resized();
+    // A sentence, as the instrument says it.
+    status.show (text.substring (0, 1).toUpperCase() + text.substring (1), canUndo, isError);
 }
 
-void Editor::updateBar()
+void Editor::updateHeader()
 {
     const auto& d = session.document();
-    name.setText (d.name, juce::dontSendNotification);
+    presetBar.setPatchName (d.name, session.history().canUndo());
     undo.setEnabled (session.history().canUndo());
     redo.setEnabled (session.history().canRedo());
     undo.setTooltip (session.history().canUndo() ? "Undo " + juce::String (session.history().undoLabel()) + " (Cmd/Ctrl + Z)" : juce::String ("Nothing to undo"));
-    redo.setTooltip (session.history().canRedo() ? "Redo " + juce::String (session.history().redoLabel()) : juce::String ("Nothing to redo"));
-    voices.setSelectedId (d.settings.voiceMode > 0 ? 100 + d.settings.voiceMode : d.settings.polyphony, juce::dontSendNotification);
-    repaint (bar);
+    redo.setTooltip (session.history().canRedo() ? "Redo " + juce::String (session.history().redoLabel()) + " (Shift + Cmd/Ctrl + Z)" : juce::String ("Nothing to redo"));
+    const bool mono = d.settings.voiceMode > 0;
+    voices.setText (mono ? (d.settings.voiceMode == 1 ? "MONO" : "LEGATO") : "POLY", mono ? juce::String ("1 VOICE") : juce::String (d.settings.polyphony) + (d.settings.polyphony == 1 ? " VOICE" : " VOICES"));
+    surface.repaint (at (boardArea().withHeight (layout::boardHeader)));
 }
 
-void Editor::timerCallback() { repaint (status); }
-
-void Editor::paint (juce::Graphics& g)
+void Editor::updateStatus()
 {
-    g.fillAll (colour::peat);
-    g.setColour (colour::cardHigh);
-    g.fillRect (bar);
-    g.setColour (colour::line);
-    g.drawHorizontalLine (bar.getBottom() - 1, 0.0f, static_cast<float> (getWidth()));
-    drawWordmark (g, bar.withWidth (getWidth() < 1200 ? 150 : 190).reduced (16, getWidth() < 1200 ? 17 : 14).toFloat());
-    // status: voices, CPU, compile time, the patch's budget and any problems
     const auto& rep = session.report();
-    g.setFont (text (10.5f, 500));
-    juce::String s;
-    s << processor.engine().activeVoices() << " VOICES   CPU " << juce::roundToInt (processor.cpuLoad() * 100.0f) << "%   " << rep.sources << "/6 SOURCES   "
-      << rep.nodes << "/32 MODULES";
     int problems = 0;
     for (const auto& i : rep.issues)
         problems += i.severity == Issue::Severity::error ? 1 : 0;
-    g.setColour (problems > 0 ? colour::error : colour::boneDim);
+    juce::String s;
+    const int sounding = processor.engine().activeVoices();
+    s << sounding << (sounding == 1 ? " voice" : " voices") << "      CPU " << juce::roundToInt (processor.cpuLoad() * 100.0f) << " %      " << rep.nodes << " of 32 modules      "
+      << rep.sources << " of 6 sources";
     if (problems > 0)
-        s << "   " << problems << " PROBLEM" << (problems > 1 ? "S" : "");
-    g.drawText (s, status, juce::Justification::centredRight);
+        s << "      " << problems << (problems > 1 ? " problems" : " problem");
+    status.setIdleText (s);
+    voices.setSounding (sounding > 0);
+}
+
+void Editor::timerCallback() { updateStatus(); }
+
+//==============================================================================
+void Editor::paint (juce::Graphics& g)
+{
+    // (only seen where a host gives the window another shape than the instrument's)
+    g.fillAll (draw::surround());
+}
+
+void Editor::paintSurface (juce::Graphics& g)
+{
+    // InstrumentFrame.cpp, frame::paint: the housing (ANDOR Analog's walnut cheeks from its
+    // pack), the identity, the keyboard's bed, the macro panel, then the ceramic keys.
+    draw::housing (g, surface.getLocalBounds().toFloat());
+    {
+        const auto bold = fonts::make (60.0f, Weight::displayBold).withHorizontalScale (1.07f);
+        const auto light = fonts::make (60.0f, Weight::displayLight).withHorizontalScale (1.07f);
+        const auto logo = design::layout::logo;
+        juce::GlyphArrangement mark, rest;
+        mark.addLineOfText (bold, "ANDOR", logo.x, logo.y);
+        const float w = mark.getBoundingBox (0, -1, true).getRight() - logo.x + 1.0f;
+        rest.addLineOfText (light, "/MODULAR", logo.x + w, logo.y);
+        g.setColour (colour::text);
+        mark.draw (g);
+        rest.draw (g);
+        g.setFont (fonts::make (15.0f, Weight::regular, 0.16f));
+        g.setColour (colour::textSecondary);
+        g.drawText ("Invent an instrument", design::layout::logoSubtitle.withHeight (17.0f), juce::Justification::centredLeft, false);
+    }
+
+    // The board.
+    const auto board = boardArea();
+    paintBoard (g, board, design::layout::panelRadius);
     if (! playShown)
     {
-        g.setColour (colour::card);
-        g.fillRect (stripArea);
-        g.setColour (colour::line);
-        g.drawHorizontalLine (stripArea.getY(), 0.0f, static_cast<float> (getWidth()));
-        if (getWidth() >= 1200)
-        {
-            g.setColour (colour::boneFaint);
-            g.setFont (text (9.5f, 600));
-            g.drawText ("PERFORMANCE PANEL", stripArea.withWidth (150).reduced (16, 0), juce::Justification::centredLeft);
-        }
+        const auto header = board.withHeight (layout::boardHeader);
+        g.setColour (board::ink);
+        g.setFont (type::panelHeader());
+        g.drawText ("PATCH", header.withTrimmedLeft (24.0f).withWidth (80.0f), juce::Justification::centredLeft, false);
+        const auto& rep = session.report();
+        g.setColour (board::weak.darker (0.2f));
+        g.setFont (fonts::make (11.5f, Weight::medium, 0.1f));
+        g.drawText (juce::String (rep.nodes) + (rep.nodes == 1 ? " MODULE" : " MODULES") + "      " + juce::String (static_cast<int> (session.document().connections.size()))
+                        + " CABLES",
+                    header.withTrimmedLeft (104.0f).withWidth (300.0f).translated (0.0f, 1.0f), juce::Justification::centredLeft, false);
+        g.setColour (board::rule);
+        g.fillRect (juce::Rectangle<float> (board.getX() + 14.0f, header.getBottom(), board.getWidth() - 28.0f, 1.0f));
+        // between the board's tools and its history: a short rule
+        g.fillRect (juce::Rectangle<float> (static_cast<float> (undo.getX()) - 9.0f, header.getY() + 14.0f, 1.0f, header.getHeight() - 28.0f));
     }
+    else
+    {
+        // The macros and the scenes share the family's one panel.
+        const auto panel = layout::macroPanel;
+        draw::raised (g, panel, design::layout::panelRadius, colour::panelTop, colour::panelBottom);
+        g.setColour (colour::divider);
+        g.fillRect (juce::Rectangle<float> (layout::sceneDividerX, 695.0f, 1.0f, 190.0f));
+    }
+
+    // The keyboard's bed (rendered: the keys sit in a recess cut into the housing).
+    const auto keys = layout::keyboard;
+    bool bed = false;
+    if (auto* pieces = skin::active())
+        bed = pieces->draw (g, "keybed", juce::Rectangle<float> (keys.getX() - 2.0f, keys.getY() - 3.0f, keys.getWidth() + 4.0f, keys.getHeight() + 5.0f));
+    if (! bed)
+    {
+        juce::Path frame;
+        frame.addRoundedRectangle (keys.expanded (2.0f), 6.0f);
+        design::CachedShadow (juce::Colour (0x22302418), 3, { 0, 1 }).drawForPath (g, frame);
+        g.setColour (juce::Colour (0xffd9d0c3));
+        g.fillPath (frame);
+        g.setColour (juce::Colour (0xffc4bbad));
+        g.strokePath (frame, juce::PathStrokeType (1.0f));
+    }
+    skin::drawKeys (g, surface);
 }
 
 void Editor::resized()
 {
-    auto r = getLocalBounds();
-    bar = r.removeFromTop (space::topBar);
-    // The bar steps down gracefully: the status first, then the labels' room.
-    const bool narrow = getWidth() < 1200;
-    auto b = bar.reduced (12, 12);
-    b.removeFromLeft (narrow ? 150 : 190);
-    patches.setBounds (b.removeFromLeft (narrow ? 80 : 92));
-    b.removeFromLeft (8);
-    name.setVisible (getWidth() >= 960);   // (the name stays on PLAY)
-    if (name.isVisible())
-    {
-        name.setBounds (b.removeFromLeft (narrow ? 96 : std::min (240, getWidth() / 7)));
-        b.removeFromLeft (8);
-    }
-    undo.setBounds (b.removeFromLeft (narrow ? 52 : 64));
-    b.removeFromLeft (4);
-    redo.setBounds (b.removeFromLeft (narrow ? 52 : 64));
-    b.removeFromLeft (narrow ? 8 : 12);
-    patchTab.setBounds (b.removeFromLeft (narrow ? 64 : 76));
-    playTab.setBounds (b.removeFromLeft (narrow ? 64 : 76));
-    b.removeFromLeft (narrow ? 8 : 12);
-    evolve.setBounds (b.removeFromLeft (narrow ? 70 : 80));
-    b.removeFromLeft (8);
-    voices.setBounds (b.removeFromLeft (narrow ? 88 : 100));
-    b.removeFromLeft (8);
-    if (! playShown)
-    {
-        arrange.setBounds (b.removeFromLeft (narrow ? 72 : 80));
-        b.removeFromLeft (4);
-        fit.setBounds (b.removeFromLeft (44));
-    }
-    status = b.withTrimmedLeft (8);
+    const float scale = std::min (static_cast<float> (getWidth()) / layout::width, static_cast<float> (getHeight()) / layout::height);
+    surface.setBounds (0, 0, juce::roundToInt (layout::width), juce::roundToInt (layout::height));
+    surface.setTransform (juce::AffineTransform::scale (scale).translated (0.5f * (static_cast<float> (getWidth()) - layout::width * scale),
+                                                                             0.5f * (static_cast<float> (getHeight()) - layout::height * scale)));
+    layoutSurface();
+}
 
+void Editor::layoutSurface()
+{
+    presetBar.setBounds (at (layout::presetBar));
+    saveKey.setBounds (at (layout::saveKey));
+    patchKey.setBounds (at (layout::viewKey));
+    playKey.setBounds (at (layout::viewKey.translated (48.0f, 0.0f)));
+    volume.setBounds (at (layout::volume));
+    menuButton.setBounds (at (layout::menu));
+
+    const auto board = at (boardArea());
+    const int headerH = juce::roundToInt (layout::boardHeader);
+    for (auto* b : { &addModule, &arrange, &fit, &undo, &redo })
+        b->setVisible (! playShown);
+    canvas.setVisible (! playShown);
+    detail.setVisible (! playShown && detailShown);
+    play.setVisible (playShown);
+    for (auto& k : macros)
+        k->setVisible (playShown);
+    scenes.setVisible (playShown);
     if (playShown)
     {
-        play.setBounds (r);
+        play.setBounds (board);
+        for (int i = 0; i < maxMacros; ++i)
+            macros[static_cast<std::size_t> (i)]->setBounds (juce::roundToInt (layout::macroFirstX + layout::macroPitch * static_cast<float> (i) - 66.0f), 700, 132, 186);
+        scenes.setBounds (at (layout::scenes));
     }
     else
     {
-        stripArea = r.removeFromBottom (78);
-        auto s = stripArea.withTrimmedLeft (narrow ? 16 : 160).withTrimmedRight (16);
-        const int w = std::min (110, s.getWidth() / maxMacros);
-        for (auto& k : strip)
-            k->setBounds (s.removeFromLeft (w).reduced (4, 6));
+        // The board's header: its tools on the right (ink only, the routing board's way).
+        auto tools = board.withHeight (headerH).withTrimmedRight (14).reduced (0, 6);
+        redo.setBounds (tools.removeFromRight (32));
+        undo.setBounds (tools.removeFromRight (32));
+        tools.removeFromRight (16);
+        fit.setBounds (tools.removeFromRight (fit.idealWidth()));
+        arrange.setBounds (tools.removeFromRight (arrange.idealWidth()));
+        addModule.setBounds (tools.removeFromRight (addModule.idealWidth()));
+        // The canvas is the middle of the board's own face (see Canvas::setBoardArea).
+        auto inner = board.reduced (2, 0).withTrimmedTop (headerH + 1).withTrimmedBottom (7);
         if (detailShown)
-            detail.setBounds (r.removeFromRight (narrow ? 300 : space::detailWidth));
-        canvas.setBounds (r);
+            detail.setBounds (inner.removeFromRight (juce::roundToInt (layout::detailWidth)));
+        canvas.setBounds (inner);
+        canvas.setBoardArea (boardArea().translated (static_cast<float> (-inner.getX()), static_cast<float> (-inner.getY())));
     }
-    toast.setBounds (getLocalBounds().withSizeKeepingCentre (std::min (560, getWidth() - 48), 40).withY (getHeight() - (playShown ? 180 : 132)));
+
+    auto wheel = at (layout::pitchWheel);
+    pitchWheel.setBounds (wheel.withHeight (wheel.getHeight() + 20));
+    keyboard.setBounds (at (layout::keyboard));
+    keyboard.setKeyWidth (layout::keyboard.getWidth() / 52.0f);   // 88 keys = 52 white keys
+    voices.setBounds (at (layout::voicesCard));
+    evolveKey.setBounds (at (layout::evolveKey));
+    status.setBounds (at (layout::status));
+    surface.repaint();
 }
 
 bool Editor::keyPressed (const juce::KeyPress& k)
 {
     const auto mods = k.getModifiers();
+    if (k == juce::KeyPress::escapeKey && evolvePanel != nullptr)
+    {
+        showEvolve (false);
+        return true;
+    }
     if (mods.isCommandDown() && k.getKeyCode() == 'Z')
     {
         mods.isShiftDown() ? session.redo() : session.undo();
@@ -423,22 +645,17 @@ bool Editor::keyPressed (const juce::KeyPress& k)
     }
     if (mods.isCommandDown() && k.getKeyCode() == 'K')
     {
-        QuickAddContext ctx;
-        ctx.world = canvas.toWorld (canvas.getLocalBounds().getCentre().toFloat());
-        openQuickAdd (ctx, canvas.localPointToGlobal (canvas.getLocalBounds().getCentre().translated (-190, -200)));
+        addModuleFromHeader();
         return true;
     }
     if (mods.isCommandDown() && k.getKeyCode() == 'S')
     {
-        if (session.currentFile() != juce::File())
-            session.saveFile (session.currentFile());
-        else
-            saveAs();
+        save();
         return true;
     }
     if (mods.isCommandDown() && k.getKeyCode() == 'E')
     {
-        evolve.triggerClick();
+        showEvolve (evolvePanel == nullptr);
         return true;
     }
     if (k == juce::KeyPress::tabKey && mods.isCtrlDown())

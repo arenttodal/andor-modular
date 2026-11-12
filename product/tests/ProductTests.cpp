@@ -170,7 +170,7 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
     };
     for (const int width : { 869, 1448, 1810 })
     {
-        const int height = width * 868 / 1448;
+        const int height = width * 1086 / 1448;   // the instrument's own shape (1448 x 1086, scaled as one piece)
         editor->setSize (width, height);
         for (const auto& shot : { Shot { "Analog Organic Morph", false, "patch-morph" }, Shot { "Three Arps", false, "patch-three-arps" },
                                   Shot { "Scene Performance", true, "play-scenes" }, Shot { "Bowed Machine", true, "play-bowed-machine" } })
@@ -187,7 +187,12 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
             settle();
             snapshot (*editor, juce::String (shot.name) + "-" + juce::String (width));
         }
-        // Quick Add open, and a module's detail panel
+        // EVOLVE over the instrument
+        editor->showEvolve (true);
+        settle();
+        snapshot (*editor, "play-evolve-" + juce::String (width));
+        editor->showEvolve (false);
+        // Quick Add open, and a module's detail column
         editor->showPlay (false);
         ui::QuickAddContext ctx;
         ctx.world = { 0.0f, 0.0f };
@@ -197,7 +202,7 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
         snapshot (*editor, "quick-add-" + juce::String (width));
         editor->quickAddView().close();
         for (const auto& n : p.session().document().nodes)
-            if ((n.type == "proc.filter" || n.type == "osc.analog" || n.type == "fx.space") && n.group == p.session().document().view.currentGroup)
+            if ((n.type == "event.stepseq" || n.type == "proc.filter" || n.type == "fx.space") && n.group == p.session().document().view.currentGroup)
             {
                 editor->openDetail (n.id);
                 editor->canvasView().select (n.id, false);
@@ -209,7 +214,7 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
     }
     // an empty patch: the first thing a musician sees after NEW
     p.session().newPatch();
-    editor->setSize (1448, 868);
+    editor->setSize (1448, 1086);
     settle();
     snapshot (*editor, "patch-empty-1448");
     CHECK (editor->getWidth() == 1448);

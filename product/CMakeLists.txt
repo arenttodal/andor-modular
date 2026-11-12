@@ -4,37 +4,62 @@
 # program: processor, state, editor, Quick Add and screenshots, run headless under a virtual
 # display). JUCE modules are compiled per target with that target's configuration.
 
-set(ANDOR_UI_FONTS ${MODULAR_OSP_DIR}/shared/andor-ui/Resources/fonts)
 file(GLOB MODULAR_FACTORY_PATCHES ${PROJECT_SOURCE_DIR}/presets/factory/*.andormodular)
 file(GLOB MODULAR_FACTORY_MODULES ${PROJECT_SOURCE_DIR}/presets/modules/*.andormodule)
 file(GLOB MODULAR_FACTORY_SAMPLES ${PROJECT_SOURCE_DIR}/presets/factory/samples/*.wav)
 
-# Typefaces: ANDOR's own selection (SIL Open Font License, texts in resources/licenses) and the
-# factory content (patches, modules, ANDOR's synthesised recordings).
+# The factory content (patches, modules, ANDOR's synthesised recordings).
 juce_add_binary_data(ModularData
     HEADER_NAME ModularData.h
     NAMESPACE ModularData
     SOURCES
-        ${ANDOR_UI_FONTS}/Inter-Regular.ttf
-        ${ANDOR_UI_FONTS}/Inter-Medium.ttf
-        ${ANDOR_UI_FONTS}/Inter-SemiBold.ttf
-        ${ANDOR_UI_FONTS}/Outfit-ExtraLight.ttf
-        ${ANDOR_UI_FONTS}/Outfit-ExtraBold.ttf
         ${MODULAR_FACTORY_PATCHES}
         ${MODULAR_FACTORY_MODULES}
         ${MODULAR_FACTORY_SAMPLES})
 
+# ---------------------------------------------------------------------------
+# The ANDOR interface, composed from the family's own code and rendered assets (never copied,
+# never redrawn; docs/UI_COMPONENTS.md):
+#   - AndorUiData (ANDOR OSP): Inter and Outfit, the ivory macro knob sprites, the ceramic skin
+#     (housing, cards, panels, keys in four states, bezels, lenses, fader, keybed);
+#   - the tokens and drawing (Design), the look-and-feel, the skin and sprite renderers, the
+#     rack faceplate (shared/andor-ui);
+#   - ANDOR Analog's walnut housing (its skin pack) and its devices' enamel identities and
+#     motifs (FxIdentity), from the pinned submodule.
+# ---------------------------------------------------------------------------
+if(NOT TARGET AndorUiData)
+    include(${MODULAR_OSP_DIR}/shared/andor-ui/AndorUi.cmake)
+endif()
+set(MODULAR_ANDOR_UI_DIR ${MODULAR_OSP_DIR}/shared/andor-ui/Source)
+set(MODULAR_ANDOR_UI_SOURCES
+    ${MODULAR_ANDOR_UI_DIR}/Design.cpp
+    ${MODULAR_ANDOR_UI_DIR}/OspLookAndFeel.cpp
+    ${MODULAR_ANDOR_UI_DIR}/CeramicSkin.cpp
+    ${MODULAR_ANDOR_UI_DIR}/SpriteKnobRenderer.cpp
+    ${MODULAR_ANDOR_UI_DIR}/RackFaceplate.cpp
+    ${MODULAR_ANALOG_DIR}/product/Source/FxIdentity.cpp)
+juce_add_binary_data(ModularMaterialsData
+    HEADER_NAME ModularMaterialsData.h
+    NAMESPACE ModularMaterialsData
+    SOURCES ${MODULAR_ANALOG_DIR}/product/Resources/walnut-skin.zip)
+
 set(MODULAR_PRODUCT_SOURCES
+    ${MODULAR_ANDOR_UI_SOURCES}
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/Theme.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/Session.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/ExternalHost.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/PluginProcessor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/PluginEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/Widgets.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/Frame.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/Canvas.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/QuickAdd.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/DetailPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/PlayView.cpp)
+set(MODULAR_PRODUCT_INCLUDES
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source
+    ${MODULAR_ANDOR_UI_DIR}
+    ${MODULAR_ANALOG_DIR}/product/Source)
 
 set(MODULAR_JUCE_DEFINITIONS
     JUCE_WEB_BROWSER=0
@@ -74,12 +99,14 @@ juce_add_plugin(ANDOR_Modular
     MICROPHONE_PERMISSION_ENABLED FALSE)
 
 target_sources(ANDOR_Modular PRIVATE ${MODULAR_PRODUCT_SOURCES})
-target_include_directories(ANDOR_Modular PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
+target_include_directories(ANDOR_Modular PRIVATE ${MODULAR_PRODUCT_INCLUDES})
 target_compile_definitions(ANDOR_Modular PUBLIC ${MODULAR_JUCE_DEFINITIONS} JUCE_MODAL_LOOPS_PERMITTED=0 JucePlugin_Build_Product=1)
 target_link_libraries(ANDOR_Modular
     PRIVATE
         andor_modular_dsp
         ModularData
+        ModularMaterialsData
+        AndorUiData
         juce::juce_audio_utils
         juce::juce_audio_formats
         juce::juce_audio_processors
@@ -96,13 +123,15 @@ if(MODULAR_BUILD_TESTS)
     target_sources(modular_product_tests PRIVATE
         ${MODULAR_PRODUCT_SOURCES}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/ProductTests.cpp)
-    target_include_directories(modular_product_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
+    target_include_directories(modular_product_tests PRIVATE ${MODULAR_PRODUCT_INCLUDES})
     target_compile_definitions(modular_product_tests PRIVATE ${MODULAR_JUCE_DEFINITIONS} JUCE_MODAL_LOOPS_PERMITTED=1 JUCE_STANDALONE_APPLICATION=1
         JucePlugin_Name="ANDOR Modular" JucePlugin_IsSynth=1 JucePlugin_WantsMidiInput=1 JucePlugin_ProducesMidiOutput=0
         JucePlugin_IsMidiEffect=0 JucePlugin_EditorRequiresKeyboardFocus=1 JucePlugin_VersionString="${MODULAR_VERSION}")
     target_link_libraries(modular_product_tests PRIVATE
         andor_modular_dsp
         ModularData
+        ModularMaterialsData
+        AndorUiData
         Catch2::Catch2
         juce::juce_audio_utils
         juce::juce_audio_formats

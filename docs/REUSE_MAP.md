@@ -26,3 +26,7 @@ risks: [00_DISCOVERY_AUDIT.md](00_DISCOVERY_AUDIT.md).
 | VOICE MIX, POLY>GLOBAL, MIXER, SWITCH, SPLIT/MERGE, GAIN/VCA, FEEDBACK DELAY, OUTPUT, SCOPE | — | new |
 | Engine hand-over | pattern of OSP `ModelExchange` | atomic publish + lock-free retire ring |
 | Fonts | OSP `shared/andor-ui/Resources/fonts` | — |
+| Interface: tokens, materials, drawing, look-and-feel, ceramic skin, sprite knobs | OSP `shared/andor-ui/Source` (`Design`, `OspLookAndFeel`, `CeramicSkin`, `SpriteKnobRenderer`, `RackFaceplate`) + `AndorUiData` | compiled into `product/` from the submodule, unchanged |
+| Interface: walnut housing pack, copper materials | Analog `product/Resources/walnut-skin.zip`, `docs/WALNUT_VISUAL_DESIGN.md` | embedded from the submodule; materials set value for value (`ui::applyMaterials`) |
+| Interface: device enamels and motifs | Analog `product/Source/FxIdentity.*` | compiled from the submodule, unchanged; mapped to modules in `ui::lookFor` |
+| Interface: routing board, keyboard, wheel, VOLUME, preset bar, macro setup | Analog `FxRouting.cpp`; OSP `InstrumentFrame.cpp`, `MainSections.cpp` | their drawing recipe re-bound to the patch in `product/Source/{Canvas,Frame,PlayView}.*` (docs/DECISIONS.md D-16) |

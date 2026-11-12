@@ -7,7 +7,7 @@ namespace andor::modular::ui
 
 namespace
 {
-    constexpr int knobW = 40, knobH = 50, choiceH = 22, telemetryH = 22;
+    constexpr int knobW = 42;
 
     const CompiledNode* liveNode (Session& s, const std::string& id)
     {
@@ -23,15 +23,19 @@ namespace
         return n != nullptr && i < n->telemetryCount.load (std::memory_order_relaxed) ? n->telemetry[static_cast<std::size_t> (i)].load (std::memory_order_relaxed) : 0.0f;
     }
 
-    /** A group's own control on its card (moves the group control channel live). */
+    /** A group's own control on its card (moves the group control channel live): the same
+        mini knob as a module's. */
     class GroupKnob final : public juce::Slider
     {
     public:
         GroupKnob (Session& s, std::string g, int c) : session (s), group (std::move (g)), control (c)
         {
             setSliderStyle (RotaryHorizontalVerticalDrag);
+            setRotaryParameters (LookAndFeel::rotaryStart, LookAndFeel::rotaryEnd, true);
             setTextBoxStyle (NoTextBox, true, 0, 0);
             setRange (0.0, 1.0);
+            getProperties().set ("mini", true);
+            getProperties().set ("arc", static_cast<juce::int64> (board::bone.getARGB()));
             refresh();
         }
         void refresh()
@@ -53,11 +57,17 @@ namespace
         {
             auto r = getLocalBounds();
             const auto* gm = session.document().findGroup (group);
-            g.setColour (colour::boneDim);
-            g.setFont (text (10.0f, 500));
-            g.drawFittedText (gm != nullptr && control < static_cast<int> (gm->controls.size()) ? juce::String (gm->controls[static_cast<std::size_t> (control)].name) : juce::String(),
-                              r.removeFromBottom (ParamKnob::labelHeight), juce::Justification::centred, 1, 0.8f);
-            drawKnob (g, r.toFloat().reduced (2.0f), static_cast<float> (getValue()), false, 0.0f, false, isMouseOverOrDragging(), colour::ember);
+            const auto caption = r.removeFromBottom (13);
+            const auto area = r.withSizeKeepingCentre (std::min (r.getWidth(), r.getHeight()), r.getHeight());
+            const auto params = getRotaryParameters();
+            getLookAndFeel().drawRotarySlider (g, area.getX(), area.getY(), area.getWidth(), area.getHeight(), static_cast<float> (getValue()), params.startAngleRadians,
+                                               params.endAngleRadians, *this);
+            g.setColour (board::bone.withAlpha (isMouseOverOrDragging() ? 1.0f : 0.74f));
+            g.setFont (fonts::make (9.5f, Weight::medium, 0.05f));
+            g.drawFittedText (isMouseOverOrDragging() ? juce::String (juce::roundToInt (getValue() * 100.0)) + " %"
+                                                      : (gm != nullptr && control < static_cast<int> (gm->controls.size()) ? juce::String (gm->controls[static_cast<std::size_t> (control)].name)
+                                                                                                                             : juce::String()),
+                              caption, juce::Justification::centred, 1, 0.75f);
         }
 
     private:
@@ -71,6 +81,9 @@ namespace
 NodeView::NodeView (Canvas& owner, std::string id, bool isGroupCard) : canvas (owner), nodeId (std::move (id)), group (isGroupCard)
 {
     setWantsKeyboardFocus (true);
+    // The face (its enamel and motif, its ceramic) is drawn once and kept; only what moves
+    // on it (the glass, a turned knob) is drawn again.
+    setBufferedToImage (true);
     rebuild();
 }
 
@@ -95,6 +108,7 @@ void NodeView::rebuild()
         const auto* g = doc.findGroup (nodeId);
         if (g == nullptr)
             return;
+        look = groupLook();
         for (const auto& p : g->ports)
         {
             Port port;
@@ -126,6 +140,7 @@ void NodeView::rebuild()
     {
         const auto* n = doc.findNode (nodeId);
         const auto* d = n != nullptr ? s.registry().find (n->type) : nullptr;
+        look = lookFor (n != nullptr ? n->type : std::string(), canvas.sourceOrdinal (nodeId));
         if (d != nullptr)
         {
             for (const auto& p : d->inputs)
@@ -151,65 +166,92 @@ void NodeView::rebuild()
                 if (! isChoice && knobs >= 4)
                     continue;
                 (isChoice ? choices : knobs)++;
-                auto c = makeControl (s, nodeId, p);
+                std::unique_ptr<juce::Component> c;
+                if (p.curve == ParamCurve::choice)
+                {
+                    auto mode = std::make_unique<ParamMode> (s, nodeId, p.id);
+                    mode->setInks (look.mutedInk, look.ink);
+                    c = std::move (mode);
+                }
+                else if (p.curve == ParamCurve::toggle)
+                {
+                    auto toggle = std::make_unique<ParamToggle> (s, nodeId, p.id, true);
+                    toggle->setInks (look.mutedInk, look.face == ModuleLook::Face::enamel ? look.ink : look.arc);
+                    c = std::move (toggle);
+                }
+                else
+                {
+                    auto knob = std::make_unique<ParamKnob> (s, nodeId, p.id, ParamKnob::Style::tile);
+                    knob->setInks (look.mutedInk, look.ink, look.arc);
+                    c = std::move (knob);
+                }
                 addAndMakeVisible (*c);
                 controls.push_back (std::move (c));
             }
         }
     }
     const int rows = std::max (rowsIn, rowsOut);
-    int knobCount = 0, choiceCount = 0;
+    int knobCount = 0;
     for (auto& c : controls)
-        (dynamic_cast<juce::ComboBox*> (c.get()) != nullptr || dynamic_cast<juce::Button*> (c.get()) != nullptr ? choiceCount : knobCount)++;
-    const int height = space::headerHeight + 6 + rows * space::portSpacing + (choiceCount > 0 ? choiceH + 6 : 0) + (knobCount > 0 ? knobH + 4 : 0) + telemetryH + 8;
-    setSize (space::nodeWidth, height);
-    int yi = space::headerHeight + 6 + space::portSpacing / 2, yo = yi;
+        knobCount += dynamic_cast<juce::Slider*> (c.get()) != nullptr ? 1 : 0;
+    const int height = tile::top + rows * tile::portRow + (rows > 0 ? 4 : 0) + (knobCount > 0 ? tile::knobRow : 0) + tile::glass + 10;
+    setSize (tile::width + 2 * tile::pad, height + 2 * tile::pad);
+    int yi = tile::pad + tile::top + tile::portRow / 2 + 1, yo = yi;
     for (auto& p : portList)
     {
         if (p.input)
         {
-            p.at = { 0.0f, static_cast<float> (yi) };
-            yi += space::portSpacing;
+            p.at = { static_cast<float> (tile::pad), static_cast<float> (yi) };
+            yi += tile::portRow;
         }
         else
         {
-            p.at = { static_cast<float> (space::nodeWidth), static_cast<float> (yo) };
-            yo += space::portSpacing;
+            p.at = { static_cast<float> (tile::pad + tile::width), static_cast<float> (yo) };
+            yo += tile::portRow;
         }
     }
     resized();
     const auto* n = doc.findNode (nodeId);
     setTitle (group ? juce::String (doc.findGroup (nodeId)->name) : (n != nullptr ? juce::String (doc.displayName (s.registry(), *n)) : juce::String()));
+    repaint();
 }
 
 void NodeView::resized()
 {
-    int rows = 0;
-    for (const auto& p : portList)
-        rows = std::max (rows, p.input ? 1 : 0);
     int rowsIn = 0, rowsOut = 0;
     for (const auto& p : portList)
         (p.input ? rowsIn : rowsOut)++;
-    header = getLocalBounds().removeFromTop (space::headerHeight);
-    ledArea = header.removeFromRight (26);
-    auto area = getLocalBounds().withTrimmedTop (space::headerHeight + 6 + std::max (rowsIn, rowsOut) * space::portSpacing).reduced (8, 0);
-    std::vector<juce::Component*> knobs, choices;
+    const int rows = std::max (rowsIn, rowsOut);
+    face = getLocalBounds().reduced (tile::pad);
+    // The name band: what stands left of the name (a device's motif, a source's badge), the
+    // name, under it the mode; the status light at its right end.
+    const int nameX = look.face == ModuleLook::Face::enamel ? 52 : (look.badge >= 0 ? 40 : 13);
+    header = face.withHeight (tile::top);
+    ledArea = juce::Rectangle<int> (face.getRight() - 24, face.getY() + 5, 20, 20);
+    nameArea = juce::Rectangle<int> (face.getX() + nameX, face.getY() + 6, face.getWidth() - nameX - 26, 17);
+    modeArea = juce::Rectangle<int> (face.getX() + nameX, face.getY() + 22, face.getWidth() - nameX - 10, 15);
+    auto area = face.withTrimmedTop (tile::top + rows * tile::portRow + (rows > 0 ? 4 : 0)).reduced (8, 0);
+    std::vector<juce::Component*> knobs;
+    hasMode = false;
     for (auto& c : controls)
-        (dynamic_cast<juce::ComboBox*> (c.get()) != nullptr || dynamic_cast<juce::Button*> (c.get()) != nullptr ? choices : knobs).push_back (c.get());
-    for (auto* c : choices)
     {
-        c->setBounds (area.removeFromTop (choiceH));
-        area.removeFromTop (6);
+        if (dynamic_cast<juce::Slider*> (c.get()) != nullptr)
+            knobs.push_back (c.get());
+        else
+        {
+            c->setBounds (modeArea);
+            hasMode = true;
+        }
     }
     if (! knobs.empty())
     {
-        auto row = area.removeFromTop (knobH);
-        const int w = row.getWidth() / std::max<int> (4, static_cast<int> (knobs.size()));
-        for (auto* k : knobs)
-            k->setBounds (row.removeFromLeft (w).withSizeKeepingCentre (std::min (w, knobW + 4), knobH));
-        area.removeFromTop (4);
+        auto row = area.removeFromTop (tile::knobRow);
+        const int w = row.getWidth() / 4;
+        const int startX = row.getX() + (row.getWidth() - w * static_cast<int> (knobs.size())) / 2;
+        for (std::size_t i = 0; i < knobs.size(); ++i)
+            knobs[i]->setBounds (juce::Rectangle<int> (startX + w * static_cast<int> (i), row.getY(), w, row.getHeight()).withSizeKeepingCentre (std::min (w, knobW), row.getHeight() - 2));
     }
-    telemetryArea = area.removeFromTop (telemetryH);
+    telemetryArea = area.removeFromTop (tile::glass);
 }
 
 void NodeView::refreshControls()
@@ -223,10 +265,16 @@ void NodeView::refreshControls()
     }
 }
 
+void NodeView::repaintLive()
+{
+    if (! telemetryArea.isEmpty())
+        repaint (telemetryArea);
+}
+
 int NodeView::portAt (juce::Point<float> local) const
 {
     for (std::size_t i = 0; i < portList.size(); ++i)
-        if (portList[i].at.getDistanceFrom (local) < 10.0f)
+        if (portList[i].at.getDistanceFrom (local) < 9.0f)
             return static_cast<int> (i);
     return -1;
 }
@@ -237,7 +285,15 @@ juce::Point<float> NodeView::portPosition (const std::string& node, const std::s
         if (p.input == input && p.id == port && (! group || p.innerNode == node))
             return p.at;
     // a group card without that port exposed: its edge
-    return { input ? 0.0f : static_cast<float> (getWidth()), static_cast<float> (space::headerHeight / 2) };
+    return { static_cast<float> (input ? tile::pad : tile::pad + tile::width), static_cast<float> (tile::pad + tile::top / 2) };
+}
+
+bool NodeView::hitTest (int x, int y)
+{
+    // The room around the face belongs to the board, except where a socket sits on its edge.
+    if (face.contains (x, y))
+        return true;
+    return portAt ({ static_cast<float> (x), static_cast<float> (y) }) >= 0;
 }
 
 void NodeView::paint (juce::Graphics& g)
@@ -245,63 +301,48 @@ void NodeView::paint (juce::Graphics& g)
     auto& s = canvas.session();
     const auto& doc = s.document();
     const bool sel = canvas.selection().count (nodeId) > 0;
-    auto r = getLocalBounds().toFloat().reduced (0.5f);
+    const auto r = face.toFloat();
     const auto* n = group ? nullptr : doc.findNode (nodeId);
     const auto* d = n != nullptr ? s.registry().find (n->type) : nullptr;
     const bool enabled = group || (n != nullptr && n->enabled);
     const bool missing = ! group && d == nullptr;
 
-    // the card
-    g.setColour (juce::Colours::black.withAlpha (0.35f));
-    g.fillRoundedRectangle (r.translated (0.0f, 3.0f), static_cast<float> (space::corner));
-    g.setColour (group ? colour::card.brighter (0.06f) : colour::card);
-    g.fillRoundedRectangle (r, static_cast<float> (space::corner));
-    g.setColour (colour::cardHigh);
-    g.fillRoundedRectangle (r.withHeight (static_cast<float> (space::headerHeight)), static_cast<float> (space::corner));
-    g.fillRect (r.withTop (static_cast<float> (space::headerHeight) - 6.0f).withHeight (6.0f));
-    g.setColour (sel ? colour::ember : (missing ? colour::error : colour::line));
-    g.drawRoundedRectangle (r, static_cast<float> (space::corner), sel ? 1.6f : 1.0f);
-    if (group)
+    paintFace (g, r, look, hover, ! enabled);
+    if (sel)
     {
-        // a stacked edge: a group holds several modules
-        g.setColour (colour::line);
-        g.drawRoundedRectangle (r.translated (3.0f, -3.0f).withTrimmedRight (3.0f).withHeight (8.0f), 3.0f, 1.0f);
+        // The routing board's selection ring.
+        g.setColour (board::sage);
+        g.drawRoundedRectangle (r.expanded (3.0f), tile::radius + 3.0f, 2.0f);
     }
 
-    // header: category tick, name, domain chip, power LED
-    juce::String title, chip;
-    juce::Colour tick = colour::sporeDim;
+    // The name band.
+    juce::String title, under;
     if (group)
     {
         const auto* gm = doc.findGroup (nodeId);
         title = gm != nullptr ? juce::String (gm->name) : juce::String ("GROUP");
-        chip = juce::String (static_cast<int> (edit::groupMembers (doc, nodeId).size())) + " MOD";
-        tick = colour::ember;
+        under = juce::String (static_cast<int> (edit::groupMembers (doc, nodeId).size())) + " MODULES";
     }
     else if (n != nullptr)
     {
         title = juce::String (doc.displayName (s.registry(), *n));
-        chip = n->domain == Domain::voice ? "VOICE" : (n->domain == Domain::event ? "NOTES" : "GLOBAL");
-        if (d != nullptr)
-            tick = d->category == "Sources" ? colour::ember : (d->category == "Controllers" ? colour::port (PortKind::control)
-                                                                : (d->category == "Spatial" ? colour::port (PortKind::gate) : colour::boneDim));
+        under = n->domain == Domain::voice ? "PER VOICE" : (n->domain == Domain::event ? "NOTES" : "GLOBAL");
     }
-    g.setColour (tick);
-    g.fillRect (juce::Rectangle<float> (8.0f, 9.0f, 3.0f, 10.0f));
-    g.setColour (enabled ? colour::bone : colour::boneFaint);
-    g.setFont (text (12.0f, 600));
-    auto titleArea = header.withTrimmedLeft (16).withTrimmedRight (52);
-    g.drawFittedText (title, titleArea, juce::Justification::centredLeft, 1, 0.75f);
-    g.setFont (text (8.5f, 600));
-    const auto chipArea = juce::Rectangle<int> (header.getRight() - 50, 8, 46, 13);
-    g.setColour (colour::line);
-    g.fillRoundedRectangle (chipArea.toFloat(), 3.0f);
-    g.setColour (colour::boneDim);
-    g.drawText (chip, chipArea, juce::Justification::centred);
-    g.setColour (enabled ? colour::ember : colour::sporeDim);
-    g.fillEllipse (ledArea.toFloat().withSizeKeepingCentre (7.0f, 7.0f));
+    if (look.badge >= 0)
+        paintBadge (g, juce::Rectangle<float> (r.getX() + 10.0f, r.getY() + 9.0f, 23.0f, 23.0f), look.badge, look.badgeLetter);
+    g.setColour (look.ink.withMultipliedAlpha (enabled ? 1.0f : 0.6f));
+    g.setFont (fonts::make (13.5f, Weight::bold, 0.06f));
+    g.drawFittedText (title.toUpperCase(), nameArea, juce::Justification::centredLeft, 1, 0.7f);
+    if (! hasMode)
+    {
+        g.setColour (look.mutedInk.withMultipliedAlpha (enabled ? 1.0f : 0.7f));
+        g.setFont (fonts::make (10.5f, Weight::medium, 0.07f));
+        g.drawFittedText (under, modeArea, juce::Justification::centredLeft, 1, 0.75f);
+    }
+    if (! group)
+        paintLight (g, ledArea.toFloat(), look, enabled);
 
-    // ports and their names
+    // Sockets on the face's edges, their names inside.
     std::set<std::string> connectedIn, connectedOut;
     for (const auto& c : doc.connections)
     {
@@ -310,45 +351,59 @@ void NodeView::paint (juce::Graphics& g)
         if (c.from == nodeId || (group && std::any_of (portList.begin(), portList.end(), [&] (const Port& p) { return p.innerNode == c.from && p.id == c.fromPort; })))
             connectedOut.insert ((group ? c.from + "/" : std::string()) + c.fromPort);
     }
-    g.setFont (text (10.0f, 500));
+    g.setFont (fonts::make (9.5f, Weight::medium, 0.06f));
     for (std::size_t i = 0; i < portList.size(); ++i)
     {
         const auto& p = portList[i];
         const auto key = (group ? p.innerNode + "/" : std::string()) + p.id;
         const bool on = p.input ? connectedIn.count (key) > 0 : connectedOut.count (key) > 0;
-        drawPort (g, p.at, p.kind, on, static_cast<int> (i) == hoverPort);
-        g.setColour (on ? colour::bone : colour::boneDim);
-        const auto labelArea = p.input ? juce::Rectangle<float> (12.0f, p.at.y - 8.0f, 80.0f, 16.0f) : juce::Rectangle<float> (static_cast<float> (getWidth()) - 92.0f, p.at.y - 8.0f, 80.0f, 16.0f);
-        g.drawText (p.name, labelArea, p.input ? juce::Justification::centredLeft : juce::Justification::centredRight);
+        drawSocket (g, p.at, p.kind, on, static_cast<int> (i) == hoverPort);
+        g.setColour (on ? look.ink.withAlpha (0.92f) : look.mutedInk);
+        const auto labelArea = p.input ? juce::Rectangle<float> (r.getX() + 10.0f, p.at.y - 8.0f, 78.0f, 16.0f) : juce::Rectangle<float> (r.getRight() - 88.0f, p.at.y - 8.0f, 78.0f, 16.0f);
+        g.drawText (juce::String (p.name).toUpperCase(), labelArea, p.input ? juce::Justification::centredLeft : juce::Justification::centredRight, false);
     }
     if (missing)
     {
-        g.setColour (colour::error);
-        g.setFont (text (10.5f));
-        g.drawFittedText ("missing module: " + juce::String (n != nullptr ? n->type : std::string()) + " (kept, silent)", getLocalBounds().withTrimmedTop (space::headerHeight).reduced (10, 4),
-                          juce::Justification::topLeft, 3);
+        g.setColour (look.ink);
+        g.setFont (type::micro (11.0f));
+        g.drawFittedText ("Missing module: " + juce::String (n != nullptr ? n->type : std::string()) + " (kept, silent)", telemetryArea.expanded (0, 6), juce::Justification::centredLeft, 2);
+        return;
     }
-    paintTelemetry (g, telemetryArea.toFloat());
+    if (! telemetryArea.isEmpty())
+    {
+        paintGlass (g, telemetryArea.toFloat(), look);
+        paintTelemetry (g, telemetryArea.toFloat());
+    }
 }
 
 void NodeView::paintTelemetry (juce::Graphics& g, juce::Rectangle<float> area)
 {
     auto& s = canvas.session();
-    if (group || area.isEmpty())
+    const auto inner = area.reduced (6.0f, 4.0f);
+    const auto lit = look.trace, dim = look.trace.withAlpha (0.28f), words = colour::wellText.brighter (0.25f);
+    g.setFont (fonts::make (9.5f, Weight::medium, 0.08f));
+    auto label = [&] (const juce::String& t, juce::Colour c) {
+        g.setColour (c);
+        g.drawText (t, inner, juce::Justification::centredLeft, false);
+    };
+    if (group)
+    {
+        // A group shows what leaves it: the loudest of its members.
+        float level = 0.0f;
+        for (const auto& id : edit::groupMembers (s.document(), nodeId))
+            if (const auto* live = liveNode (s, id))
+                level = std::max (level, live->peak.load (std::memory_order_relaxed));
+        g.setColour (dim);
+        g.fillRoundedRectangle (inner.withHeight (3.0f).withCentre (inner.getCentre()), 1.5f);
+        g.setColour (lit);
+        g.fillRoundedRectangle (inner.withHeight (3.0f).withCentre (inner.getCentre()).withWidth (inner.getWidth() * juce::jlimit (0.0f, 1.0f, level)), 1.5f);
         return;
+    }
     const auto* n = s.document().findNode (nodeId);
     if (n == nullptr)
         return;
     const auto* live = liveNode (s, nodeId);
-    g.setColour (colour::peatDeep);
-    g.fillRoundedRectangle (area, 3.0f);
-    auto inner = area.reduced (6.0f, 4.0f);
-    g.setFont (text (9.5f, 500));
     const auto& type = n->type;
-    auto label = [&] (const juce::String& t, juce::Colour c = colour::boneDim) {
-        g.setColour (c);
-        g.drawText (t, inner, juce::Justification::centredLeft);
-    };
     if (type == "event.arp" || type == "event.stepseq" || type == "event.generative" || type == "event.clock")
     {
         const int steps = type == "event.arp" ? 14 : 16;
@@ -364,23 +419,23 @@ void NodeView::paintTelemetry (juce::Graphics& g, juce::Rectangle<float> area)
                 h = note >= 0.0f ? 0.25f + 0.7f * juce::jlimit (0.0f, 1.0f, (note - 36.0f) / 48.0f) : 0.08f;
             }
             const auto cell = juce::Rectangle<float> (inner.getX() + w * static_cast<float> (i) + 1.0f, inner.getBottom() - inner.getHeight() * h, w - 2.0f, inner.getHeight() * h);
-            g.setColour (now ? colour::ember : colour::sporeDim);
-            g.fillRect (cell);
+            g.setColour (now ? lit : dim);
+            g.fillRoundedRectangle (cell, 1.0f);
         }
         return;
     }
     if (type == "src.granular")
     {
-        g.setColour (colour::sporeDim);
-        g.drawHorizontalLine (static_cast<int> (inner.getCentreY()), inner.getX(), inner.getRight());
+        g.setColour (dim);
+        g.fillRect (juce::Rectangle<float> (inner.getX(), inner.getCentreY() - 0.5f, inner.getWidth(), 1.0f));
         const int count = live != nullptr ? live->telemetryCount.load() - 2 : 0;
-        g.setColour (colour::spore);
+        g.setColour (lit.withAlpha (0.85f));
         for (int i = 0; i < count; ++i)
-            g.fillEllipse (inner.getX() + inner.getWidth() * tel (live, 2 + i) - 2.0f, inner.getY() + 2.0f + static_cast<float> ((i * 5) % 9), 4.0f, 4.0f);
-        g.setColour (colour::ember);
-        g.drawVerticalLine (static_cast<int> (inner.getX() + inner.getWidth() * tel (live, 1)), inner.getY(), inner.getBottom());
-        g.setColour (colour::boneDim);
-        g.drawText (juce::String (static_cast<int> (tel (live, 0))) + " GRAINS", inner, juce::Justification::centredRight);
+            g.fillEllipse (inner.getX() + inner.getWidth() * tel (live, 2 + i) - 1.5f, inner.getY() + 1.0f + static_cast<float> ((i * 5) % 11), 3.0f, 3.0f);
+        g.setColour (colour::accent);
+        g.fillRect (juce::Rectangle<float> (inner.getX() + inner.getWidth() * tel (live, 1), inner.getY(), 1.2f, inner.getHeight()));
+        g.setColour (words);
+        g.drawText (juce::String (static_cast<int> (tel (live, 0))) + " GRAINS", inner, juce::Justification::centredRight, false);
         return;
     }
     if (type == "src.organic" || type == "src.rhythm")
@@ -390,17 +445,17 @@ void NodeView::paintTelemetry (juce::Graphics& g, juce::Rectangle<float> area)
         const auto asset = key.empty() ? nullptr : s.assets().resolve (s.resolveKey (key).getFullPathName().toStdString());
         if (asset == nullptr || key.empty())
         {
-            label ("DROP A RECORDING", colour::warn);
+            label ("DROP A RECORDING", colour::arpOnDark);
             return;
         }
         if (asset->status == SampleAsset::Status::missing || asset->status == SampleAsset::Status::failed)
         {
-            label (asset->status == SampleAsset::Status::missing ? "MISSING: DROP TO RELINK" : "UNREADABLE", colour::error);
+            label (asset->status == SampleAsset::Status::missing ? "MISSING: DROP TO RELINK" : "UNREADABLE", juce::Colour (0xffe28a6c));
             return;
         }
         if (! asset->overview.empty())
         {
-            g.setColour (colour::sporeDim);
+            g.setColour (lit.withAlpha (0.6f));
             const float w = inner.getWidth() / static_cast<float> (asset->overview.size());
             for (std::size_t i = 0; i < asset->overview.size(); ++i)
             {
@@ -410,69 +465,70 @@ void NodeView::paintTelemetry (juce::Graphics& g, juce::Rectangle<float> area)
         }
         if (type == "src.organic" && tel (live, 0) >= 0.0f && live != nullptr && live->telemetryCount.load() > 0)
         {
-            g.setColour (colour::ember);
-            g.drawVerticalLine (static_cast<int> (inner.getX() + inner.getWidth() * tel (live, 0)), inner.getY(), inner.getBottom());
+            g.setColour (colour::accent.brighter (0.2f));
+            g.fillRect (juce::Rectangle<float> (inner.getX() + inner.getWidth() * tel (live, 0), inner.getY(), 1.2f, inner.getHeight()));
         }
         if (asset->status != SampleAsset::Status::ready)
-            label (asset->status == SampleAsset::Status::loading ? "LOADING" : "PLAYABLE, ANALYSING", colour::warn);
+            label (asset->status == SampleAsset::Status::loading ? "LOADING" : "PLAYABLE, ANALYSING", colour::arpOnDark);
         else if (type == "src.rhythm" && asset->tempoBpm > 0.0)
         {
-            g.setColour (colour::bone);
-            g.drawText (juce::String (asset->tempoBpm, 1) + " BPM", inner, juce::Justification::centredRight);
+            g.setColour (words.brighter (0.4f));
+            g.drawText (juce::String (asset->tempoBpm, 1) + " BPM", inner, juce::Justification::centredRight, false);
         }
         return;
     }
     if (type == "proc.morph" || type == "proc.morph.global")
     {
-        const bool voiceMorph = type == "proc.morph";
+        // The two sounds' bands, side by side: A in the first layer's light, B in the second's.
         const float w = inner.getWidth() / 14.0f;
         for (int i = 0; i < 7; ++i)
         {
             const float a = juce::jlimit (0.0f, 1.0f, (tel (live, i) + 80.0f) / 80.0f);
             const float b = juce::jlimit (0.0f, 1.0f, (tel (live, 7 + i) + 80.0f) / 80.0f);
-            g.setColour (colour::spore);
+            g.setColour (colour::identity (0).wave);
             g.fillRect (inner.getX() + w * static_cast<float> (2 * i), inner.getBottom() - inner.getHeight() * a, w - 1.0f, inner.getHeight() * a);
-            g.setColour (colour::emberSoft);
+            g.setColour (colour::identity (1).wave);
             g.fillRect (inner.getX() + w * static_cast<float> (2 * i + 1), inner.getBottom() - inner.getHeight() * b, w - 1.0f, inner.getHeight() * b);
         }
-        if (voiceMorph && tel (live, 14) < 0.5f)
-            label ("PLAY TWO SOURCES", colour::boneFaint);
+        if (type == "proc.morph" && tel (live, 14) < 0.5f)
+            label ("PLAY TWO SOURCES", words);
         return;
     }
     if (type == "spatial.satellite")
     {
-        g.setColour (colour::sporeDim);
-        g.drawHorizontalLine (static_cast<int> (inner.getCentreY()), inner.getX(), inner.getRight());
-        g.setColour (colour::ember);
+        g.setColour (dim);
+        g.fillRect (juce::Rectangle<float> (inner.getX(), inner.getCentreY() - 0.5f, inner.getWidth(), 1.0f));
+        g.setColour (lit);
         const float x = inner.getCentreX() + inner.getWidth() * 0.5f * tel (live, 0);
-        g.fillEllipse (x - 4.0f, inner.getCentreY() - 4.0f, 8.0f, 8.0f);
+        g.fillEllipse (x - 3.5f, inner.getCentreY() - 3.5f, 7.0f, 7.0f);
         return;
     }
     if (type == "osc.analog")
     {
-        label (live != nullptr && tel (live, 0) > 0.0f ? juce::String (tel (live, 0), 1) + " Hz" : juce::String ("PLAY A NOTE"), colour::boneDim);
+        label (live != nullptr && tel (live, 0) > 0.0f ? juce::String (tel (live, 0), 1) + " Hz" : juce::String ("PLAY A NOTE"), tel (live, 0) > 0.0f ? lit : words);
         return;
     }
     if (type == "util.voicemix")
     {
-        label (juce::String (static_cast<int> (tel (live, 0))) + " VOICES", colour::bone);
+        label (juce::String (static_cast<int> (tel (live, 0))) + " VOICES", lit);
         return;
     }
     if (type == "src.external")
     {
-        label (s.externals().status (nodeId), colour::boneDim);
+        label (s.externals().status (nodeId).toUpperCase(), words);
         return;
     }
-    // default: a level meter (output peak) or a control value
+    // default: a level (the output's peak) or a control's value
     float level = live != nullptr ? live->peak.load (std::memory_order_relaxed) : 0.0f;
     if (type == "ctl.lfo" || type == "ctl.random" || type == "ctl.env" || type == "ctl.follower" || type == "proc.vca")
         level = std::abs (tel (live, 0));
     if (live != nullptr)
         const_cast<CompiledNode*> (live)->peak.store (level * 0.8f, std::memory_order_relaxed);   // decays between frames
-    g.setColour (colour::sporeDim);
-    g.fillRoundedRectangle (inner.withHeight (4.0f).withCentre (inner.getCentre()), 2.0f);
-    g.setColour (level > 0.95f ? colour::error : colour::spore);
-    g.fillRoundedRectangle (inner.withHeight (4.0f).withCentre (inner.getCentre()).withWidth (inner.getWidth() * juce::jlimit (0.0f, 1.0f, level)), 2.0f);
+    const auto bar = inner.withHeight (3.0f).withCentre (inner.getCentre());
+    g.setColour (dim);
+    g.fillRoundedRectangle (bar, 1.5f);
+    g.setColour (level > 0.95f ? juce::Colour (0xffe2684a) : lit);
+    g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * juce::jlimit (0.0f, 1.0f, level)), 1.5f);
 }
 
 void NodeView::mouseDown (const juce::MouseEvent& e)
@@ -532,6 +588,12 @@ void NodeView::mouseDoubleClick (const juce::MouseEvent&)
         canvas.onOpenDetail (nodeId);
 }
 
+void NodeView::mouseEnter (const juce::MouseEvent&)
+{
+    hover = true;
+    repaint();
+}
+
 void NodeView::mouseMove (const juce::MouseEvent& e)
 {
     const int p = portAt (e.position);
@@ -544,6 +606,8 @@ void NodeView::mouseMove (const juce::MouseEvent& e)
             setTooltip (juce::String (port.name) + ": " + portKindName (port.kind) + (port.input ? " in" : " out")
                         + "\nDrag to connect; right-click for compatible modules.");
         }
+        else if (ledArea.contains (e.getPosition()) && ! group)
+            setTooltip ("On / bypass");
         else
             setTooltip (group ? "Double-click to open the group" : "Drag to move; double-click for every control; right-click for more");
         repaint();
@@ -553,6 +617,7 @@ void NodeView::mouseMove (const juce::MouseEvent& e)
 void NodeView::mouseExit (const juce::MouseEvent&)
 {
     hoverPort = -1;
+    hover = false;
     repaint();
 }
 
@@ -565,7 +630,8 @@ std::unique_ptr<juce::AccessibilityHandler> NodeView::createAccessibilityHandler
 Canvas::Canvas (Session& s) : model (s)
 {
     setWantsKeyboardFocus (true);
-    setTitle ("Patch canvas");
+    setTitle ("Patch board");
+    setOpaque (true);   // (the board's own face: what moves on it never redraws the housing below)
     zoom = static_cast<float> (model.document().view.zoom);
     pan = { static_cast<float> (model.document().view.panX), static_cast<float> (model.document().view.panY) };
     rebuild();
@@ -576,6 +642,27 @@ Canvas::~Canvas() = default;
 
 juce::Point<float> Canvas::toWorld (juce::Point<float> p) const noexcept { return p / zoom + pan; }
 juce::Point<float> Canvas::toCanvas (juce::Point<float> w) const noexcept { return (w - pan) * zoom; }
+
+void Canvas::setBoardArea (juce::Rectangle<float> boardInCanvas)
+{
+    boardArea = boardInCanvas;
+    repaint();
+}
+
+int Canvas::sourceOrdinal (const std::string& id) const
+{
+    int ordinal = 0;
+    for (const auto& n : model.document().nodes)
+    {
+        const auto* d = model.registry().find (n.type);
+        if (d == nullptr || d->role != NodeRole::source)
+            continue;
+        if (n.id == id)
+            return ordinal;
+        ++ordinal;
+    }
+    return -1;
+}
 
 std::string Canvas::visibleOwner (const std::string& node) const
 {
@@ -658,7 +745,8 @@ void Canvas::updateNodeTransforms()
         }
         else if (const auto* n = doc.findNode (v->id()))
             world = { n->x, n->y };
-        const auto topLeft = world - pan;
+        // (a module's position is its face's corner: the room around it hangs outside)
+        const auto topLeft = world - pan - juce::Point<float> (static_cast<float> (tile::pad), static_cast<float> (tile::pad));
         v->setBounds (juce::roundToInt (topLeft.x), juce::roundToInt (topLeft.y), v->getWidth(), v->getHeight());
         v->setTransform (juce::AffineTransform::scale (zoom));
     }
@@ -672,7 +760,7 @@ bool Canvas::endPoint (const std::string& node, const std::string& port, bool in
     const auto owner = visibleOwner (node);
     if (owner.empty())
     {
-        // outside the group being edited: the rail at the canvas' edge
+        // outside the group being edited: the rail at the board's edge
         out = { input ? static_cast<float> (getWidth()) - 6.0f : 6.0f, 60.0f + static_cast<float> (std::hash<std::string> {} (node) % 300) };
         return true;
     }
@@ -682,15 +770,15 @@ bool Canvas::endPoint (const std::string& node, const std::string& port, bool in
     auto local = v->portPosition (node, port, input);
     if (! v->isGroup())
     {
-        // a parameter target: the knob if it is on the card, else the header's right edge
+        // a parameter target: the knob if it is on the tile, else the top of its face
         const auto* n = model.document().findNode (node);
         const auto* d = n != nullptr ? model.registry().find (n->type) : nullptr;
         if (input && d != nullptr && d->inputIndex (port) < 0 && d->paramIndex (port) >= 0)
         {
-            local = { static_cast<float> (v->getWidth()) * 0.5f, 4.0f };
+            local = { static_cast<float> (v->getWidth()) * 0.5f, static_cast<float> (tile::pad) };
             for (auto* c : v->getChildren())
                 if (auto* k = dynamic_cast<ParamKnob*> (c); k != nullptr && k->paramId() == port)
-                    local = k->getBounds().toFloat().getCentre().withY (static_cast<float> (k->getY()));
+                    local = k->getBounds().toFloat().getCentre().withY (static_cast<float> (k->getY()) + 2.0f);
         }
     }
     out = getLocalPoint (v, local);
@@ -706,16 +794,16 @@ juce::Path Canvas::cablePath (juce::Point<float> a, juce::Point<float> b) const
     return p;
 }
 
-void Canvas::paintCables (juce::Graphics& g)
+void Canvas::forEachCable (const std::function<void (const Connection&, const juce::Path&, PortKind, bool hot, juce::Point<float> a, juce::Point<float> b)>& visit) const
 {
     const auto& doc = model.document();
     for (const auto& c : doc.connections)
     {
         juce::Point<float> a, b;
-        const bool va = ! visibleOwner (c.from).empty(), vb = ! visibleOwner (c.to).empty();
-        if (! va && ! vb)
+        const auto ownerA = visibleOwner (c.from), ownerB = visibleOwner (c.to);
+        if (ownerA.empty() && ownerB.empty())
             continue;
-        if (visibleOwner (c.from) == visibleOwner (c.to) && viewFor (visibleOwner (c.from)) != nullptr && viewFor (visibleOwner (c.from))->isGroup())
+        if (ownerA == ownerB && viewFor (ownerA) != nullptr && viewFor (ownerA)->isGroup())
             continue;   // inside a collapsed group
         if (! endPoint (c.from, c.fromPort, false, a) || ! endPoint (c.to, c.toPort, true, b))
             continue;
@@ -724,50 +812,78 @@ void Canvas::paintCables (juce::Graphics& g)
         PortKind kind = PortKind::audioMono;
         if (fd != nullptr && fd->outputIndex (c.fromPort) >= 0)
             kind = effectiveKind (fd->outputs[static_cast<std::size_t> (fd->outputIndex (c.fromPort))], from->domain);
-        const bool hot = c.id == hoverCable || selected.count (c.from) > 0 || selected.count (c.to) > 0;
-        auto path = cablePath (a, b);
-        auto col = colour::port (kind).withAlpha (hot ? 0.95f : 0.45f);
-        const float width = (kind == PortKind::audioStereo ? 2.4f : 1.6f) * (hot ? 1.4f : 1.0f);
+        // (a modulation lands on its knob from above)
+        juce::Path path;
+        if (c.toParam)
+        {
+            path.startNewSubPath (a);
+            const float dx = std::max (40.0f * zoom, std::abs (b.x - a.x) * 0.4f);
+            path.cubicTo (a.x + dx, a.y, b.x, b.y - std::max (36.0f * zoom, std::abs (b.y - a.y) * 0.4f), b.x, b.y);
+        }
+        else
+            path = cablePath (a, b);
+        const bool hot = c.id == hoverCable || selected.count (ownerA) > 0 || selected.count (ownerB) > 0;
+        visit (c, path, kind, hot, a, b);
+    }
+}
+
+void Canvas::paintCables (juce::Graphics& g)
+{
+    // The routing board's wires: thin, warm grey, an arrowhead where the signal arrives. What
+    // a wire carries shows in its ink (notes in the arpeggiator's amber, control in sage) and
+    // its weight (stereo heavier); a modulation is dashed.
+    forEachCable ([&] (const Connection& c, const juce::Path& path, PortKind kind, bool hot, juce::Point<float>, juce::Point<float> b) {
+        juce::Colour ink = board::wire;
+        if (kind == PortKind::notes)
+            ink = colour::arp;
+        else if (isControlLike (kind))
+            ink = board::wireControl;
+        if (hot)
+            ink = c.id == hoverCable ? colour::accent : ink.darker (0.35f);
+        const float width = (kind == PortKind::audioStereo ? 2.4f : 1.6f) * std::max (0.75f, std::sqrt (zoom));
+        g.setColour (ink);
         if (c.toParam)
         {
             juce::Path dashed;
             const float dash[] = { 5.0f, 4.0f };
             juce::PathStrokeType (width).createDashedStroke (dashed, path, dash, 2);
-            g.setColour (col);
             g.fillPath (dashed);
         }
         else
-        {
-            g.setColour (col);
             g.strokePath (path, juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        }
-        if (hot)
-        {
-            // where the signal is going: a moving dot (real only when the source is active)
-            const auto* live = liveNode (model, c.from);
-            const float level = live != nullptr ? live->peak.load (std::memory_order_relaxed) : 0.0f;
-            if (level > 0.0005f || kind == PortKind::notes)
-            {
-                const float t = static_cast<float> ((frame % 50) / 50.0);
-                const auto at = path.getPointAlongPath (path.getLength() * t);
-                g.setColour (colour::ember);
-                g.fillEllipse (at.x - 2.5f, at.y - 2.5f, 5.0f, 5.0f);
-            }
-        }
+        // The arrowhead just before the socket (the modulation: pointing down onto its knob).
+        const float size = 5.0f * std::max (0.75f, std::sqrt (zoom));
+        const float socket = 7.0f * zoom;
+        g.setColour (hot ? ink : board::arrow.interpolatedWith (ink, 0.5f));
+        if (c.toParam)
+            arrowAt (g, b.translated (0.0f, -1.0f), juce::MathConstants<float>::halfPi, size);
+        else
+            arrowAt (g, b.translated (-socket, 0.0f), 0.0f, size);
+    });
+    // Where the signal is going on the wires of what is selected: a bead (only while the
+    // source really sounds).
+    for (const auto& dot : activity)
+    {
+        g.setColour (colour::accent);
+        g.fillEllipse (juce::Rectangle<float> (5.0f, 5.0f).withCentre (dot));
     }
 }
 
 void Canvas::paint (juce::Graphics& g)
 {
-    g.fillAll (colour::peat);
-    // a quiet grid (every 32 world px, dots)
+    // The board's face (the editor paints the same gradient around this component).
+    const auto b = boardArea.isEmpty() ? getLocalBounds().toFloat() : boardArea;
+    g.setGradientFill (juce::ColourGradient (board::faceTop, b.getX(), b.getY(), board::faceBottom, b.getRight(), b.getBottom(), false));
+    g.fillAll();
+    // A quiet grid of points (every 32 world px).
     const float step = 32.0f * zoom;
-    if (step > 9.0f)
+    if (step > 11.0f)
     {
-        g.setColour (colour::line.withAlpha (0.45f));
+        g.setColour (board::column.withAlpha (0.8f));
         const float ox = std::fmod (-pan.x * zoom, step), oy = std::fmod (-pan.y * zoom, step);
-        for (float x = ox; x < static_cast<float> (getWidth()); x += step)
-            for (float y = oy; y < static_cast<float> (getHeight()); y += step)
+        const auto clip = g.getClipBounds().toFloat();
+        for (float x = ox + step * std::floor ((clip.getX() - ox) / step); x < clip.getRight(); x += step)
+            for (float y = oy + step * std::floor ((clip.getY() - oy) / step); y < clip.getBottom(); y += step)
                 g.fillRect (x, y, 1.2f, 1.2f);
     }
     paintCables (g);
@@ -777,19 +893,20 @@ void Canvas::paint (juce::Graphics& g)
         if (endPoint (cable.node, cable.port, ! cable.fromOutput, a))
         {
             const auto p = cable.fromOutput ? cablePath (a, dragNow) : cablePath (dragNow, a);
-            g.setColour (colour::port (cable.kind));
-            g.strokePath (p, juce::PathStrokeType (2.0f));
+            g.setColour (colour::accent);
+            g.strokePath (p, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            drawSocket (g, dragNow, cable.kind, true, true);
         }
     }
     if (drag == Drag::rubber)
     {
         const auto r = juce::Rectangle<float> (dragStart, dragNow);
-        g.setColour (colour::ember.withAlpha (0.08f));
-        g.fillRect (r);
-        g.setColour (colour::ember.withAlpha (0.6f));
-        g.drawRect (r, 1.0f);
+        g.setColour (board::sage.withAlpha (0.12f));
+        g.fillRoundedRectangle (r, 3.0f);
+        g.setColour (board::sage);
+        g.drawRoundedRectangle (r, 3.0f, 1.0f);
     }
-    // breadcrumb (inside a group)
+    // Inside a group: the way back, as a terminal on the board.
     const auto& doc = model.document();
     breadcrumbArea = {};
     if (! doc.view.currentGroup.empty())
@@ -803,60 +920,72 @@ void Canvas::paint (juce::Graphics& g)
             gid = gm != nullptr ? gm->parent : std::string();
         }
         for (const auto& gid : chain)
-            crumb << "  >  " << doc.findGroup (gid)->name;
-        breadcrumbArea = juce::Rectangle<float> (12.0f, 12.0f, 24.0f + juce::GlyphArrangement::getStringWidth (text (12.0f, 600), crumb), 26.0f);
-        g.setColour (colour::cardHigh);
-        g.fillRoundedRectangle (breadcrumbArea, 4.0f);
-        g.setColour (colour::ember);
-        g.setFont (text (12.0f, 600));
-        g.drawText ("<  " + crumb, breadcrumbArea.reduced (8.0f, 0.0f), juce::Justification::centredLeft);
+            crumb << "   /   " << juce::String (doc.findGroup (gid)->name).toUpperCase();
+        const auto font = fonts::make (11.5f, Weight::medium, 0.1f);
+        breadcrumbArea = juce::Rectangle<float> (14.0f, 12.0f, 40.0f + juce::GlyphArrangement::getStringWidth (font, crumb), 26.0f);
+        g.setColour (board::terminalFace);
+        g.fillRoundedRectangle (breadcrumbArea, 6.0f);
+        g.setColour (board::terminalEdge);
+        g.drawRoundedRectangle (breadcrumbArea.reduced (0.5f), 6.0f, 1.0f);
+        icon::draw (g, icon::Kind::previous, breadcrumbArea.withWidth (26.0f).reduced (4.0f), board::terminalInk, 1.4f);
+        g.setColour (board::terminalInk);
+        g.setFont (font);
+        g.drawText (crumb, breadcrumbArea.withTrimmedLeft (26.0f), juce::Justification::centredLeft, false);
     }
     if (doc.nodes.empty())
     {
-        g.setColour (colour::boneDim);
-        g.setFont (text (15.0f, 500));
-        g.drawText ("Right-click (or Cmd/Ctrl + K) and type \"analog\" to start.", getLocalBounds(), juce::Justification::centred);
-        g.setFont (text (12.5f));
-        g.setColour (colour::boneFaint);
-        g.drawText ("Drop a WAV, AIFF or FLAC here to play a recording.", getLocalBounds().withTrimmedTop (48), juce::Justification::centred);
+        g.setColour (board::soft);
+        g.setFont (fonts::make (17.0f, Weight::regular, 0.01f));
+        g.drawText ("Right-click the board, or press + ADD MODULE, and type \"analog\" to start.", getLocalBounds().withTrimmedBottom (24), juce::Justification::centred);
+        g.setFont (type::micro (13.5f));
+        g.setColour (board::weak);
+        g.drawText ("Drop a WAV, AIFF or FLAC here to play a recording.", getLocalBounds().withTrimmedTop (36), juce::Justification::centred);
     }
 }
 
 std::string Canvas::cableAt (juce::Point<float> p) const
 {
-    const auto& doc = model.document();
     std::string best;
     float bestDistance = 7.0f;
-    for (const auto& c : doc.connections)
-    {
-        juce::Point<float> a, b;
-        if (visibleOwner (c.from).empty() && visibleOwner (c.to).empty())
-            continue;
-        if (! endPoint (c.from, c.fromPort, false, a) || ! endPoint (c.to, c.toPort, true, b))
-            continue;
-        const auto path = cablePath (a, b);
+    forEachCable ([&] (const Connection& c, const juce::Path& path, PortKind, bool, juce::Point<float>, juce::Point<float>) {
         juce::Point<float> nearest;
         path.getNearestPoint (p, nearest);
-        const float d = nearest.getDistanceFrom (p);
-        if (d < bestDistance)
+        if (const float d = nearest.getDistanceFrom (p); d < bestDistance)
         {
             bestDistance = d;
             best = c.id;
         }
-    }
+    });
     return best;
 }
 
 void Canvas::timerCallback()
 {
+    if (! isVisible())
+        return;
     ++frame;
     if ((frame % 3) == 0)
         for (auto& v : views)
             v->refreshControls();
     for (auto& v : views)
-        v->repaint();
+        v->repaintLive();
+    // The beads on the wires of what is selected or pointed at: only their own few pixels.
+    auto dirty = [this] {
+        for (const auto& dot : activity)
+            repaint (juce::Rectangle<float> (9.0f, 9.0f).withCentre (dot).getSmallestIntegerContainer());
+    };
+    dirty();
+    activity.clear();
     if (! hoverCable.empty() || ! selected.empty())
-        repaint();
+        forEachCable ([&] (const Connection& c, const juce::Path& path, PortKind kind, bool hot, juce::Point<float>, juce::Point<float>) {
+            if (! hot)
+                return;
+            const auto* live = liveNode (model, c.from);
+            const float level = live != nullptr ? live->peak.load (std::memory_order_relaxed) : 0.0f;
+            if (level > 0.0005f || kind == PortKind::notes)
+                activity.push_back (path.getPointAlongPath (path.getLength() * static_cast<float> ((frame % 50) / 50.0)));
+        });
+    dirty();
 }
 
 //==============================================================================
@@ -1047,13 +1176,13 @@ void Canvas::fitAll()
         const auto* n = model.document().findNode (v->id());
         const auto* gm = model.document().findGroup (v->id());
         const juce::Point<float> at = n != nullptr ? juce::Point<float> (n->x, n->y) : (gm != nullptr ? juce::Point<float> (gm->x, gm->y) : juce::Point<float>());
-        const auto r = juce::Rectangle<float> (at.x, at.y, static_cast<float> (v->getWidth()), static_cast<float> (v->getHeight()));
+        const auto r = juce::Rectangle<float> (at.x, at.y, static_cast<float> (v->getWidth() - 2 * tile::pad), static_cast<float> (v->getHeight() - 2 * tile::pad));
         box = first ? r : box.getUnion (r);
         first = false;
     }
-    box = box.expanded (60.0f);
-    // Readable first (75 .. 125 %): a patch wider than the window is centred and panned, not shrunk.
-    zoom = juce::jlimit (0.75f, 1.25f, std::min (static_cast<float> (getWidth()) / box.getWidth(), static_cast<float> (getHeight()) / box.getHeight()));
+    box = box.expanded (44.0f, 36.0f);
+    // Readable first (60 .. 110 %): a patch wider than the board is centred and panned, not shrunk.
+    zoom = juce::jlimit (0.6f, 1.1f, std::min (static_cast<float> (getWidth()) / box.getWidth(), static_cast<float> (getHeight()) / box.getHeight()));
     pan = box.getCentre() - juce::Point<float> (static_cast<float> (getWidth()), static_cast<float> (getHeight())) * 0.5f / zoom;
     model.document().view.zoom = zoom;
     model.document().view.panX = pan.x;
