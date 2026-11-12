@@ -32,7 +32,28 @@ TEST_CASE ("The factory files are what the factory builder makes", "[regression]
         std::stringstream ss;
         ss << f.rdbuf();
         INFO (file);
-        CHECK (ss.str() == saveToString (p));
+        // (a mismatch is reported as its first differing line, not as two whole patches)
+        const auto committed = ss.str(), built = saveToString (p);
+        std::string difference;
+        if (committed != built)
+        {
+            std::istringstream a (committed), b (built);
+            std::string la, lb;
+            for (int line = 1;; ++line)
+            {
+                const bool moreA = static_cast<bool> (std::getline (a, la)), moreB = static_cast<bool> (std::getline (b, lb));
+                if (! moreA && ! moreB)
+                    break;
+                if (la != lb || moreA != moreB)
+                {
+                    difference = "line " + std::to_string (line) + ": the file has [" + (moreA ? la : std::string ("<end>")) + "], the builder makes ["
+                                 + (moreB ? lb : std::string ("<end>")) + "]";
+                    break;
+                }
+            }
+        }
+        INFO (difference);
+        CHECK (difference.empty());
     }
 }
 
