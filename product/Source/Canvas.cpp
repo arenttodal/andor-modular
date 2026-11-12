@@ -1737,6 +1737,12 @@ void Canvas::showNodeMenu (NodeView& v)
             if (onOpenDetail)
                 onOpenDetail (id);
         });
+        if (d != nullptr && d->role == NodeRole::source)
+        {
+            juce::PopupMenu types;
+            addSourceTypeItems (types, model, id);
+            menu.addSubMenu ("Source type", types);
+        }
         menu.addItem (n != nullptr && n->enabled ? "Bypass" : "Enable", [this, id] {
             model.perform ("bypass", [&] (Document& doc) {
                 edit::Result r;

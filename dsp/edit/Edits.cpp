@@ -670,6 +670,278 @@ std::vector<const NodeDesc*> compatibleTypes (const Document& doc, const Registr
     return out;
 }
 
+const std::vector<SourceType>& sourceTypes()
+{
+    static const std::vector<SourceType> types {
+        { "osc.analog", "ANALOG", "An oscillator: CLASSIC, DCO or WIDE" },
+        { "src.organic", "ORGANIC", "A recording, played across the keys" },
+        { "src.granular", "GRANULAR", "A recording as a cloud of grains" },
+        { "src.rhythm", "RHYTHM", "A loop on the host's tempo (plays once for all notes)" },
+        { "src.external", "EXTERNAL", "An instrument plugin you own (one for the patch)" },
+        { "src.noise", "NOISE", "White, pink or brown" },
+        { "src.input", "LIVE INPUT", "The host's audio input" },
+    };
+    return types;
+}
+
+std::string sourceTypeName (const std::string& type)
+{
+    for (const auto& t : sourceTypes())
+        if (type == t.type)
+            return t.name;
+    return {};
+}
+
+Result changeSourceType (Document& doc, const Registry& reg, const std::string& node, const std::string& type)
+{
+    auto* n = doc.findNode (node);
+    const auto* was = n != nullptr ? reg.find (n->type) : nullptr;
+    const auto* now = reg.find (type);
+    if (n == nullptr || was == nullptr || was->role != NodeRole::source)
+        return fail ("that is not a sound source");
+    if (now == nullptr || now->role != NodeRole::source || sourceTypeName (type).empty())
+        return fail ("not a kind of source");
+    if (! now->available)
+        return fail (sourceTypeName (type) + " is not available: " + now->unavailableReason);
+    Result r;
+    r.focus = node;
+    if (n->type == type)
+    {
+        r.ok = true;
+        r.message = "already " + sourceTypeName (type);
+        return r;
+    }
+    const Document before = doc;
+    const std::string oldType = n->type;
+    const std::string oldOut = firstAudioOut (*was), newOut = firstAudioOut (*now);
+    const auto errorsBefore = [&] {
+        int count = 0;
+        for (const auto& i : Validator (reg).validate (before).issues)
+            count += i.severity == Issue::Severity::error ? 1 : 0;
+        return count;
+    }();
+
+    // 1. The type it leaves, as it is.
+    SourceMode keep;
+    keep.domain = n->domain;
+    keep.params = n->params;
+    keep.strings = n->strings;
+    std::vector<Connection> touching;
+    for (const auto& c : doc.connections)
+        if (c.from == node || c.to == node)
+            touching.push_back (c);
+    doc.connections.erase (std::remove_if (doc.connections.begin(), doc.connections.end(), [&] (const Connection& c) { return c.from == node || c.to == node; }),
+                           doc.connections.end());
+    for (std::size_t slot = 0; slot < doc.macros.size(); ++slot)
+    {
+        auto& maps = doc.macros[slot].mappings;
+        for (auto it = maps.begin(); it != maps.end();)
+            if (it->node == node && now->paramIndex (it->param) < 0)
+            {
+                keep.mappings.push_back ({ static_cast<int> (slot), false, it->param, it->min, it->max, static_cast<int> (it->curve) });
+                it = maps.erase (it);
+            }
+            else
+                ++it;
+    }
+    for (std::size_t slot = 0; slot < doc.hostBindings.size(); ++slot)
+        if (auto& b = doc.hostBindings[slot]; b.node == node && now->paramIndex (b.param) < 0)
+        {
+            keep.mappings.push_back ({ static_cast<int> (slot), true, b.param, 0.0, 1.0, 0 });
+            b = {};
+        }
+
+    // 2. The type it becomes: as it left it last time, or new.
+    SourceMode back;
+    const bool returning = n->modes.count (type) > 0;
+    if (returning)
+    {
+        back = std::move (n->modes[type]);
+        n->modes.erase (type);
+    }
+    n->type = type;
+    n->typeVersion = now->version;
+    n->params.clear();
+    for (const auto& p : now->params)
+        n->params[p.id] = p.def;
+    if (returning)
+    {
+        for (const auto& [k, v] : back.params)
+            if (const int i = now->paramIndex (k); i >= 0)
+                n->params[k] = now->params[static_cast<std::size_t> (i)].clampNative (v);
+    }
+    else if (const int a = was->paramIndex ("level"), b = now->paramIndex ("level"); a >= 0 && b >= 0 && was->params[static_cast<std::size_t> (a)].unit == now->params[static_cast<std::size_t> (b)].unit)
+        n->params["level"] = now->params[static_cast<std::size_t> (b)].clampNative (keep.params["level"]);   // (its loudness, where the two count alike)
+    n->strings.clear();
+    for (const auto& key : now->strings)
+        n->strings[key] = {};
+    if (returning)
+        for (const auto& [k, v] : back.strings)
+            if (n->strings.count (k) > 0)
+                n->strings[k] = v;
+    // Where it runs: as it left this type; else where the musician had the source running, if
+    // that was a choice (a type that only runs one way, a loop, chose nothing); else its own.
+    const bool choseDomain = was->supports (Domain::voice) && was->supports (Domain::global);
+    n->domain = returning && now->supports (back.domain) ? back.domain : (choseDomain && now->supports (keep.domain) ? keep.domain : now->defaultDomain);
+
+    // 3. The cables that still fit stay; the others are set aside with the type they were for.
+    const Validator check (reg);
+    const auto reconnect = [&] (const std::string& from, const std::string& fromPort, const std::string& to, const std::string& toPort, bool toParam, double depth, int transpose) {
+        if (doc.findNode (from) == nullptr || doc.findNode (to) == nullptr)
+            return false;
+        for (const auto& c : doc.connections)
+            if (c.from == from && c.fromPort == fromPort && c.to == to && c.toPort == toPort && c.toParam == toParam)
+                return true;   // (already there)
+        if (! check.checkConnection (doc, from, fromPort, to, toPort, toParam).ok)
+            return false;
+        auto& made = toParam ? doc.modulate (from, fromPort, to, toPort, depth) : doc.connect (from, fromPort, to, toPort);
+        made.transpose = transpose;
+        return true;
+    };
+    int kept = 0, aside = 0, restored = 0;
+    std::vector<Connection> lostOutputs;
+    for (const auto& c : touching)
+    {
+        if (reconnect (c.from, c.fromPort, c.to, c.toPort, c.toParam, c.depth, c.transpose))
+            ++kept;
+        else
+        {
+            keep.cables.push_back ({ c.from, c.fromPort, c.to, c.toPort, c.toParam, c.depth, c.transpose });
+            ++aside;
+            if (c.from == node && c.fromPort == oldOut && ! c.toParam)
+                lostOutputs.push_back (c);
+        }
+    }
+    // 4. What this type had last time.
+    for (const auto& c : back.cables)
+        restored += reconnect (c.from, c.fromPort, c.to, c.toPort, c.toParam, c.depth, c.transpose) ? 1 : 0;
+    for (const auto& m : back.mappings)
+    {
+        if (now->paramIndex (m.param) < 0)
+            continue;
+        if (m.host)
+        {
+            if (m.slot < static_cast<int> (doc.hostBindings.size()) && doc.hostBindings[static_cast<std::size_t> (m.slot)].node.empty())
+                doc.hostBindings[static_cast<std::size_t> (m.slot)] = { node, m.param };
+        }
+        else if (m.slot < static_cast<int> (doc.macros.size()))
+            doc.macros[static_cast<std::size_t> (m.slot)].mappings.push_back ({ node, m.param, m.min, m.max, static_cast<MacroCurve> (m.curve) });
+    }
+
+    const auto hasOutput = [&] {
+        return std::any_of (doc.connections.begin(), doc.connections.end(), [&] (const Connection& c) { return c.from == node && c.fromPort == newOut && ! c.toParam; });
+    };
+    // 4b. What its OTHER types set aside and this one can use is taken back: the source's
+    // per-voice chain after a type that plays once for all notes, the arpeggiator that played
+    // it before a type without notes. (A cable belongs to the source; it is only kept with a
+    // type while no type in between could use it.)
+    for (auto& [other, mode] : n->modes)
+        for (auto it = mode.cables.begin(); it != mode.cables.end();)
+        {
+            const bool free = it->from == node ? (it->fromPort != newOut || it->toParam || ! hasOutput())
+                                               : std::none_of (doc.connections.begin(), doc.connections.end(), [&] (const Connection& c) {
+                                                     return c.to == node && c.toPort == it->toPort && c.toParam == it->toParam;
+                                                 });
+            if (free && reconnect (it->from, it->fromPort, it->to, it->toPort, it->toParam, it->depth, it->transpose))
+            {
+                it = mode.cables.erase (it);
+                ++restored;
+            }
+            else
+                ++it;
+        }
+
+    // 5. It stays in the sound, and playable.
+    std::string routed;
+    if (! newOut.empty() && ! hasOutput() && ! lostOutputs.empty())
+    {
+        for (const auto& lost : lostOutputs)
+        {
+            // as a dragged cable would be (voice audio into a global module: its own VOICE MIX)
+            const auto smart = connectSmart (doc, reg, node, newOut, lost.to, lost.toPort);
+            if (smart.ok)
+            {
+                routed = smart.message;
+                continue;
+            }
+            // a source that plays once for all notes cannot enter a per-voice chain: it joins
+            // where that chain's voices meet (after its VOICE MIX)
+            std::string at = lost.to;
+            for (int hop = 0; hop < 32 && ! at.empty(); ++hop)
+            {
+                const auto* here = doc.findNode (at);
+                const auto* hd = here != nullptr ? reg.find (here->type) : nullptr;
+                if (hd == nullptr)
+                    break;
+                const auto out = firstAudioOut (*hd);
+                std::string next, nextPort;
+                for (const auto& c : doc.connections)
+                    if (c.from == at && c.fromPort == out && ! c.toParam)
+                    {
+                        next = c.to;
+                        nextPort = c.toPort;
+                        break;
+                    }
+                if (next.empty())
+                    break;
+                if (reconnect (node, newOut, next, nextPort, false, 1.0, 0))
+                {
+                    const auto* joined = doc.findNode (next);
+                    routed = sourceTypeName (type) + " plays once for all notes: it joins at " + (joined != nullptr ? doc.displayName (reg, *joined) : next)
+                             + ", after the voices (the per-voice modules before it no longer hear it)";
+                    break;
+                }
+                at = next;
+            }
+        }
+        if (! hasOutput())
+        {
+            const auto* target = before.findNode (lostOutputs.front().to);
+            const std::string where = target != nullptr ? before.displayName (reg, *target) : lostOutputs.front().to;
+            doc = before;
+            return fail (sourceTypeName (type) + " cannot take this source's place in front of " + where + ": nowhere after it takes audio that plays once for all notes");
+        }
+    }
+    n = doc.findNode (node);   // (a VOICE MIX may have been added)
+    if (now->inputIndex ("notes") >= 0
+        && std::none_of (doc.connections.begin(), doc.connections.end(), [&] (const Connection& c) { return c.to == node && c.toPort == "notes" && ! c.toParam; }))
+    {
+        // it needs notes and the type it was had no notes cable: the patch's keyboard plays it
+        for (const auto& other : doc.nodes)
+            if (other.type == "event.keyboard" && other.group == n->group && reconnect (other.id, "notes", node, "notes", false, 1.0, 0))
+                break;
+    }
+    n = doc.findNode (node);
+    n->modes[oldType] = std::move (keep);
+
+    // 6. Nothing may be broken by it (a limit, a domain).
+    for (const auto& issue : check.validate (doc).issues)
+        if (issue.severity == Issue::Severity::error)
+        {
+            int after = 0;
+            for (const auto& i : check.validate (doc).issues)
+                after += i.severity == Issue::Severity::error ? 1 : 0;
+            if (after > errorsBefore)
+            {
+                const auto why = issue.message;
+                doc = before;
+                return fail (sourceTypeName (type) + " is not possible here: " + why);
+            }
+            break;
+        }
+
+    r.ok = true;
+    r.message = doc.displayName (reg, *doc.findNode (node)) + " is now " + sourceTypeName (type) + (returning ? " again, as it was" : "");
+    if (aside > 0)
+        r.message += "; " + std::to_string (aside) + (aside == 1 ? " cable" : " cables") + " that only " + sourceTypeName (oldType) + " has " + (aside == 1 ? "is" : "are")
+                     + " kept for it";
+    if (restored > 0)
+        r.message += "; " + std::to_string (restored) + (restored == 1 ? " cable of its own is back" : " cables of its own are back");
+    if (! routed.empty())
+        r.message += ". " + routed;
+    return r;
+}
+
 Result replaceNode (Document& doc, const Registry& reg, const std::string& node, const std::string& type)
 {
     const auto* old = doc.findNode (node);

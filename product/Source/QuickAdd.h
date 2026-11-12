@@ -61,6 +61,9 @@ public:
     juce::Rectangle<int> rootBounds() const noexcept { return root; }
     juce::Rectangle<int> submenuBounds() const noexcept { return sub; }
     static juce::String categoryOf (const NodeDesc&);
+    /** A module as the menu names it: every kind of sound source is the one SOURCE ("SOURCE",
+        an oscillator at once; "SOURCE - ORGANIC"... the same source starting as that type). */
+    static juce::String rowName (const NodeDesc&);
 
 private:
     struct Row

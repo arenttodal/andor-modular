@@ -604,7 +604,7 @@ void registerSourceNodes (Registry& r)
 
     {
         auto d = source ("osc.analog", "ANALOG OSC", "ANDOR ANALOG's oscillator: CLASSIC VCO, DCO (with sub) and WIDE (with SUPER SAW)");
-        d.keywords = { "oscillator", "vco", "dco", "saw", "pulse", "supersaw", "analog", "synth" };
+        d.keywords = { "source", "oscillator", "vco", "dco", "saw", "pulse", "supersaw", "analog", "synth" };
         d.help = "Three models from ANDOR ANALOG with band-limited (B-spline BLEP/BLAMP) edges. FM and SYNC are audio-rate inputs: "
                  "connect another oscillator. PITCH: 1.0 = one octave.";
         d.inputs = { modIn ("fm", "FM"), modIn ("sync", "SYNC"), in ("pitch", "PITCH", PortKind::pitch), notesIn() };
@@ -625,7 +625,7 @@ void registerSourceNodes (Registry& r)
     }
     {
         auto d = source ("src.noise", "NOISE", "White, pink and brown noise with tone, key tracking and a slow natural motion");
-        d.keywords = { "noise", "white", "pink", "breath", "wind", "air" };
+        d.keywords = { "source", "noise", "white", "pink", "breath", "wind", "air" };
         d.domains = voiceOrGlobal;
         d.inputs = { notesIn() };
         d.outputs = { out ("out", "OUT", PortKind::audioMono) };
@@ -637,7 +637,7 @@ void registerSourceNodes (Registry& r)
     }
     {
         auto d = source ("src.organic", "ORGANIC SAMPLE", "A recording as an oscillator: ANDOR OSP's root, onset and sustain loop, played per note");
-        d.keywords = { "sample", "recording", "wav", "organic", "osp", "audio file" };
+        d.keywords = { "source", "sample", "recording", "wav", "organic", "osp", "audio file" };
         d.help = "Drop a WAV, AIFF or FLAC on it (or on the canvas). It is analysed in the background: first playable (root and onset), "
                  "then sustaining (ANDOR OSP's continuation loop). A missing file keeps the module and its settings until you relink it.";
         d.inputs = { in ("pitch", "PITCH", PortKind::pitch), notesIn() };
@@ -652,7 +652,7 @@ void registerSourceNodes (Registry& r)
     }
     {
         auto d = source ("src.granular", "GRANULAR", "Grains of a recording: position, size, density, spread; live grain view");
-        d.keywords = { "granular", "grains", "cloud", "texture", "key dna" };
+        d.keywords = { "source", "granular", "grains", "cloud", "texture", "key dna" };
         d.help = "ANDOR OSP's granular engine. VOICE: a cloud for each note. GLOBAL: one stereo cloud that follows the last note (a bed). "
                  "Heavy at 16 voices: lower DENSITY or polyphony if the CPU meter warns.";
         d.domains = voiceOrGlobal;
@@ -672,7 +672,7 @@ void registerSourceNodes (Registry& r)
     }
     {
         auto d = source ("src.rhythm", "RHYTHMIC SOURCE", "A loop kept on the host's beat (pitch untouched), with its envelope and onset triggers");
-        d.keywords = { "loop", "break", "drum", "rhythm", "texture", "rain", "clock", "ticking" };
+        d.keywords = { "source", "loop", "break", "drum", "rhythm", "texture", "rain", "clock", "ticking" };
         d.help = "Each beat restarts its slice of the loop at its place, so the loop follows the host tempo without being re-pitched. "
                  "ENVELOPE and TRIGGER follow what you hear: patch them into a filter or an amp (Rhythmic Morph anywhere).";
         d.domains = globalOnly;
@@ -688,7 +688,7 @@ void registerSourceNodes (Registry& r)
     }
     {
         auto d = source ("src.external", "EXTERNAL INSTRUMENT", "One installed VST3/AU instrument as a global source (one instance for every note)");
-        d.keywords = { "plugin", "vst", "vst3", "au", "kontakt", "external", "host" };
+        d.keywords = { "source", "plugin", "vst", "vst3", "au", "kontakt", "external", "host" };
         d.help = "Hosts one instrument plugin. It is global: one instance hears every note (never copied per voice), so use GLOBAL MORPH, "
                  "filters and effects after it. A missing plugin keeps the module and its saved state silent until it is installed.";
         d.domains = globalOnly;
@@ -705,7 +705,7 @@ void registerSourceNodes (Registry& r)
     }
     {
         auto d = source ("src.input", "LIVE INPUT", "The host's audio input (with a feedback guard); not every DAW gives instruments one");
-        d.keywords = { "input", "mic", "audio in", "live", "sidechain" };
+        d.keywords = { "source", "input", "mic", "audio in", "live", "sidechain" };
         d.domains = globalOnly;
         d.defaultDomain = Domain::global;
         d.outputs = { out ("out", "OUT", PortKind::audioStereo) };

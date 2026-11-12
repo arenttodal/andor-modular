@@ -789,6 +789,9 @@ namespace
             const auto* n = session.document().findNode (id);
             if (n == nullptr || desc == nullptr)
                 return;
+            // A sound source: what kind of sound it is, first (the same choice as on its card).
+            if (desc->role == NodeRole::source && host.apvts().getParameter ("m.sourceType") != nullptr)
+                selectorList ("m.sourceType", "TYPE", 132, "This source's type. Each type keeps its own settings, recording and cables.");
             if (selector != nullptr)
                 choiceControl (*selector, true);
             if (page < 0 || page >= static_cast<int> (pages.size()))
@@ -1091,6 +1094,36 @@ std::unique_ptr<NativeRack> createModuleRack (Session& s, const std::string& id)
     };
     on.write = [&s, id] (double v) { s.setEnabled (id, v >= 0.5); };
     binding.push_back (std::move (on));
+    // A sound source's TYPE (not a parameter: it changes which module this is). Applied after
+    // the click has returned, because the rack is built again for the new type.
+    if (d->role == NodeRole::source && ! edit::sourceTypeName (n->type).empty())
+    {
+        juce::StringArray names;
+        for (const auto& t : edit::sourceTypes())
+            names.add (t.name);
+        const auto indexOf = [] (const std::string& type) {
+            const auto& types = edit::sourceTypes();
+            for (std::size_t i = 0; i < types.size(); ++i)
+                if (type == types[i].type)
+                    return static_cast<int> (i);
+            return 0;
+        };
+        layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "m.sourceType", 1 }, "Source type", names, indexOf (n->type)));
+        RackParam kind { "m.sourceType", {}, 1.0, 0.0, {}, {}, {}, {} };
+        kind.read = [&s, id, indexOf] {
+            const auto* node = s.document().findNode (id);
+            return node != nullptr ? static_cast<double> (indexOf (node->type)) : 0.0;
+        };
+        kind.write = [&s, id] (double v) {
+            const auto& types = edit::sourceTypes();
+            const std::string type = types[static_cast<std::size_t> (juce::jlimit (0, static_cast<int> (types.size()) - 1, juce::roundToInt (v)))].type;
+            juce::MessageManager::callAsync ([&s, id, type] {
+                if (const auto* node = s.document().findNode (id); node != nullptr && node->type != type)
+                    s.changeSourceType (id, type);
+            });
+        };
+        binding.push_back (std::move (kind));
+    }
     // Each cable that modulates one of its parameters: its depth.
     const auto mods = modulationsOf (s.document(), id);
     for (std::size_t i = 0; i < mods.size() && i < 8; ++i)

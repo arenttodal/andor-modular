@@ -107,6 +107,11 @@ void refreshControl (juce::Component* c);
 /** The parameter menu (reset, type a value, macros, host slots, modulation). */
 void showParamMenu (Session& s, const std::string& node, const std::string& param, juce::Component* target);
 
+/** A sound source's TYPE (ANALOG, ORGANIC, GRANULAR, RHYTHM, EXTERNAL, NOISE, LIVE INPUT): the
+    menu, and the choice applied (Session::changeSourceType: in place, one undo step). */
+void addSourceTypeItems (juce::PopupMenu& menu, Session& s, const std::string& node);
+void showSourceTypeMenu (Session& s, const std::string& node, juce::Component* target);
+
 //==============================================================================
 /** A ceramic key (skin::KeyFace: its rendered face and shadow are drawn by the surface it
     sits on, skin::drawKeys; it draws only its ink): a word, an icon, or both. */

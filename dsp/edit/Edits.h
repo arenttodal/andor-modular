@@ -115,6 +115,39 @@ enum class DropAction { layer, morph, modulate, replace };
     MODULATE (dragged into target's FM), REPLACE (target becomes dragged's type). */
 Result dropOnSource (Document& doc, const Registry& reg, const std::string& dragged, const std::string& target, DropAction action);
 
+/** The kinds of sound a SOURCE can be (one concept for the musician; each is one of the
+    existing source modules underneath, with its own DSP, ports and where it runs). In the
+    order they are offered. */
+struct SourceType
+{
+    const char* type;    ///< the module type id ("osc.analog")
+    const char* name;    ///< "ANALOG"
+    const char* about;   ///< one line for a menu
+};
+const std::vector<SourceType>& sourceTypes();
+/** "ANALOG", "ORGANIC"... for a source's module type ("" if it is not a source type). */
+std::string sourceTypeName (const std::string& type);
+
+/**
+    Makes a sound source another kind of source, in place: the same module (its id, name,
+    place, group, mute and solo, and so its letter and its card), another generator.
+
+      - The type it leaves is kept on it as it was (its settings, its recording or plugin, where
+        it ran, and the cables and macro / host assignments that only that type has): coming
+        back to it brings all of that back.
+      - Every cable and assignment the new type can honour stays. One it cannot (FM into a
+        recording, a per-voice filter after a loop that plays once for all notes) is set aside
+        with the old type, never silently lost.
+      - The source stays in the sound: if its audio output's cable could not stay, it is
+        connected again by the same rules as a dragged cable (through a VOICE MIX of its own
+        into a global module), or, for a source that plays once for all notes, to where its
+        chain's voices meet. A type that needs notes and has no notes cable gets the keyboard's.
+      - If that cannot be done, or the patch would break a limit (a second hosted instrument),
+        nothing changes and the reason is returned.
+
+    One transaction. Structural: the patch is compiled again (the caller's swap is click-free). */
+Result changeSourceType (Document& doc, const Registry& reg, const std::string& node, const std::string& type);
+
 /** Replaces a module by another type, keeping every cable whose port exists on the new one. */
 Result replaceNode (Document& doc, const Registry& reg, const std::string& node, const std::string& type);
 

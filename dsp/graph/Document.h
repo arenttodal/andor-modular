@@ -21,6 +21,33 @@ struct NodeDesc;
     docs/STATE_SCHEMA.md describes the saved form ("andormodular" JSON, schemaVersion 1).
 */
 
+/** What a sound source keeps of a type it is not playing at the moment (edit::changeSourceType):
+    that type's own settings and recording, where it ran, and the cables and macro or host
+    assignments that only made sense for it. Switching back brings them back. */
+struct ParkedCable
+{
+    std::string from, fromPort, to, toPort;
+    bool toParam = false;
+    double depth = 1.0;
+    int transpose = 0;
+};
+struct ParkedMapping
+{
+    int slot = 0;                       ///< macro index, or host slot when `host`
+    bool host = false;
+    std::string param;
+    double min = 0.0, max = 1.0;
+    int curve = 0;                      ///< MacroCurve
+};
+struct SourceMode
+{
+    Domain domain = Domain::global;
+    std::map<std::string, double> params;
+    std::map<std::string, std::string> strings;
+    std::vector<ParkedCable> cables;
+    std::vector<ParkedMapping> mappings;
+};
+
 struct NodeModel
 {
     std::string id;                     ///< stable UUID-like id ("n-1a2b3c4d")
@@ -38,6 +65,8 @@ struct NodeModel
         un-soloed source keeps running and keeps its routing; only what it adds to the sound is
         faded out at its own output (audibleGain). Saved only when set. */
     bool muted = false, solo = false;
+    /** A sound source's other types, as it left them (by node type id). Saved only when any. */
+    std::map<std::string, SourceMode> modes;
 
     double param (const std::string& key, double fallback) const
     {

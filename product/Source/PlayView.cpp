@@ -545,6 +545,15 @@ SourceCard::SourceCard (Session& s, std::string nodeId, int ordinal, bool isComp
             onEdit (node);
     };
     addAndMakeVisible (edit);
+    // What kind of sound it is: one click, one choice (the card becomes that type's; this
+    // source keeps its letter, its name, its M and S, and what the other types had).
+    type.setButtonText (n != nullptr ? juce::String (edit::sourceTypeName (n->type)) : juce::String());
+    type.setIcon (icon::Kind::down, true);
+    type.setFontHeight (compact ? 11.0f : 12.0f);
+    type.setTooltip ("This source's type: ANALOG, ORGANIC, GRANULAR, RHYTHM, EXTERNAL, NOISE or LIVE INPUT. Each keeps its own settings.");
+    type.setTitle ("Source type");
+    type.onClick = [this] { showSourceTypeMenu (session, node, &type); };
+    addAndMakeVisible (type);
 
     if (d != nullptr)
     {
@@ -632,6 +641,8 @@ void SourceCard::resized()
         solo.setBounds (keys.removeFromBottom (each));
     }
     edit.setBounds (header.removeFromRight (40).withHeight (std::min (badge, 34)).translated (0, (badge - std::min (badge, 34)) / 2));
+    header.removeFromRight (7);
+    type.setBounds (header.removeFromRight (compact ? 104 : 124).withHeight (std::min (badge, 34)).translated (0, (badge - std::min (badge, 34)) / 2));
     for (auto it = toggles.rbegin(); it != toggles.rend(); ++it)
     {
         header.removeFromRight (7);

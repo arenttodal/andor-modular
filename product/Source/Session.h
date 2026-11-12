@@ -65,6 +65,12 @@ public:
         (Shift) adds it to, or takes it out of, the soloed set. */
     void toggleSolo (const std::string& nodeOrGroup, bool additive);
     void clearSolo();
+    /** A sound source becomes another kind of source, in place (edit::changeSourceType): one
+        undo step. A type that plays a recording and has none yet starts with one of ANDOR's
+        own, so it sounds at once. */
+    edit::Result changeSourceType (const std::string& node, const std::string& type);
+    /** ANDOR's own recording a new source of `type` starts with ("": it needs none). */
+    static std::string starterRecording (const std::string& type);
     bool anySolo() const;
     /** The patch's master level (dB), heard at once (VOLUME; beginGesture first for its undo). */
     void setMasterDb (double dB);

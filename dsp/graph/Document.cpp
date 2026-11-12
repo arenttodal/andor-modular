@@ -405,6 +405,54 @@ json::Value toJson (const Document& doc)
             }
         if (anyString)
             v.set ("strings", std::move (strings));
+        if (! n.modes.empty())
+        {
+            // A source's other types as it left them (std::map: sorted, deterministic).
+            auto modes = json::Value::object();
+            for (const auto& [type, mode] : n.modes)
+            {
+                auto m = json::Value::object();
+                m.set ("domain", domainName (mode.domain));
+                auto mp = json::Value::object();
+                for (const auto& [k, value] : mode.params)
+                    mp.set (k, value);
+                m.set ("params", std::move (mp));
+                auto ms = json::Value::object();
+                for (const auto& [k, value] : mode.strings)
+                    if (! value.empty())
+                        ms.set (k, value);
+                m.set ("strings", std::move (ms));
+                auto cables = json::Value::array();
+                for (const auto& c : mode.cables)
+                {
+                    auto e = json::Value::object();
+                    e.set ("from", c.from);
+                    e.set ("fromPort", c.fromPort);
+                    e.set ("to", c.to);
+                    e.set ("toPort", c.toPort);
+                    e.set ("toParam", c.toParam);
+                    e.set ("depth", c.depth);
+                    e.set ("transpose", c.transpose);
+                    cables.push (std::move (e));
+                }
+                m.set ("cables", std::move (cables));
+                auto maps = json::Value::array();
+                for (const auto& mm : mode.mappings)
+                {
+                    auto e = json::Value::object();
+                    e.set ("slot", mm.slot);
+                    e.set ("host", mm.host);
+                    e.set ("param", mm.param);
+                    e.set ("min", mm.min);
+                    e.set ("max", mm.max);
+                    e.set ("curve", macroCurveName (static_cast<MacroCurve> (mm.curve)));
+                    maps.push (std::move (e));
+                }
+                m.set ("mappings", std::move (maps));
+                modes.set (type, std::move (m));
+            }
+            v.set ("modes", std::move (modes));
+        }
         nodes.push (std::move (v));
     }
     root.set ("nodes", std::move (nodes));
@@ -620,6 +668,50 @@ LoadResult fromJson (const json::Value& input, Document& out)
         for (const auto& [k, value] : n["strings"].entries())
             if (value.isString())
                 m.strings[k] = value.asString();
+        for (const auto& [type, saved] : n["modes"].entries())
+        {
+            if (m.modes.size() >= 16 || type.empty())
+                break;
+            SourceMode mode;
+            Domain d = Domain::global;
+            mode.domain = domainFromName (saved.getString ("domain"), d) ? d : Domain::global;
+            for (const auto& [k, value] : saved["params"].entries())
+                if (value.isNumber() && std::isfinite (value.asNumber()))
+                    mode.params[k] = value.asNumber();
+            for (const auto& [k, value] : saved["strings"].entries())
+                if (value.isString())
+                    mode.strings[k] = value.asString();
+            for (const auto& e : saved["cables"].elements())
+            {
+                if (mode.cables.size() >= 64)
+                    break;
+                ParkedCable c;
+                c.from = e.getString ("from");
+                c.fromPort = e.getString ("fromPort");
+                c.to = e.getString ("to");
+                c.toPort = e.getString ("toPort");
+                c.toParam = e.getBool ("toParam", false);
+                c.depth = std::clamp (e.get ("depth", 1.0), -1.0, 1.0);
+                c.transpose = std::clamp (e.getInt ("transpose", 0), -48, 48);
+                if (! c.from.empty() && ! c.to.empty())
+                    mode.cables.push_back (std::move (c));
+            }
+            for (const auto& e : saved["mappings"].elements())
+            {
+                if (mode.mappings.size() >= 64)
+                    break;
+                ParkedMapping mm;
+                mm.slot = std::clamp (e.getInt ("slot", 0), 0, 63);
+                mm.host = e.getBool ("host", false);
+                mm.param = e.getString ("param");
+                mm.min = std::clamp (e.get ("min", 0.0), 0.0, 1.0);
+                mm.max = std::clamp (e.get ("max", 1.0), 0.0, 1.0);
+                mm.curve = static_cast<int> (macroCurveFrom (e.getString ("curve", "linear")));
+                if (! mm.param.empty())
+                    mode.mappings.push_back (std::move (mm));
+            }
+            m.modes[type] = std::move (mode);
+        }
         doc.nodes.push_back (std::move (m));
     }
 

@@ -42,6 +42,14 @@ juce::String QuickAdd::categoryOf (const NodeDesc& d)
     return d.type.rfind ("fx.", 0) == 0 ? juce::String ("Effects") : juce::String (d.category);
 }
 
+juce::String QuickAdd::rowName (const NodeDesc& d)
+{
+    const auto type = edit::sourceTypeName (d.type);
+    if (type.empty())
+        return juce::String (d.name);
+    return d.type == "osc.analog" ? juce::String ("SOURCE") : "SOURCE " + juce::String::fromUTF8 ("\xc2\xb7 ") + juce::String (type);
+}
+
 QuickAdd::QuickAdd (const Registry& reg) : registry (reg)
 {
     setWantsKeyboardFocus (false);
@@ -74,6 +82,16 @@ std::vector<const NodeDesc*> QuickAdd::modulesIn (const juce::String& category) 
     for (const auto* d : registry.all())
         if (allowed (d) && categoryOf (*d) == category)
             out.push_back (d);
+    // The one SOURCE first (an oscillator, playable at once), then the same source starting
+    // as each other type, in the order its TYPE menu has them.
+    const auto rank = [] (const NodeDesc* d) {
+        const auto& types = edit::sourceTypes();
+        for (std::size_t i = 0; i < types.size(); ++i)
+            if (d->type == types[i].type)
+                return static_cast<int> (i);
+        return static_cast<int> (types.size());
+    };
+    std::stable_sort (out.begin(), out.end(), [&] (const NodeDesc* a, const NodeDesc* b) { return rank (a) < rank (b); });
     return out;
 }
 
@@ -146,7 +164,15 @@ void QuickAdd::rebuild()
     searching = ! q.empty();
     if (searching)
     {
-        for (const auto* d : registry.search (q, 40))
+        auto found = registry.search (q, 40);
+        // "so", "source", "sources": the one SOURCE leads (a module named RHYTHMIC SOURCE would)
+        if (const auto typed = juce::String (q).toLowerCase(); typed.length() >= 2 && juce::String ("sources").startsWith (typed))
+            if (const auto* one = registry.find ("osc.analog"); one != nullptr)
+            {
+                found.erase (std::remove (found.begin(), found.end(), one), found.end());
+                found.insert (found.begin(), one);
+            }
+        for (const auto* d : found)
             if (allowed (d) && rootRows.size() < 8)
                 rootRows.push_back ({ Row::Kind::module, d, {} });
     }
@@ -305,7 +331,7 @@ void QuickAdd::paintRows (juce::Graphics& g, const std::vector<Row>& rows, juce:
             g.setColour (d->available ? colour::text : colour::textMicro);
             g.setFont (fonts::make (13.0f, Weight::regular, 0.03f));
             const bool tagged = (isRoot && searching) || d->cost.heavy || ! d->available;
-            g.drawText (juce::String (d->name), r.withTrimmedLeft (28).withTrimmedRight (tagged ? 78 : 8), juce::Justification::centredLeft, true);
+            g.drawText (rowName (*d), r.withTrimmedLeft (28).withTrimmedRight (tagged ? 78 : 8), juce::Justification::centredLeft, true);
             if (tagged)
             {
                 // one quiet word at the end: where it lives (search), or what to know

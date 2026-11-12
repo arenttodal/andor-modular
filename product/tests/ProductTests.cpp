@@ -939,6 +939,184 @@ TEST_CASE ("Every module opens a device of its own: the family's rack, or one bu
     editor.openRack ({});
 }
 
+TEST_CASE ("One SOURCE: added at once, then any kind of sound from its card, its tile or its rack", "[product][ui][source][type]")
+{
+    Instrument in;
+    REQUIRE (in.editor != nullptr);
+    in.editor->setSize (1448, 1086);
+    auto& s = in.session();
+    auto& editor = *in.editor;
+    auto& menu = editor.quickAddView();
+    s.newPatch();
+    settle();
+
+    // Quick Add: Sources leads with the one SOURCE; "source", "oscillator" and a type's own
+    // words find it (as that type)
+    ui::QuickAddContext ctx;
+    ctx.world = { 200.0f, 200.0f };
+    editor.openQuickAdd (ctx, editor.getScreenBounds().getCentre());
+    menu.openCategory ("Sources");
+    auto listed = menu.visibleTypes();
+    REQUIRE_FALSE (listed.empty());
+    CHECK (listed.front() == "osc.analog");
+    CHECK (ui::QuickAdd::rowName (*Registry::builtIn().find ("osc.analog")) == "SOURCE");
+    CHECK (ui::QuickAdd::rowName (*Registry::builtIn().find ("src.organic")).startsWith ("SOURCE"));
+    CHECK (ui::QuickAdd::rowName (*Registry::builtIn().find ("src.organic")).endsWith ("ORGANIC"));
+    CHECK (ui::QuickAdd::rowName (*Registry::builtIn().find ("proc.filter")) == "FILTER");
+    for (const auto& [query, type] : { std::pair<const char*, const char*> { "source", "osc.analog" }, { "oscillator", "osc.analog" }, { "analog", "osc.analog" },
+                                      { "organic", "src.organic" }, { "sample", "src.organic" }, { "granular", "src.granular" }, { "rhythm", "src.rhythm" },
+                                      { "kontakt", "src.external" }, { "noise", "src.noise" }, { "input", "src.input" } })
+    {
+        INFO (query);
+        menu.setQuery (query);
+        REQUIRE_FALSE (menu.visibleTypes().empty());
+        CHECK (menu.visibleTypes().front() == type);
+    }
+    // SOURCE, Return: an oscillator, wired, audible, within the immediate-add budget
+    menu.setQuery ("source");
+    const auto started = juce::Time::getMillisecondCounterHiRes();
+    menu.chooseSelected();
+    const double ms = juce::Time::getMillisecondCounterHiRes() - started;
+    CHECK (ms < 100.0);
+    const auto source = in.firstOfType ("osc.analog");
+    REQUIRE_FALSE (source.empty());
+    auto out = run (in.processor, 0.5, { juce::MidiMessage::noteOn (1, 57, 0.9f) });
+    CHECK (rms (out, 4800) > 0.01);
+    run (in.processor, 0.2, { juce::MidiMessage::noteOff (1, 57) });
+
+    // Its card on PLAY carries its type; the choice changes the generator, not the source
+    s.beginGesture ("model");
+    s.setParam (source, "model", 1.0);   // DCO
+    s.perform ("rename", [&] (Document& d) {
+        d.findNode (source)->label = "BOWED CLOUD";
+        edit::Result r;
+        r.ok = true;
+        return r;
+    });
+    s.setMuted (source, false);
+    s.toggleSolo (source, false);
+    editor.showPlay (true);
+    settle();
+    auto& play = editor.playView();
+    REQUIRE (play.cardCount() == 1);
+    CHECK (play.card (0).typeKey().getButtonText() == "ANALOG");
+    const auto sounds = [&] (int note) {
+        s.assets().waitIdle (20.0);
+        settle (80);
+        run (in.processor, 0.2);
+        const auto audio = run (in.processor, 0.7, { juce::MidiMessage::noteOn (1, note, 0.9f) });
+        run (in.processor, 0.4, { juce::MidiMessage::noteOff (1, note) });
+        return rms (audio, 9600);
+    };
+    const std::size_t modules = s.document().nodes.size();
+    for (const auto& [type, name] : { std::pair<const char*, const char*> { "src.organic", "ORGANIC" }, { "src.granular", "GRANULAR" }, { "src.rhythm", "RHYTHM" },
+                                      { "src.noise", "NOISE" }, { "osc.analog", "ANALOG" } })
+    {
+        INFO (name);
+        const auto before = saveToString (s.document());
+        const auto changed = s.changeSourceType (source, type);
+        INFO (changed.message);
+        REQUIRE (changed.ok);
+        const auto* n = s.document().findNode (source);
+        REQUIRE (n != nullptr);
+        CHECK (n->type == type);
+        CHECK (n->label == "BOWED CLOUD");
+        CHECK (n->solo);
+        CHECK (s.document().nodes.size() == modules);          // the same source: never another module, never a second source
+        CHECK (s.report().sources == 1);
+        REQUIRE (play.cardCount() == 1);
+        CHECK (play.card (0).nodeId() == source);
+        CHECK (play.card (0).typeKey().getButtonText() == name);
+        CHECK (sounds (57) > 0.002);                            // the generator changed, and it plays
+        // one undo step back, one redo forward: exactly
+        const auto after = saveToString (s.document());
+        s.undo();
+        CHECK (saveToString (s.document()) == before);
+        s.redo();
+        CHECK (saveToString (s.document()) == after);
+    }
+    // ANALOG came back as it was left (DCO), and its recordings are kept for their types
+    CHECK (juce::roundToInt (s.document().paramValue (s.registry(), source, "model")) == 1);
+    CHECK (s.document().findNode (source)->modes.at ("src.organic").strings.at ("sample") == "samples/bowed-c3.wav");
+    CHECK (s.document().findNode (source)->modes.at ("src.rhythm").strings.at ("sample") == "samples/clockwork-120.wav");
+
+    // Its rack follows it: the same drawer, the new type's device; TYPE is in the rack too
+    editor.showPlay (false);
+    editor.openRack (source);
+    auto& rack = editor.rackView();
+    REQUIRE (rack.isNative());
+    REQUIRE (rack.binding() != nullptr);
+    CHECK (juce::roundToInt (rack.binding()->parameterValue ("m.sourceType")) == 0);
+    rack.binding()->setParameterValue ("m.sourceType", 1.0f);   // ORGANIC (applied after the click returns)
+    settle (120);
+    CHECK (s.document().findNode (source)->type == "src.organic");
+    REQUIRE (rack.isOpen());
+    REQUIRE (rack.isNative());
+    CHECK (rack.shown() == source);
+    CHECK (rack.module()->title() == "BOWED CLOUD");
+    CHECK (juce::roundToInt (rack.binding()->parameterValue ("m.sourceType")) == 1);
+    CHECK (s.document().findNode (source)->strings.at ("sample") == "samples/bowed-c3.wav");
+    editor.openRack ({});
+
+    // Six sources, each its own type; the budget is the patch's, not the types'
+    for (const char* type : { "osc.analog", "osc.analog", "osc.analog", "osc.analog", "osc.analog" })
+        REQUIRE (s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), type, 0, 0, source); }).ok);
+    CHECK (s.report().sources == 6);
+    std::vector<std::string> ids;
+    for (const auto& n : s.document().nodes)
+        if (const auto* d = s.registry().find (n.type); d != nullptr && d->role == NodeRole::source)
+            ids.push_back (n.id);
+    REQUIRE (ids.size() == 6);
+    CHECK (s.changeSourceType (ids[1], "src.noise").ok);
+    CHECK (s.changeSourceType (ids[2], "src.granular").ok);
+    CHECK (s.changeSourceType (ids[3], "src.external").ok);
+    const auto second = s.changeSourceType (ids[4], "src.external");   // one hosted instrument for the patch
+    CHECK_FALSE (second.ok);
+    CHECK (s.document().findNode (ids[4])->type == "osc.analog");
+    CHECK (s.report().sources == 6);
+    editor.showPlay (true);
+    settle();
+    REQUIRE (play.cardCount() == 6);
+    CHECK (play.card (1).typeKey().getButtonText() == "NOISE");
+    CHECK (play.card (2).typeKey().getButtonText() == "GRANULAR");
+    CHECK (play.card (3).typeKey().getButtonText() == "EXTERNAL");
+    CHECK (overlappingTiles (s.document(), s.registry()) == 0);
+}
+
+TEST_CASE ("Factory and older patches: every source shows as the SOURCE type it is; nothing is converted", "[product][source][type][state]")
+{
+    Instrument in;
+    REQUIRE (in.editor != nullptr);
+    in.editor->setSize (1448, 1086);
+    auto& s = in.session();
+    for (int i = 0; i < static_cast<int> (Session::factoryPatches().size()); ++i)
+    {
+        const auto& item = Session::factoryPatches()[static_cast<std::size_t> (i)];
+        INFO (item.name);
+        // the file as it shipped loads, and saves to the very same text: nothing was rewritten
+        Document fromFile;
+        REQUIRE (loadFromString (item.text, fromFile).ok);
+        CHECK (saveToString (fromFile) == item.text);
+        CHECK (item.text.find ("\"modes\"") == std::string::npos);
+        REQUIRE (s.loadFactory (i));
+        in.editor->showPlay (true);
+        settle();
+        auto& play = in.editor->playView();
+        int sources = 0;
+        for (const auto& n : s.document().nodes)
+            if (const auto* d = s.registry().find (n.type); d != nullptr && d->role == NodeRole::source && n.group.empty())
+                ++sources;
+        for (int c = 0; c < play.cardCount(); ++c)
+        {
+            const auto* n = s.document().findNode (play.card (c).nodeId());
+            REQUIRE (n != nullptr);
+            CHECK (play.card (c).typeKey().getButtonText() == juce::String (edit::sourceTypeName (n->type)));
+            CHECK (play.card (c).typeKey().getButtonText().isNotEmpty());
+        }
+        CHECK (play.cardCount() >= std::min (sources, 1));
+    }
+}
+
 TEST_CASE ("Modules never land on each other: added, inserted, connected from a port, loaded", "[product][ui][layout]")
 {
     Instrument in;

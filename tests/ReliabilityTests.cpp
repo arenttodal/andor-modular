@@ -884,3 +884,273 @@ TEST_CASE ("Listening demos: shared filters, an unpitched recording, octave and 
     }
 }
 
+//==============================================================================
+// One SOURCE, several kinds of sound: a source changes its type in place.
+namespace
+{
+    int errorsIn (const Document& d)
+    {
+        int n = 0;
+        for (const auto& i : Validator (reg()).validate (d).issues)
+            n += i.severity == Issue::Severity::error ? 1 : 0;
+        return n;
+    }
+    bool hasCable (const Document& d, const std::string& from, const std::string& fromPort, const std::string& to, const std::string& toPort)
+    {
+        for (const auto& c : d.connections)
+            if (c.from == from && c.fromPort == fromPort && c.to == to && c.toPort == toPort)
+                return true;
+        return false;
+    }
+}
+
+TEST_CASE ("SOURCE: its type changes in place; the type it left comes back as it was", "[source][type]")
+{
+    std::string osc;
+    Document d = basicPatch (&osc);
+    const auto keys = nodeOfType (d, "event.keyboard"), env = nodeOfType (d, "proc.vca");
+    d.findNode (osc)->label = "BOWED CLOUD";
+    d.findNode (osc)->muted = false;
+    d.findNode (osc)->solo = true;
+    d.findNode (osc)->x = 123.0f;
+    edit::setParam (d, reg(), osc, "model", 1.0);
+    edit::setParam (d, reg(), osc, "octave", 1.0);
+    edit::setParam (d, reg(), osc, "level", 0.35);
+    const std::size_t nodes = d.nodes.size(), cables = d.connections.size();
+
+    // ANALOG -> ORGANIC: the same module, another generator; its notes and its output stay
+    auto r = edit::changeSourceType (d, reg(), osc, "src.organic");
+    INFO (r.message);
+    REQUIRE (r.ok);
+    const auto* n = d.findNode (osc);
+    REQUIRE (n != nullptr);
+    CHECK (n->type == "src.organic");
+    CHECK (n->label == "BOWED CLOUD");
+    CHECK (n->solo);
+    CHECK (n->x == 123.0f);
+    CHECK (d.nodes.size() == nodes);
+    CHECK (d.connections.size() == cables);
+    CHECK (hasCable (d, keys, "notes", osc, "notes"));
+    CHECK (hasCable (d, osc, "out", env, "in"));
+    CHECK (errorsIn (d) == 0);
+    CHECK (d.paramValue (reg(), osc, "level") == Catch::Approx (0.35));   // (its loudness carried: both count in %)
+    // it is the sound that changed: a recording now plays
+    d.findNode (osc)->strings["sample"] = "samples/bowed-c3.wav";
+    edit::setParam (d, reg(), osc, "level", 1.0);
+    edit::setParam (d, reg(), osc, "tune", 7.0);
+    edit::setParam (d, reg(), osc, "loop", 1.0);
+    {
+        OfflineRenderer renderer;
+        const auto out = test::render (renderer, d, { { 48, 0.0, 1.0 } }, 1.0, 256, 48000.0, factoryAssets());
+        CHECK (test::rms (out.left, 9600) > 0.003);
+    }
+
+    // ORGANIC -> GRANULAR -> ANALOG: each as new or as it was
+    REQUIRE (edit::changeSourceType (d, reg(), osc, "src.granular").ok);
+    CHECK (d.findNode (osc)->strings["sample"].empty());             // (GRANULAR's own recording: none yet)
+    d.findNode (osc)->strings["sample"] = "samples/rain-texture.wav";
+    r = edit::changeSourceType (d, reg(), osc, "osc.analog");
+    REQUIRE (r.ok);
+    CHECK (r.message.find ("again") != std::string::npos);
+    CHECK (std::lround (d.paramValue (reg(), osc, "model")) == 1);
+    CHECK (std::lround (d.paramValue (reg(), osc, "octave")) == 1);
+    CHECK (d.paramValue (reg(), osc, "level") == Catch::Approx (0.35));
+    CHECK (d.findNode (osc)->modes.count ("src.organic") == 1);
+    CHECK (d.findNode (osc)->modes.count ("src.granular") == 1);
+    // ...and back to ORGANIC: its recording, its tuning and its loop are there
+    REQUIRE (edit::changeSourceType (d, reg(), osc, "src.organic").ok);
+    CHECK (d.findNode (osc)->strings["sample"] == "samples/bowed-c3.wav");
+    CHECK (d.paramValue (reg(), osc, "tune") == Catch::Approx (7.0));
+    CHECK (d.paramValue (reg(), osc, "loop") == Catch::Approx (1.0));
+    REQUIRE (edit::changeSourceType (d, reg(), osc, "src.granular").ok);
+    CHECK (d.findNode (osc)->strings["sample"] == "samples/rain-texture.wav");
+    CHECK (d.findNode (osc)->label == "BOWED CLOUD");
+    CHECK (d.nodes.size() == nodes);
+    CHECK (errorsIn (d) == 0);
+
+    // saved and loaded: the same patch, the other types with it; a patch without any has no trace of this
+    const auto text = saveToString (d);
+    CHECK (text.find ("\"modes\"") != std::string::npos);
+    Document again;
+    REQUIRE (loadFromString (text, again).ok);
+    CHECK (saveToString (again) == text);
+    CHECK (again.findNode (osc)->modes.at ("src.organic").strings.at ("sample") == "samples/bowed-c3.wav");
+    CHECK (saveToString (basicPatch()).find ("\"modes\"") == std::string::npos);
+
+    // what is not a kind of source, or not a source, is refused and nothing changes
+    const auto before = saveToString (d);
+    CHECK_FALSE (edit::changeSourceType (d, reg(), osc, "proc.filter").ok);
+    CHECK_FALSE (edit::changeSourceType (d, reg(), env, "src.noise").ok);
+    CHECK_FALSE (edit::changeSourceType (d, reg(), "nobody", "src.noise").ok);
+    CHECK (saveToString (d) == before);
+}
+
+TEST_CASE ("SOURCE: cables and assignments only one type has are set aside with it, never lost", "[source][type]")
+{
+    std::string a;
+    Document d = basicPatch (&a);
+    // a second oscillator modulates the first one's FM; a macro holds its WIDTH and its LEVEL
+    const auto b = edit::addModule (d, reg(), "osc.analog", 0, 240, a).focus;
+    REQUIRE_FALSE (b.empty());
+    REQUIRE (edit::connect (d, reg(), b, "out", a, "fm").ok);
+    d.macros[0].mappings.push_back ({ a, "width", 0.2, 0.8, MacroCurve::linear });
+    d.macros[0].mappings.push_back ({ a, "level", 0.0, 1.0, MacroCurve::linear });
+    d.hostBindings[3] = { a, "fine" };
+    const auto original = saveToString (d);
+    REQUIRE (errorsIn (d) == 0);
+
+    auto r = edit::changeSourceType (d, reg(), a, "src.noise");
+    INFO (r.message);
+    REQUIRE (r.ok);
+    CHECK_FALSE (hasCable (d, b, "out", a, "fm"));                 // NOISE has no FM
+    CHECK (r.message.find ("kept for it") != std::string::npos);  // ...and says so
+    CHECK (errorsIn (d) == 0);
+    REQUIRE (d.macros[0].mappings.size() == 1);                    // LEVEL is NOISE's too; WIDTH is not
+    CHECK (d.macros[0].mappings[0].param == "level");
+    CHECK (d.hostBindings[3].node.empty());
+    const auto& parked = d.findNode (a)->modes.at ("osc.analog");
+    CHECK (parked.cables.size() == 1);
+    CHECK (parked.mappings.size() == 2);
+
+    r = edit::changeSourceType (d, reg(), a, "osc.analog");
+    REQUIRE (r.ok);
+    CHECK (hasCable (d, b, "out", a, "fm"));
+    CHECK (d.hostBindings[3].node == a);
+    CHECK (d.hostBindings[3].param == "fine");
+    bool width = false;
+    for (const auto& m : d.macros[0].mappings)
+        width = width || (m.node == a && m.param == "width" && m.min == 0.2 && m.max == 0.8);
+    CHECK (width);
+    CHECK (errorsIn (d) == 0);
+    // the round trip leaves the patch as it was (apart from what NOISE left behind on the module)
+    Document plain = d;
+    plain.findNode (a)->modes.clear();
+    Document first;
+    REQUIRE (loadFromString (original, first).ok);
+    CHECK (plain.connections.size() == first.connections.size());
+    CHECK (plain.findNode (a)->params == first.findNode (a)->params);
+}
+
+TEST_CASE ("SOURCE: a type that plays once for all notes joins after the voices; a type that cannot fit is refused", "[source][type][routing-domains]")
+{
+    std::string osc;
+    Document d = basicPatch (&osc);
+    const auto env = nodeOfType (d, "proc.vca"), mix = nodeOfType (d, "util.voicemix"), out = nodeOfType (d, "util.output");
+    const auto original = d;
+
+    // ANALOG (per voice) -> RHYTHM (once, globally): it cannot feed the per-voice envelope
+    auto r = edit::changeSourceType (d, reg(), osc, "src.rhythm");
+    INFO (r.message);
+    REQUIRE (r.ok);
+    CHECK (d.findNode (osc)->domain == Domain::global);
+    CHECK_FALSE (hasCable (d, osc, "out", env, "in"));
+    CHECK (hasCable (d, osc, "out", out, "in"));                   // where the chain's voices meet
+    CHECK (r.message.find ("once for all notes") != std::string::npos);
+    CHECK (errorsIn (d) == 0);
+    CHECK (d.nodes.size() == original.nodes.size());               // no mixer invented
+    d.findNode (osc)->strings["sample"] = "samples/clockwork-120.wav";
+    {
+        OfflineRenderer renderer;
+        const auto audio = test::render (renderer, d, {}, 1.5, 256, 48000.0, factoryAssets());
+        CHECK (test::rms (audio.left, 4800) > 0.003);
+    }
+    // RHYTHM -> NOISE (another per-voice type, never seen on this source): it takes the source's
+    // per-voice chain back (no VOICE MIX of its own is invented), and the keyboard's notes
+    r = edit::changeSourceType (d, reg(), osc, "src.noise");
+    INFO (r.message);
+    REQUIRE (r.ok);
+    CHECK (d.nodes.size() == original.nodes.size());
+    CHECK (hasCable (d, osc, "out", env, "in"));
+    CHECK_FALSE (hasCable (d, osc, "out", out, "in"));
+    CHECK (hasCable (d, nodeOfType (d, "event.keyboard"), "notes", osc, "notes"));
+    CHECK (errorsIn (d) == 0);
+    (void) mix;
+    // back: its per-voice cable is its own again, the loop's cable is kept for the loop
+    r = edit::changeSourceType (d, reg(), osc, "osc.analog");
+    REQUIRE (r.ok);
+    CHECK (d.findNode (osc)->domain == Domain::voice);
+    CHECK (hasCable (d, osc, "out", env, "in"));
+    CHECK_FALSE (hasCable (d, osc, "out", out, "in"));
+    CHECK (errorsIn (d) == 0);
+    {
+        OfflineRenderer renderer;
+        const auto audio = test::render (renderer, d, { { 57, 0.0, 0.8 } }, 1.0);
+        CHECK (test::rms (audio.left, 4800) > 0.01);
+        CHECK (std::abs (test::fundamental (audio.left, 48000.0, 9600, 9600, 60.0, 1500.0) - 220.0) < 4.0);
+    }
+    // RHYTHM -> ANALOG from a patch where the loop went straight to the output: voices need
+    // their mix, so it is given one (as a dragged cable would be), and the keyboard plays it
+    {
+        Document g;
+        auto* loop = g.addNode (reg(), "src.rhythm", 0, 0);
+        const auto id = loop->id;
+        auto* output = g.addNode (reg(), "util.output", 400, 0);
+        const auto outId = output->id;
+        g.addNode (reg(), "event.keyboard", -300, 0);
+        REQUIRE (edit::connect (g, reg(), id, "out", outId, "in").ok);
+        const auto made = edit::changeSourceType (g, reg(), id, "osc.analog");
+        INFO (made.message);
+        REQUIRE (made.ok);
+        CHECK (errorsIn (g) == 0);
+        CHECK (hasCable (g, nodeOfType (g, "event.keyboard"), "notes", id, "notes"));
+        OfflineRenderer renderer;
+        const auto audio = test::render (renderer, g, { { 57, 0.0, 0.8 } }, 1.0);
+        CHECK (test::rms (audio.left, 4800) > 0.005);
+    }
+    // A source an ARPEGGIATOR plays: after a type without notes, the next type is played by
+    // that arpeggiator again (not by the keyboard directly)
+    {
+        std::string a;
+        Document g = basicPatch (&a);
+        const auto arp = edit::addModule (g, reg(), "event.arp", -100, 0, a).focus;
+        REQUIRE_FALSE (arp.empty());
+        REQUIRE (hasCable (g, arp, "notes", a, "notes"));
+        REQUIRE (edit::changeSourceType (g, reg(), a, "src.rhythm").ok);
+        CHECK_FALSE (hasCable (g, arp, "notes", a, "notes"));
+        REQUIRE (edit::changeSourceType (g, reg(), a, "src.organic").ok);
+        CHECK (hasCable (g, arp, "notes", a, "notes"));
+        CHECK_FALSE (hasCable (g, nodeOfType (g, "event.keyboard"), "notes", a, "notes"));
+        CHECK (errorsIn (g) == 0);
+    }
+    // A second hosted instrument is over the patch's limit: refused, with the reason, untouched
+    {
+        Document two = basicPatch (&osc);
+        const auto second = edit::addModule (two, reg(), "osc.analog", 0, 240, osc).focus;
+        REQUIRE (edit::changeSourceType (two, reg(), osc, "src.external").ok);
+        const auto before = saveToString (two);
+        const auto refused = edit::changeSourceType (two, reg(), second, "src.external");
+        INFO (refused.message);
+        CHECK_FALSE (refused.ok);
+        CHECK_FALSE (refused.message.empty());
+        CHECK (saveToString (two) == before);
+    }
+}
+
+TEST_CASE ("SOURCE: changing its type under a held chord neither hangs a note nor leaves the patch silent", "[source][type][lifecycle]")
+{
+    std::string osc;
+    Document d = basicPatch (&osc);
+    Player p;
+    p.publish (d);
+    p.run (80, { Player::on (57), Player::on (64) });
+    REQUIRE (p.tail (2048) > 0.005);
+    for (const char* type : { "src.noise", "src.organic", "osc.analog", "src.rhythm", "osc.analog" })
+    {
+        INFO (type);
+        REQUIRE (edit::changeSourceType (d, reg(), osc, type).ok);
+        p.publish (d);
+        p.run (120);
+        for (const float x : p.left)
+            REQUIRE (std::isfinite (x));
+        CHECK (p.engine.activeVoices() <= 2);
+    }
+    // the chord is still held on the ANALOG source it came back to, then released: all ends
+    CHECK (p.tail (2048) > 0.003);
+    p.run (500, { Player::off (57), Player::off (64) });
+    CHECK (p.engine.activeVoices() == 0);
+    CHECK (p.tail (1024) < 1.0e-3);
+    // a new note plays
+    p.run (60, { Player::on (60) });
+    CHECK (p.tail (2048) > 0.005);
+}
+

@@ -247,6 +247,29 @@ void Session::setParam (const std::string& node, const std::string& param, doubl
     changed (pd.curve == ParamCurve::choice || pd.curve == ParamCurve::toggle);
 }
 
+std::string Session::starterRecording (const std::string& type)
+{
+    if (type == "src.organic") return "samples/bowed-c3.wav";
+    if (type == "src.granular") return "samples/rain-texture.wav";
+    if (type == "src.rhythm") return "samples/clockwork-120.wav";
+    return {};
+}
+
+edit::Result Session::changeSourceType (const std::string& node, const std::string& type)
+{
+    return perform ("source type", [&] (Document& d) {
+        auto r = edit::changeSourceType (d, registry(), node, type);
+        if (r.ok)
+            if (auto* n = d.findNode (node); n != nullptr && n->strings.count ("sample") > 0 && n->strings["sample"].empty())
+                if (const auto starter = starterRecording (type); ! starter.empty())
+                {
+                    n->strings["sample"] = starter;
+                    r.message += " (with ANDOR's own recording: drop yours on it)";
+                }
+        return r;
+    });
+}
+
 void Session::setNodeString (const std::string& node, const std::string& key, const std::string& value)
 {
     perform ("set " + juce::String (key), [&] (Document& d) {

@@ -35,6 +35,7 @@ public:
     ui::Canvas& canvasView() noexcept { return canvas; }
     ui::QuickAdd& quickAddView() noexcept { return quickAdd; }
     ui::Rack& rackView() noexcept { return rack; }
+    ui::PlayView& playView() noexcept { return play; }
     void openQuickAdd (const ui::QuickAddContext& ctx, juce::Point<int> screen);
     /** Opens a module's rack along the board's foot (another one open: swapped). "" closes. */
     void openRack (const std::string& id);

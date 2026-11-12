@@ -466,6 +466,31 @@ void refreshControl (juce::Component* c)
         t->refresh();
 }
 
+void addSourceTypeItems (juce::PopupMenu& menu, Session& s, const std::string& node)
+{
+    const auto* n = s.document().findNode (node);
+    if (n == nullptr)
+        return;
+    for (const auto& t : edit::sourceTypes())
+    {
+        const auto* d = s.registry().find (t.type);
+        const bool available = d != nullptr && d->available;
+        const std::string type = t.type;
+        menu.addItem (juce::String (t.name) + "    " + juce::String (t.about), available, n->type == type, [&s, node, type] {
+            // (after the menu has gone: the card or rack that opened it is rebuilt by this)
+            juce::MessageManager::callAsync ([&s, node, type] { s.changeSourceType (node, type); });
+        });
+    }
+}
+
+void showSourceTypeMenu (Session& s, const std::string& node, juce::Component* target)
+{
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("SOURCE TYPE");
+    addSourceTypeItems (menu, s, node);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (target));
+}
+
 //==============================================================================
 KeyButton::KeyButton (const juce::String& label, skin::KeyRole r) : juce::Button (label), role (r)
 {

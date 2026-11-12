@@ -97,6 +97,9 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     std::function<void (const std::string& nodeId)> onEdit;
+    /** Tests: its TYPE key. */
+    juce::Button& typeKey() noexcept { return type; }
+    const std::string& nodeId() const noexcept { return node; }
 
 private:
     void timerCallback() override;
@@ -107,6 +110,7 @@ private:
     bool compact = false, audible = true;
     KeyButton mute { "M", skin::KeyRole::modifier }, solo { "S", skin::KeyRole::modifier };
     KeyButton edit { juce::String(), skin::KeyRole::generic };
+    KeyButton type { juce::String(), skin::KeyRole::generic };   ///< its kind of sound (ANALOG, ORGANIC...): a menu
     std::vector<std::unique_ptr<ParamKnob>> knobs;
     std::vector<std::unique_ptr<ParamMode>> modes;
     std::vector<std::unique_ptr<ParamToggle>> toggles;
@@ -129,6 +133,10 @@ public:
     std::vector<juce::Rectangle<int>> cardAreas() const;
     std::function<void (const std::string& nodeId)> onEdit;
     std::function<void()> onAddSource;
+
+    /** Tests: the source cards, in order (A, B...). */
+    int cardCount() const noexcept { return static_cast<int> (cards.size()); }
+    SourceCard& card (int index) { return *cards[static_cast<std::size_t> (index)]; }
 
 private:
     std::string signature() const;

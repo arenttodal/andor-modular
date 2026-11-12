@@ -307,17 +307,13 @@ void Editor::choose (const std::string& type)
     // A new source that plays a recording starts with one of ANDOR's own, so it sounds at once
     // (an empty one is silent until something is dropped on it): the same transaction.
     auto sounding = [] (Document& d, edit::Result made) {
-        static const std::pair<const char*, const char*> starters[] = { { "src.organic", "samples/bowed-c3.wav" },
-                                                                        { "src.granular", "samples/rain-texture.wav" },
-                                                                        { "src.rhythm", "samples/clockwork-120.wav" } };
         if (made.ok)
             if (auto* n = d.findNode (made.focus))
-                for (const auto& [sourceType, key] : starters)
-                    if (n->type == sourceType && n->strings["sample"].empty())
-                    {
-                        n->strings["sample"] = key;
-                        made.message += " with ANDOR's own recording: drop yours on it";
-                    }
+                if (const auto starter = Session::starterRecording (n->type); ! starter.empty() && n->strings["sample"].empty())
+                {
+                    n->strings["sample"] = starter;
+                    made.message += " with ANDOR's own recording: drop yours on it";
+                }
         return made;
     };
     switch (ctx.kind)
