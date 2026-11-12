@@ -18,7 +18,7 @@ namespace andor::modular::ui
 class ParamKnob final : public juce::Slider
 {
 public:
-    enum class Style { tile, detail };
+    enum class Style { tile, detail, panel };   ///< panel: a source card's knob on the front panel (the family's size)
     ParamKnob (Session& s, std::string node, std::string param, Style style);
     /** The inks of the face it sits on (a device's enamel, or ceramic). */
     void setInks (juce::Colour caption, juce::Colour captionHot, juce::Colour arc);
@@ -63,6 +63,9 @@ class ParamMode final : public juce::Component, public juce::SettableTooltipClie
 public:
     ParamMode (Session& s, std::string node, std::string param);
     void setInks (juce::Colour ink, juce::Colour hot);
+    /** In a display's corner: set from the right, a little larger. */
+    void setOnDisplay (bool display) { onDisplay = display; }
+    int idealWidth() const;
     void refresh() { repaint(); }
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -73,6 +76,7 @@ private:
     Session& session;
     std::string node, param;
     juce::Colour ink { colour::textSecondary }, hotInk { colour::text };
+    bool onDisplay = false;
 };
 
 /** A toggle parameter: in the detail column a modifier key (on: the accent's soft face); on a

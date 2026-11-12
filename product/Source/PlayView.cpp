@@ -463,146 +463,459 @@ void EvolvePanel::resized()
 }
 
 //==============================================================================
-PlayView::PlayView (ModularProcessor& p) : processor (p), session (p.session())
+namespace
 {
-    setTitle ("Play");
-    setInterceptsMouseClicks (false, false);
-    startTimerHz (30);
+    const CompiledNode* liveSource (Session& s, const std::string& id)
+    {
+        auto* g = s.graph();
+        if (g == nullptr)
+            return nullptr;
+        const auto it = g->nodeIndexById.find (id);
+        return it == g->nodeIndexById.end() ? nullptr : &g->nodes[static_cast<std::size_t> (it->second)];
+    }
+
+    float live (const CompiledNode* n, int i)
+    {
+        return n != nullptr && i < n->telemetryCount.load (std::memory_order_relaxed) ? n->telemetry[static_cast<std::size_t> (i)].load (std::memory_order_relaxed) : 0.0f;
+    }
+
+    /** One cycle of the wave an ANALOG OSC is set to (the picture of its setting, as the
+        family's source displays draw it; -1..1 at phase 0..1). */
+    float analogWave (int model, int wave, float width, float sub, float phase)
+    {
+        const float saw = 2.0f * phase - 1.0f;
+        const float tri = 1.0f - 4.0f * std::abs (phase - 0.5f);
+        const float pulse = phase < width ? 1.0f : -1.0f;
+        if (model == 0)   // CLASSIC: SAW, TRI, PULSE, SAW+TRI, SAW+PULSE, TRI+PULSE, ALL
+        {
+            static constexpr float mix[7][3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 }, { 0.5f, 0.5f, 0 }, { 0.5f, 0, 0.5f }, { 0, 0.5f, 0.5f }, { 0.34f, 0.33f, 0.33f } };
+            const auto& m = mix[juce::jlimit (0, 6, wave)];
+            return m[0] * saw + m[1] * tri + m[2] * pulse;
+        }
+        if (model == 1)   // DCO: SAW, PULSE, SAW+PULSE, SUB ONLY (the sub an octave below)
+        {
+            const float subWave = std::fmod (phase * 0.5f, 1.0f) < 0.5f ? 1.0f : -1.0f;
+            const float main = wave == 0 ? saw : (wave == 1 ? pulse : (wave == 2 ? 0.5f * (saw + pulse) : 0.0f));
+            return wave == 3 ? subWave : (main * (1.0f - 0.4f * sub) + 0.4f * sub * subWave);
+        }
+        // WIDE: SAW, PULSE, TRIANGLE, SQUARE, SUPER SAW (seven detuned saws)
+        switch (wave)
+        {
+            case 1: return pulse;
+            case 2: return tri;
+            case 3: return phase < 0.5f ? 1.0f : -1.0f;
+            case 4:
+            {
+                static constexpr float detune[7] = { 1.0f, 1.012f, 0.988f, 1.031f, 0.969f, 1.058f, 0.942f };
+                float sum = 0.0f;
+                for (int i = 0; i < 7; ++i)
+                    sum += 2.0f * std::fmod (phase * detune[i] * 2.0f + 0.137f * static_cast<float> (i), 1.0f) - 1.0f;
+                return sum / 3.6f;
+            }
+            default: return saw;
+        }
+    }
 }
 
-void PlayView::refresh() { repaint(); }
-
-void PlayView::timerCallback()
+SourceCard::SourceCard (Session& s, std::string nodeId, int ordinal, bool isCompact) : session (s), node (std::move (nodeId)), compact (isCompact)
 {
-    if (! isVisible())
+    const auto* n = session.document().findNode (node);
+    const auto* d = n != nullptr ? session.registry().find (n->type) : nullptr;
+    look = lookFor (n != nullptr ? n->type : std::string(), ordinal);
+    const auto& identity = colour::identity (std::max (0, look.badge));
+
+    mute.setFontHeight (11.5f);
+    mute.setTooltip ("Mute this source");
+    mute.setTitle ("Mute");
+    mute.onClick = [this] {
+        session.perform ("mute", [this] (Document& doc) {
+            edit::Result r;
+            if (auto* target = doc.findNode (node))
+            {
+                target->enabled = ! target->enabled;
+                r.ok = true;
+                r.message = target->enabled ? "on" : "muted";
+            }
+            return r;
+        });
+    };
+    addAndMakeVisible (mute);
+    edit.setIcon (icon::Kind::patch);
+    edit.setTooltip ("Show this source in PATCH, with every control");
+    edit.setTitle ("Edit in PATCH");
+    edit.onClick = [this] {
+        if (onEdit)
+            onEdit (node);
+    };
+    addAndMakeVisible (edit);
+
+    if (d != nullptr)
+    {
+        // Its modes in the display's corner, its switches as keys, then its knobs: the quick
+        // ones first (those on its tile), filled up with the rest that apply now.
+        std::vector<const ParamDesc*> wanted;
+        // (filled up only with continuous controls: a setting such as a sample's ROOT belongs to
+        // its detail column)
+        for (const bool quick : { true, false })
+            for (const auto& p : d->params)
+                if (p.quick == quick && d->paramShown (p, n->params) && (quick || (p.curve != ParamCurve::integer && p.curve != ParamCurve::toggle)))
+                    wanted.push_back (&p);
+        const int maxKnobs = 5;
+        for (const auto* p : wanted)
+        {
+            if (p->curve == ParamCurve::choice)
+            {
+                if (modes.size() >= 2)
+                    continue;
+                auto m = std::make_unique<ParamMode> (session, node, p->id);
+                m->setOnDisplay (true);
+                m->setInks (colour::wellText, identity.wave);
+                addAndMakeVisible (*m);
+                modes.push_back (std::move (m));
+            }
+            else if (p->curve == ParamCurve::toggle)
+            {
+                if (toggles.size() >= 2 || ! p->quick)
+                    continue;
+                auto t = std::make_unique<ParamToggle> (session, node, p->id, false);
+                addAndMakeVisible (*t);
+                toggles.push_back (std::move (t));
+            }
+            else if (static_cast<int> (knobs.size()) < maxKnobs)
+            {
+                auto k = std::make_unique<ParamKnob> (session, node, p->id, compact ? ParamKnob::Style::detail : ParamKnob::Style::panel);
+                k->setInks (colour::textSecondary, colour::text, identity.arc);
+                addAndMakeVisible (*k);
+                knobs.push_back (std::move (k));
+            }
+        }
+    }
+    setTitle (n != nullptr ? juce::String (session.document().displayName (session.registry(), *n)) : juce::String());
+    refresh();
+    startTimerHz (25);
+}
+
+void SourceCard::refresh()
+{
+    const auto* n = session.document().findNode (node);
+    const bool muted = n != nullptr && ! n->enabled;
+    if (muted != mute.getToggleState())
+    {
+        mute.setToggleState (muted, juce::dontSendNotification);
+        repaint();
+    }
+    for (auto& k : knobs)
+        k->refresh();
+    for (auto& m : modes)
+        m->refresh();
+    for (auto& t : toggles)
+        t->refresh();
+}
+
+void SourceCard::timerCallback()
+{
+    if (isVisible() && getParentComponent() != nullptr && getParentComponent()->isVisible())
+        repaint (well);
+}
+
+void SourceCard::resized()
+{
+    auto r = getLocalBounds().reduced (14, 0);
+    const int headerH = compact ? 54 : 72, badge = compact ? 34 : 48;
+    auto header = r.removeFromTop (headerH).withTrimmedTop (compact ? 10 : 12);
+    header.removeFromLeft (badge + 9);
+    mute.setBounds (header.removeFromLeft (28).withSizeKeepingCentre (28, 24).withY (header.getY() + (badge - 24) / 2));
+    edit.setBounds (header.removeFromRight (40).withHeight (std::min (badge, 34)).translated (0, (badge - std::min (badge, 34)) / 2));
+    for (auto it = toggles.rbegin(); it != toggles.rend(); ++it)
+    {
+        header.removeFromRight (7);
+        (*it)->setBounds (header.removeFromRight (74).withHeight (std::min (badge, 30)).translated (0, (badge - std::min (badge, 30)) / 2));
+    }
+    const int knobRow = knobs.empty() ? 0 : (compact ? 92 : 118);
+    auto foot = r.removeFromBottom (knobRow + (compact ? 8 : 14));
+    well = r.withTrimmedBottom (compact ? 8 : 14);
+    int right = well.getRight() - 12;
+    for (auto it = modes.rbegin(); it != modes.rend(); ++it)
+    {
+        const int w = (*it)->idealWidth();
+        (*it)->setBounds (right - w, well.getY() + 8, w, 20);
+        right -= w + 14;
+    }
+    if (! knobs.empty())
+    {
+        auto row = foot.withHeight (knobRow);
+        const int cell = std::min (compact ? 84 : 104, row.getWidth() / static_cast<int> (std::max<std::size_t> (knobs.size(), 4)));
+        int x = row.getCentreX() - cell * static_cast<int> (knobs.size()) / 2;
+        for (auto& k : knobs)
+        {
+            k->setBounds (x, row.getY(), cell, row.getHeight());
+            x += cell;
+        }
+    }
+}
+
+void SourceCard::paint (juce::Graphics& g)
+{
+    skin::drawKeys (g, *this);
+    const auto& doc = session.document();
+    const auto* n = doc.findNode (node);
+    if (n == nullptr)
         return;
-    processor.engine().copyScope (scope.data(), static_cast<int> (scope.size()));
-    repaint (well.getSmallestIntegerContainer());
+    const int badge = compact ? 34 : 48;
+    paintBadge (g, juce::Rectangle<float> (14.0f, compact ? 10.0f : 12.0f, static_cast<float> (badge), static_cast<float> (badge)), std::max (0, look.badge), look.badgeLetter);
+    // Its name, as the family writes a source's.
+    const int nameX = mute.getRight() + 12;
+    const int nameRight = (toggles.empty() ? edit.getX() : toggles.front()->getX()) - 8;
+    g.setColour (n->enabled ? colour::text : colour::textMicro);
+    g.setFont (fonts::make (compact ? 13.5f : 15.0f, Weight::regular, 0.06f));
+    g.drawFittedText (juce::String (doc.displayName (session.registry(), *n)).toUpperCase(), nameX, compact ? 10 : 12, std::max (20, nameRight - nameX), badge,
+                      juce::Justification::centredLeft, 1, 0.7f);
+
+    draw::well (g, well.toFloat(), 10.0f, colour::wellA);
+    {
+        juce::Graphics::ScopedSaveState clip (g);
+        g.reduceClipRegion (well.reduced (2));
+        paintDisplay (g, well.toFloat());
+        if (! n->enabled)
+        {
+            g.setColour (colour::wellA.withAlpha (0.6f));
+            g.fillRect (well);
+            g.setColour (colour::wellText);
+            g.setFont (fonts::make (11.5f, Weight::medium, 0.14f));
+            g.drawText ("MUTED", well, juce::Justification::centred, false);
+        }
+    }
 }
 
-void PlayView::resized()
-{
-    const auto r = getLocalBounds().toFloat();
-    well = juce::Rectangle<float> (r.getX() + 0.39f * r.getWidth(), r.getY() + 34.0f, 0.61f * r.getWidth() - 36.0f, r.getHeight() - 68.0f);
-}
-
-void PlayView::paint (juce::Graphics& g)
+void SourceCard::paintDisplay (juce::Graphics& g, juce::Rectangle<float> area)
 {
     const auto& doc = session.document();
-    const auto r = getLocalBounds().toFloat();
-    const float left = 44.0f, columnW = well.getX() - left - 36.0f;
+    const auto* n = doc.findNode (node);
+    const auto* node_ = liveSource (session, node);
+    const auto& identity = colour::identity (std::max (0, look.badge));
+    const auto wave = identity.wave;
+    const auto inner = area.reduced (16.0f, compact ? 12.0f : 30.0f).withTrimmedTop (compact ? 14.0f : 6.0f);
+    const float mid = inner.getCentreY();
+    auto value = [&] (const char* id) { return static_cast<float> (doc.paramValue (session.registry(), node, id)); };
+    auto corner = [&] (const juce::String& text, juce::Colour c, juce::Justification where = juce::Justification::bottomLeft) {
+        g.setColour (c);
+        g.setFont (fonts::make (11.5f, Weight::medium, 0.1f));
+        g.drawText (text, area.reduced (14.0f, 9.0f), where, false);
+    };
+    g.setColour (colour::wellGrid);
+    g.fillRect (juce::Rectangle<float> (inner.getX(), mid - 0.5f, inner.getWidth(), 1.0f));
+    const auto& type = n->type;
 
-    // The instrument's name in ANDOR's identity face, and what it says about itself.
-    g.setColour (colour::textMicro.darker (0.2f));
-    g.setFont (fonts::make (12.0f, Weight::medium, 0.14f));
-    g.drawText ("INSTRUMENT", juce::Rectangle<float> (left, 34.0f, columnW, 16.0f), juce::Justification::centredLeft, false);
-    g.setColour (colour::text);
-    g.setFont (fonts::make (52.0f, Weight::displayBold).withHorizontalScale (1.04f));
-    g.drawFittedText (juce::String (doc.name).toUpperCase(), juce::Rectangle<float> (left - 2.0f, 52.0f, columnW, 62.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.55f);
-    g.setColour (colour::textSecondary);
-    g.setFont (type::micro (15.5f));
-    g.drawFittedText (doc.description, juce::Rectangle<float> (left, 120.0f, columnW, 62.0f).toNearestInt(), juce::Justification::topLeft, 3, 0.9f);
+    auto trace = [&] (const std::function<float (float)>& at, int points) {
+        // The family's source display: the line in the layer's light, a soft fill to the axis.
+        juce::Path line;
+        for (int i = 0; i < points; ++i)
+        {
+            const float t = static_cast<float> (i) / static_cast<float> (points - 1);
+            const float y = mid - 0.5f * inner.getHeight() * 0.86f * juce::jlimit (-1.0f, 1.0f, at (t));
+            if (i == 0)
+                line.startNewSubPath (inner.getX(), y);
+            else
+                line.lineTo (inner.getX() + inner.getWidth() * t, y);
+        }
+        juce::Path fill (line);
+        fill.lineTo (inner.getRight(), mid);
+        fill.lineTo (inner.getX(), mid);
+        fill.closeSubPath();
+        g.setGradientFill (juce::ColourGradient (wave.withAlpha (0.22f), 0.0f, inner.getY(), wave.withAlpha (0.05f), 0.0f, inner.getBottom(), false));
+        g.fillPath (fill);
+        g.setColour (wave);
+        g.strokePath (line, juce::PathStrokeType (1.5f, juce::PathStrokeType::mitered, juce::PathStrokeType::rounded));
+    };
 
-    // What it is made of: its sources, each with its badge (the family's layer identities).
-    g.setColour (board::rule);
-    g.fillRect (juce::Rectangle<float> (left, 198.0f, columnW, 1.0f));
-    g.setColour (colour::textMicro.darker (0.2f));
-    g.setFont (fonts::make (12.0f, Weight::medium, 0.14f));
-    g.drawText ("SOURCES", juce::Rectangle<float> (left, 210.0f, columnW, 16.0f), juce::Justification::centredLeft, false);
-    int ordinal = 0, row = 0;
-    const int perColumn = 5;
-    const float rowH = 44.0f, colW = 0.5f * columnW;
+    if (type == "osc.analog")
+    {
+        const int model = juce::roundToInt (value ("model"));
+        const int shape = juce::roundToInt (value (model == 0 ? "wave" : (model == 1 ? "dcoWave" : "wideWave")));
+        const float width = value ("width"), sub = model == 1 ? value ("sub") : 0.0f, level = value ("level");
+        trace ([&] (float t) { return (0.35f + 0.65f * std::sqrt (level)) * analogWave (model, shape, width, sub, std::fmod (t * 2.0f, 1.0f)); }, 720);
+        if (live (node_, 0) > 0.0f)
+            corner (juce::String (live (node_, 0), 1) + " Hz", wave);
+        return;
+    }
+    if (type == "src.noise")
+    {
+        // (a fixed picture of its colour: the same in every session and screenshot)
+        const int colourIndex = juce::roundToInt (value ("color"));
+        osp::Prng random (std::uint64_t { 0x6e6f697365 } + static_cast<std::uint64_t> (colourIndex));
+        const float smooth = colourIndex == 0 ? 0.0f : (colourIndex == 1 ? 0.6f : 0.92f);
+        const float gain = (colourIndex == 2 ? 3.2f : (colourIndex == 1 ? 1.5f : 0.9f)) * (0.3f + 0.7f * value ("level"));
+        float state = 0.0f;
+        trace ([&] (float) {
+            state = smooth * state + (1.0f - smooth) * static_cast<float> (random.bipolar());
+            return gain * state;
+        }, 360);
+        return;
+    }
+    if (type == "src.organic" || type == "src.granular" || type == "src.rhythm")
+    {
+        const auto it = n->strings.find ("sample");
+        const auto key = it != n->strings.end() ? it->second : std::string();
+        const auto asset = key.empty() ? nullptr : session.assets().resolve (session.resolveKey (key).getFullPathName().toStdString());
+        if (asset == nullptr || key.empty())
+        {
+            corner ("DROP A RECORDING ON IT IN PATCH", colour::arpOnDark, juce::Justification::centred);
+            return;
+        }
+        if (asset->status == SampleAsset::Status::missing || asset->status == SampleAsset::Status::failed)
+        {
+            corner (asset->status == SampleAsset::Status::missing ? "MISSING: RELINK IT IN PATCH" : "UNREADABLE", juce::Colour (0xffe28a6c), juce::Justification::centred);
+            return;
+        }
+        if (! asset->overview.empty())
+        {
+            const float w = inner.getWidth() / static_cast<float> (asset->overview.size());
+            g.setColour (wave.withAlpha (0.8f));
+            for (std::size_t i = 0; i < asset->overview.size(); ++i)
+            {
+                const float h = std::max (1.0f, inner.getHeight() * 0.9f * asset->overview[i]);
+                g.fillRect (inner.getX() + w * static_cast<float> (i), mid - h * 0.5f, std::max (1.0f, w - 0.6f), h);
+            }
+        }
+        float head = -1.0f;
+        if (type == "src.organic" && node_ != nullptr && node_->telemetryCount.load() > 0)
+            head = live (node_, 0);
+        if (type == "src.granular")
+        {
+            head = live (node_, 1);
+            const int count = node_ != nullptr ? node_->telemetryCount.load() - 2 : 0;
+            g.setColour (juce::Colours::white.withAlpha (0.85f));
+            for (int i = 0; i < count; ++i)
+                g.fillEllipse (juce::Rectangle<float> (4.0f, 4.0f).withCentre ({ inner.getX() + inner.getWidth() * live (node_, 2 + i),
+                                                                                 mid + inner.getHeight() * 0.32f * (static_cast<float> ((i * 7) % 11) / 5.0f - 1.0f) }));
+        }
+        if (head >= 0.0f)
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.9f));
+            g.fillRect (juce::Rectangle<float> (inner.getX() + inner.getWidth() * juce::jlimit (0.0f, 1.0f, head), inner.getY(), 1.3f, inner.getHeight()));
+        }
+        corner (session.resolveKey (key).getFileNameWithoutExtension(), colour::wellText);
+        if (asset->status != SampleAsset::Status::ready)
+            corner (asset->status == SampleAsset::Status::loading ? "LOADING" : "PLAYABLE, ANALYSING", colour::arpOnDark, juce::Justification::bottomRight);
+        else if (type == "src.rhythm" && asset->tempoBpm > 0.0)
+            corner (juce::String (asset->tempoBpm, 1) + " BPM", wave, juce::Justification::bottomRight);
+        else if (type == "src.granular")
+            corner (juce::String (static_cast<int> (live (node_, 0))) + " GRAINS", wave, juce::Justification::bottomRight);
+        return;
+    }
+    if (type == "src.external")
+        corner (session.externals().status (node).toUpperCase(), colour::wellText, juce::Justification::centred);
+    // any other source: what leaves it now
+    float level = node_ != nullptr ? node_->peak.load (std::memory_order_relaxed) : 0.0f;
+    if (node_ != nullptr)
+        const_cast<CompiledNode*> (node_)->peak.store (level * 0.8f, std::memory_order_relaxed);   // decays between frames
+    const auto bar = juce::Rectangle<float> (inner.getX(), area.getBottom() - 22.0f, inner.getWidth(), 4.0f);
+    g.setColour (wave.withAlpha (0.25f));
+    g.fillRoundedRectangle (bar, 2.0f);
+    g.setColour (wave);
+    g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * juce::jlimit (0.0f, 1.0f, level)), 2.0f);
+}
+
+//==============================================================================
+PlayView::PlayView (ModularProcessor& p) : session (p.session())
+{
+    setTitle ("Play");
+    addSource.setIcon (icon::Kind::plus);
+    addSource.setFontHeight (12.5f);
+    addSource.onClick = [this] {
+        if (onAddSource)
+            onAddSource();
+    };
+    addChildComponent (addSource);
+    rebuild();
+}
+
+std::string PlayView::signature() const
+{
+    // The sources and what each shows (a model change brings other controls).
+    std::string s;
+    const auto& doc = session.document();
     for (const auto& n : doc.nodes)
     {
         const auto* d = session.registry().find (n.type);
         if (d == nullptr || d->role != NodeRole::source)
             continue;
-        const auto look = lookFor (n.type, ordinal++);
-        if (row >= 2 * perColumn)
-            continue;
-        const float x = left + (row >= perColumn ? colW : 0.0f), y = 236.0f + rowH * static_cast<float> (row % perColumn);
-        if (look.badge >= 0)
-            paintBadge (g, { x, y + 4.0f, 28.0f, 28.0f }, look.badge, look.badgeLetter);
-        g.setColour (n.enabled ? colour::text : colour::textMicro);
-        g.setFont (fonts::make (15.0f, Weight::medium, 0.03f));
-        g.drawFittedText (juce::String (doc.displayName (session.registry(), n)), juce::Rectangle<float> (x + 38.0f, y + 2.0f, colW - 46.0f, 18.0f).toNearestInt(),
-                          juce::Justification::centredLeft, 1, 0.75f);
-        g.setColour (colour::textMicro.darker (0.15f));
-        g.setFont (type::micro (12.0f));
-        // (its mode when it has one, else what it is; never its name twice)
-        juce::String kind = juce::String (doc.displayName (session.registry(), n)).equalsIgnoreCase (juce::String (d->name)) ? juce::String (d->description).upToFirstOccurrenceOf (":", false, false)
-                                                                                                               : juce::String (d->name);
+        s += n.id + ":" + n.type + ":";
         for (const auto& p : d->params)
-            if (p.quick && p.curve == ParamCurve::choice && d->paramShown (p, n.params) && ! p.choices.empty())
-            {
-                const int choice = juce::jlimit (0, static_cast<int> (p.choices.size()) - 1, static_cast<int> (std::lround (doc.paramValue (session.registry(), n.id, p.id))));
-                kind = juce::String (d->name) + "   " + juce::String (p.choices[static_cast<std::size_t> (choice)]);
-                break;
-            }
-        g.drawFittedText (kind + (n.enabled ? "" : "  (off)"), juce::Rectangle<float> (x + 38.0f, y + 19.0f, colW - 46.0f, 15.0f).toNearestInt(),
-                          juce::Justification::centredLeft, 1, 0.75f);
-        ++row;
+            if (d->paramShown (p, n.params))
+                s += p.id + ",";
+        s += ";";
     }
-    if (ordinal == 0)
+    return s;
+}
+
+void PlayView::refresh()
+{
+    if (signature() != built)
     {
-        g.setColour (colour::textMicro);
+        rebuild();
+        return;
+    }
+    for (auto& c : cards)
+        c->refresh();
+}
+
+void PlayView::rebuild()
+{
+    built = signature();
+    cards.clear();
+    const auto& doc = session.document();
+    std::vector<std::string> sources;
+    for (const auto& n : doc.nodes)
+        if (const auto* d = session.registry().find (n.type); d != nullptr && d->role == NodeRole::source)
+            sources.push_back (n.id);
+    const bool compact = sources.size() > 4;
+    for (std::size_t i = 0; i < sources.size() && i < 6; ++i)
+    {
+        cards.push_back (std::make_unique<SourceCard> (session, sources[i], static_cast<int> (i), compact));
+        cards.back()->onEdit = [this] (const std::string& id) {
+            if (onEdit)
+                onEdit (id);
+        };
+        addAndMakeVisible (*cards.back());
+    }
+    addSource.setVisible (cards.empty());
+    resized();
+    if (auto* parent = getParentComponent())
+        parent->repaint();   // (the cards' faces are the surface's to draw)
+}
+
+std::vector<juce::Rectangle<int>> PlayView::cardAreas() const
+{
+    // The family's band: one, two or three cards across (design::layout::cardGap); Modular
+    // goes on to four, then to two rows of three.
+    const int count = std::max<int> (1, static_cast<int> (cards.size()));
+    const int columns = count > 4 ? 3 : count, rows = count > 4 ? 2 : 1;
+    const int gap = juce::roundToInt (design::layout::cardGap);
+    const int w = (getWidth() - gap * (columns - 1)) / columns, h = (getHeight() - gap * (rows - 1)) / rows;
+    std::vector<juce::Rectangle<int>> areas;
+    for (int i = 0; i < count; ++i)
+        areas.emplace_back ((i % columns) * (w + gap), (i / columns) * (h + gap), i % columns == columns - 1 ? getWidth() - (columns - 1) * (w + gap) : w, h);
+    return areas;
+}
+
+void PlayView::resized()
+{
+    const auto areas = cardAreas();
+    for (std::size_t i = 0; i < cards.size() && i < areas.size(); ++i)
+        cards[i]->setBounds (areas[i]);
+    addSource.setBounds (getLocalBounds().withSizeKeepingCentre (176, 40));
+}
+
+void PlayView::paint (juce::Graphics& g)
+{
+    if (cards.empty())
+    {
+        // An empty patch: its one card, and the one thing to do.
+        skin::drawKeys (g, *this);
+        g.setColour (colour::textSecondary);
         g.setFont (type::micro (14.0f));
-        g.drawText ("No source yet: open PATCH and add one.", juce::Rectangle<float> (left, 240.0f, columnW, 20.0f), juce::Justification::centredLeft, false);
-    }
-    g.setColour (colour::textMicro.darker (0.15f));
-    g.setFont (type::micro (12.5f));
-    const auto& rep = session.report();
-    g.drawText (juce::String (rep.nodes) + " modules    " + juce::String (rep.sources) + " of 6 sources    " + juce::String (static_cast<int> (doc.connections.size())) + " cables",
-                juce::Rectangle<float> (left, r.getBottom() - 54.0f, columnW, 18.0f), juce::Justification::centredLeft, false);
-
-    // The display: the output itself, steadied on a rising crossing (the family's graphite
-    // well; the trace in the first source's light).
-    draw::well (g, well, 12.0f, colour::wellA);
-    {
-        juce::Graphics::ScopedSaveState clip (g);
-        g.reduceClipRegion (well.reduced (2.0f).getSmallestIntegerContainer());
-        const auto inner = well.reduced (22.0f, 30.0f);
-        g.setColour (colour::wellGrid);
-        g.fillRect (juce::Rectangle<float> (inner.getX(), inner.getCentreY() - 0.5f, inner.getWidth(), 1.0f));
-        for (int i = 1; i < 8; ++i)
-            g.fillRect (juce::Rectangle<float> (inner.getX() + inner.getWidth() * static_cast<float> (i) / 8.0f, inner.getCentreY() - 3.0f, 1.0f, 6.0f));
-        int start = 0;
-        for (int i = 1; i < 512; ++i)
-            if (scope[static_cast<std::size_t> (i - 1)] <= 0.0f && scope[static_cast<std::size_t> (i)] > 0.0f)
-            {
-                start = i;
-                break;
-            }
-        const int count = 512;
-        float peak = 0.02f;
-        for (int i = 0; i < count; ++i)
-            peak = std::max (peak, std::abs (scope[static_cast<std::size_t> (start + i)]));
-        const float scale = std::min (1.0f, 0.46f / peak) * inner.getHeight();
-        juce::Path trace;
-        for (int i = 0; i < count; ++i)
-        {
-            const float x = inner.getX() + inner.getWidth() * static_cast<float> (i) / static_cast<float> (count - 1);
-            const float y = inner.getCentreY() - scope[static_cast<std::size_t> (start + i)] * scale;
-            if (i == 0)
-                trace.startNewSubPath (x, y);
-            else
-                trace.lineTo (x, y);
-        }
-        const auto wave = colour::identity (0).wave;
-        g.setColour (wave.withAlpha (0.16f));
-        g.strokePath (trace, juce::PathStrokeType (6.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        g.setColour (wave);
-        g.strokePath (trace, juce::PathStrokeType (1.7f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-        g.setFont (fonts::make (11.5f, Weight::medium, 0.12f));
-        g.setColour (colour::wellText);
-        const auto labels = well.reduced (20.0f, 12.0f);
-        g.drawText ("OUTPUT", labels, juce::Justification::topLeft, false);
-        const float db = juce::Decibels::gainToDecibels (processor.engine().outputPeak(), -60.0f);
-        g.drawText ("PEAK  " + (db <= -59.9f ? juce::String ("--") : juce::String (db, 1) + " dB"), labels, juce::Justification::topRight, false);
-        const int voices = processor.engine().activeVoices();
-        g.drawText (juce::String (voices) + (voices == 1 ? " VOICE" : " VOICES"), labels, juce::Justification::bottomLeft, false);
-        g.drawText ("CPU  " + juce::String (juce::roundToInt (processor.cpuLoad() * 100.0f)) + " %", labels, juce::Justification::bottomRight, false);
+        g.drawText ("No source yet", getLocalBounds().withSizeKeepingCentre (300, 20).translated (0, -40), juce::Justification::centred, false);
     }
 }
 

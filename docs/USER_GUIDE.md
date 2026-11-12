@@ -7,7 +7,9 @@
 3. Select the oscillator, right-click the canvas, type `filter`, Return: a FILTER is inserted
    after it. Turn CUTOFF on its card.
 4. Right-click a knob → *Assign to macro*, then press the **PLAY** key in the header (or
-   **Ctrl + Tab**): the instrument's face, with its eight macros and its scenes.
+   **Ctrl + Tab**): the front panel. Each sound source has its card (mute, its wave or
+   recording, its modes and knobs); under them the eight macros and the scenes. The key at a
+   card's top right shows that source in PATCH with every control.
 
 ## The canvas
 - **Add**: right-click empty space; on a **port**, only modules that fit are listed; on a

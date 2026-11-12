@@ -169,6 +169,8 @@ juce::Rectangle<int> ParamKnob::knobArea() const
     auto r = getLocalBounds();
     if (style == Style::tile)
         return r.withTrimmedBottom (13).withSizeKeepingCentre (std::min (r.getWidth(), r.getHeight() - 13), r.getHeight() - 13);
+    if (style == Style::panel)
+        return r.withTrimmedTop (20).withTrimmedBottom (22);
     return r.withTrimmedTop (16).withTrimmedBottom (17);
 }
 
@@ -231,12 +233,13 @@ void ParamKnob::paint (juce::Graphics& g)
     }
     else
     {
+        const bool panel = style == Style::panel;
         g.setColour (captionInk);
-        g.setFont (fonts::make (10.5f, Weight::medium, 0.05f));
-        g.drawFittedText (pd->name, getLocalBounds().removeFromTop (15), juce::Justification::centred, 1, 0.75f);
+        g.setFont (fonts::make (panel ? 11.5f : 10.5f, Weight::medium, 0.05f));
+        g.drawFittedText (pd->name, getLocalBounds().removeFromTop (panel ? 17 : 15), juce::Justification::centred, 1, 0.75f);
         g.setColour (hot ? captionHotInk : captionHotInk.withAlpha (0.82f));
-        g.setFont (fonts::make (12.0f, Weight::medium));
-        g.drawFittedText (value, getLocalBounds().removeFromBottom (16), juce::Justification::centred, 1, 0.8f);
+        g.setFont (fonts::make (panel ? 13.0f : 12.0f, Weight::medium));
+        g.drawFittedText (value, getLocalBounds().removeFromBottom (panel ? 19 : 16), juce::Justification::centred, 1, 0.8f);
     }
     if (hasKeyboardFocus (false))
     {
@@ -328,21 +331,36 @@ void ParamMode::setInks (juce::Colour i, juce::Colour hot)
     repaint();
 }
 
+namespace
+{
+    juce::String modeText (Session& s, const std::string& node, const std::string& param)
+    {
+        const auto* pd = findParam (s, node, param);
+        if (pd == nullptr || pd->choices.empty())
+            return {};
+        const int index = juce::jlimit (0, static_cast<int> (pd->choices.size()) - 1, static_cast<int> (std::lround (docValue (s, node, param))));
+        return juce::String (pd->choices[static_cast<std::size_t> (index)]).toUpperCase();
+    }
+}
+
+int ParamMode::idealWidth() const
+{
+    const auto font = onDisplay ? fonts::make (11.5f, Weight::medium, 0.1f) : fonts::make (10.5f, Weight::medium, 0.07f);
+    return juce::roundToInt (juce::GlyphArrangement::getStringWidth (font, modeText (session, node, param))) + 20;
+}
+
 void ParamMode::paint (juce::Graphics& g)
 {
-    const auto* pd = findParam (session, node, param);
-    if (pd == nullptr)
-        return;
-    const int index = juce::jlimit (0, std::max (0, static_cast<int> (pd->choices.size()) - 1), static_cast<int> (std::lround (docValue (session, node, param))));
-    const juce::String value = pd->choices.empty() ? juce::String() : juce::String (pd->choices[static_cast<std::size_t> (index)]).toUpperCase();
+    const auto value = modeText (session, node, param);
     const bool hot = isMouseOver();
-    const auto font = fonts::make (10.5f, Weight::medium, 0.07f);
+    const auto font = onDisplay ? fonts::make (11.5f, Weight::medium, 0.1f) : fonts::make (10.5f, Weight::medium, 0.07f);
     g.setFont (font);
     g.setColour (hot ? hotInk : ink);
     const auto r = getLocalBounds().toFloat();
-    const float w = std::min (r.getWidth() - 12.0f, juce::GlyphArrangement::getStringWidth (font, value) + 2.0f);
-    g.drawFittedText (value, r.withWidth (w).toNearestInt(), juce::Justification::centredLeft, 1, 0.75f);
-    icon::draw (g, icon::Kind::down, juce::Rectangle<float> (10.0f, 10.0f).withCentre ({ r.getX() + w + 7.0f, r.getCentreY() + 0.5f }), hot ? hotInk : ink, 1.2f);
+    const float w = std::min (r.getWidth() - 14.0f, juce::GlyphArrangement::getStringWidth (font, value) + 2.0f);
+    const float x = onDisplay ? r.getRight() - w - 14.0f : r.getX();
+    g.drawFittedText (value, juce::Rectangle<float> (x, r.getY(), w, r.getHeight()).toNearestInt(), juce::Justification::centredLeft, 1, 0.75f);
+    icon::draw (g, icon::Kind::down, juce::Rectangle<float> (10.0f, 10.0f).withCentre ({ x + w + 7.0f, r.getCentreY() + 0.5f }), hot ? hotInk : ink, 1.2f);
 }
 
 void ParamMode::mouseDown (const juce::MouseEvent&)

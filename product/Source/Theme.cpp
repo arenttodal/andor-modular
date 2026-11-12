@@ -427,7 +427,7 @@ void icon::draw (juce::Graphics& g, Kind kind, juce::Rectangle<float> a, juce::C
             p.cubicTo (pt (12, 17.5f), pt (12, 12), pt (16, 12));
             break;
         case Kind::performance:
-            // a knob: the instrument's face
+            // a knob: the front panel
             p.addEllipse (juce::Rectangle<float> (pt (5, 5), pt (19, 19)));
             p.startNewSubPath (pt (12, 12));
             p.lineTo (pt (16, 8));

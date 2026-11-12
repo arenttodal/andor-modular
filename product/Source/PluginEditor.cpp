@@ -48,7 +48,7 @@ Editor::Editor (ModularProcessor& p)
     patchKey.setTitle ("Patch");
     patchKey.onClick = [this] { showPlay (false); };
     playKey.setIcon (icon::Kind::performance);
-    playKey.setTooltip ("PLAY: the instrument's face, its macros and scenes (Ctrl + Tab)");
+    playKey.setTooltip ("PLAY: the front panel: the sources, the macros, the scenes (Ctrl + Tab)");
     playKey.setTitle ("Play");
     playKey.onClick = [this] { showPlay (true); };
     menuButton.setIcon (icon::Kind::dots);
@@ -122,6 +122,15 @@ Editor::Editor (ModularProcessor& p)
     detail.onClose = [this] {
         detailShown = false;
         layoutSurface();
+    };
+    play.onEdit = [this] (const std::string& id) {
+        showPlay (false);
+        canvas.select (id, false);
+        openDetail (id);
+    };
+    play.onAddSource = [this] {
+        showPlay (false);
+        addModuleFromHeader();
     };
     quickAdd.onChoose = [this] (const std::string& type) { choose (type); };
     quickAdd.onClose = [this] { canvas.grabKeyboardFocus(); };
@@ -520,11 +529,11 @@ void Editor::paintSurface (juce::Graphics& g)
         g.drawText ("Invent an instrument", design::layout::logoSubtitle.withHeight (17.0f), juce::Justification::centredLeft, false);
     }
 
-    // The board.
+    // The band: the patch board, or the front panel's source cards.
     const auto board = boardArea();
-    paintBoard (g, board, design::layout::panelRadius);
     if (! playShown)
     {
+        paintBoard (g, board, design::layout::panelRadius);
         const auto header = board.withHeight (layout::boardHeader);
         g.setColour (board::ink);
         g.setFont (type::panelHeader());
@@ -542,6 +551,8 @@ void Editor::paintSurface (juce::Graphics& g)
     }
     else
     {
+        for (const auto& card : play.cardAreas())
+            draw::raised (g, card.translated (play.getX(), play.getY()).toFloat(), design::layout::cardRadius, colour::cardTop, colour::cardBottom);
         // The macros and the scenes share the family's one panel.
         const auto panel = layout::macroPanel;
         draw::raised (g, panel, design::layout::panelRadius, colour::panelTop, colour::panelBottom);

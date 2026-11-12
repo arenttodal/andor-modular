@@ -116,3 +116,13 @@ are mirrored to the keys from atomics. VOLUME is the patch's `masterDb`, heard w
 (`Engine::setMasterDb`, glided over 10 ms; a level that never moves is applied exactly as
 before, so renders are unchanged). There is no MOD wheel: nothing would listen to it (rule 6).
 
+## D-20 PLAY is Analog's front panel, not a title page
+The first ANDOR-styled PLAY showed the instrument's name as a headline, its description and an
+output scope. **Decision (2026-11-12, owner):** none of that. PLAY is as immediate and
+structured as ANDOR Analog's front panel: a source card for every sound source across the band
+(badge, mute, display with its modes, knobs), the macro panel under it. The cards expose the
+modules' own parameters, so a knob turned on a card is the knob on its tile. One to four
+sources sit side by side; five or six go in two rows of three compact cards (Analog has at
+most three; Modular's budget is six). What is not a source is reached through the macros, or
+one key away in PATCH.
+

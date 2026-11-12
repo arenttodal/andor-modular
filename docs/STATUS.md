@@ -21,6 +21,7 @@ _Last updated 2026-11-12. Branch `claude/epic-feynman-fsf8ij`. Pins: OSP `e7a383
 | 12 QA, performance, docs | done for this environment | this commit | 43 kernel + 5 product test cases green; 240-configuration benchmark, 0 allocations; docs set; demo renders script | reference Mac numbers, DAW validation (P1) |
 
 ## What works (demonstrable now)
+- PLAY is Analog's front panel: a card for each source with its real controls (D-20).
 - The interface is the ANDOR family's own (walnut housing, ceramic keys, ivory macro knobs,
   Analog's device enamels on the board), scaled as one piece from 869 to 1810 px wide; its
   keyboard, PITCH wheel and VOLUME play and set the patch.

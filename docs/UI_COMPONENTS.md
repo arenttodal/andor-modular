@@ -26,7 +26,7 @@ One instrument on the family's 1448 × 1086 canvas, scaled to the window as one 
 |---|---|
 | Header | ANDOR/MODULAR and its tagline · preset bar (‹ name ⌄ ›) · SAVE (cassette) · PATCH / PLAY keys · VOLUME · menu |
 | Band, PATCH | the board down to the macro panel's foot: header (PATCH, counts, + ADD MODULE, ARRANGE, FIT, undo, redo), the canvas, the detail column (332 px) |
-| Band, PLAY | the instrument's face (name, description, sources with their badges, the graphite display of the output) over the family's macro panel: eight macros, the scenes bay |
+| Band, PLAY | ANDOR Analog's front panel: one source card for each sound source (one to four across, five or six in two rows of three), over the family's macro panel: eight macros, the scenes bay. No headline and no prose: the patch's name is in the preset bar |
 | Keyboard row | PITCH wheel · 88 keys in their bed · voices card (POLY / MONO / LEGATO) · Evolve key |
 | Footer | status line: what the last action did, with UNDO; otherwise voices, CPU, module and source counts, problems |
 
@@ -59,9 +59,10 @@ notes amber, control sage, a modulation dashed and landing on its knob from abov
 | Glass | Canvas.cpp paintTelemetry | oscillator Hz, arp / sequencer steps, grain dots + position, recording waveform + playhead + status, both sides of a morph, satellite position, voices, host status, levels |
 | Quick Add | QuickAdd.* | cream popover at the cursor; fuzzy search; recent + categories; each row a thumbnail of the tile it adds; CPU tag; filtered to compatible modules from a port |
 | Detail column | DetailPanel.* | title, mode, help; modes (mode keys, toggles as ceramic keys); knobs with their scale, label above and value below; recording / plugin keys; the 16-step graphite display; incoming modulation with depth on the rail |
-| ParamKnob / ParamMode / ParamToggle / ParamChoice | Widgets.* | drag, Shift fine, double-click default, wheel; right-click: reset, type a value, assign to macro 1–8, automate from a host slot 1–32, modulate from…; a bead on the value ring shows where macros, scenes and modulation hold it |
+| ParamKnob (tile, detail, panel) / ParamMode / ParamToggle / ParamChoice | Widgets.* | drag, Shift fine, double-click default, wheel; right-click: reset, type a value, assign to macro 1–8, automate from a host slot 1–32, modulate from…; a bead on the value ring shows where macros, scenes and modulation hold it |
 | KeyButton, InkButton, StatusLine | Widgets.* | ceramic keys drawn by the surface they sit on (`skin::KeyFace`); ink-only board tools; the status line |
-| PLAY | PlayView.* | instrument name in the identity face, description, sources, live output trace |
+| PLAY | PlayView.* | lays the source cards out across the band; rebuilt only when the sources (or the controls they show) change; an empty patch shows one card with ADD A SOURCE |
+| SourceCard | PlayView.* | Analog's source card: badge, M (mute = the module's own bypass), name, its quick switches as keys, a key that shows it in PATCH; the graphite display (the wave an ANALOG OSC is set to, a recording with its playhead, grains, tempo, status) with its modes in the corner; up to five knobs (those on its tile first, then other continuous controls that apply), label above and value below. Every control is the module's own parameter |
 | MacroKnob | PlayView.* | host parameter; ivory cap, identity on a thin ring, lens lit while mapped; menu: rename, colour (the six mineral identities), default, each mapping's range / curve / remove |
 | ScenePanel | PlayView.* | I–IV keys, STORE, the morph on the family's rail |
 | EvolvePanel | PlayView.* | popover: SUBTLE / MODERATE / WILD, locks, seed + NEW SEED, EVOLVE, A / B, KEEP, list of changes |

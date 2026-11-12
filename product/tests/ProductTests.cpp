@@ -173,7 +173,8 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
         const int height = width * 1086 / 1448;   // the instrument's own shape (1448 x 1086, scaled as one piece)
         editor->setSize (width, height);
         for (const auto& shot : { Shot { "Analog Organic Morph", false, "patch-morph" }, Shot { "Three Arps", false, "patch-three-arps" },
-                                  Shot { "Scene Performance", true, "play-scenes" }, Shot { "Bowed Machine", true, "play-bowed-machine" } })
+                                  Shot { "Scene Performance", true, "play-scenes" }, Shot { "Three Arps", true, "play-three-arps" },
+                                  Shot { "Six Oscillator Stack", true, "play-six-sources" }, Shot { "Bowed Machine", true, "play-bowed-machine" } })
         {
             const auto& items = Session::factoryPatches();
             for (int i = 0; i < static_cast<int> (items.size()); ++i)
@@ -217,6 +218,9 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
     editor->setSize (1448, 1086);
     settle();
     snapshot (*editor, "patch-empty-1448");
+    editor->showPlay (true);
+    settle();
+    snapshot (*editor, "play-empty-1448");
     CHECK (editor->getWidth() == 1448);
 }
 

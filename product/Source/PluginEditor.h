@@ -15,9 +15,9 @@ namespace andor::modular
     the family's 1448 x 1086 canvas and scaled to the window as one piece. The walnut housing,
     the identity and the preset bar, VOLUME; the band where OSP and Analog keep their sources
     is the board: PATCH (ANDOR Analog's routing board, grown: every module of the patch, with
-    the detail column) or PLAY (the instrument's face over the family's macro panel: eight
-    macros with their ivory knobs, the scenes); then the keyboard row with PITCH, the voices
-    card, Evolve, and the status line.
+    the detail column) or PLAY (ANDOR Analog's front panel: one card for each sound source,
+    over the family's macro panel: eight macros with their ivory knobs, the scenes); then the
+    keyboard row with PITCH, the voices card, Evolve, and the status line.
 */
 class Editor final : public juce::AudioProcessorEditor, private Session::Listener, private juce::Timer
 {

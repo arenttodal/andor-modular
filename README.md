@@ -10,7 +10,7 @@ without seeing a single cable.
   the patch board (docs/UI_COMPONENTS.md).
 
   ![PATCH](docs/screenshots/patch-morph-1448.png)
-  ![PLAY](docs/screenshots/play-bowed-machine-1448.png)
+  ![PLAY](docs/screenshots/play-three-arps-1448.png)
 
 - **Hear sound immediately.** Right-click the empty board, type "analog", press Return, play:
   KEYBOARD → ANALOG OSC → AMP ENVELOPE → VOICE MIX → OUTPUT is made for you.
