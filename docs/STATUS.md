@@ -1,6 +1,6 @@
 # Status — ANDOR Modular prototype
 
-_Last updated 2026-11-12. Branch `claude/epic-feynman-fsf8ij`. Pins: OSP `e7a3834`, Analog `1c0cb6d`._
+_Last updated 2026-11-12. Branch `claude/epic-feynman-fsf8ij`. Pins: OSP `c21fe80`, Analog `40bf866` (both on their repository's `claude/epic-feynman-fsf8ij`: `e7a3834` and `1c0cb6d` plus the changes below)._
 
 ## Scoreboard
 
@@ -18,7 +18,7 @@ _Last updated 2026-11-12. Branch `claude/epic-feynman-fsf8ij`. Pins: OSP `e7a383
 | 9 Instrument builder & presets | done | 282038e, c110afa | groups → .andormodule → import, group controls ← macros, PLAY panel, 12 patches + 6 modules | owner listening review |
 | 10 Scenes & EVOLVE | done | 282038e, c110afa | 4 scenes + fader (host parameter), deterministic EVOLVE with locks, A/B, one undo | EVOLVE taste curve (owner) |
 | 11 External instrument | partly: host built, surrogate-tested | c110afa | ExternalHost (VST3/AU from file, state in patch, window, missing fallback); ExternalTests: one instance, overlaps in order, GLOBAL MORPH, absence, edits | **live Kontakt not available here** (P1) |
-| 12 QA, performance, docs | done for this environment | this commit | 63 kernel + 18 product test cases green; 240-configuration benchmark, 0 allocations; docs set; demo renders script | reference Mac numbers, DAW validation (P1) |
+| 12 QA, performance, docs | done for this environment | this commit | 68 kernel + 20 product test cases green; 240-configuration benchmark, 0 allocations; docs set; demo renders script | reference Mac numbers, DAW validation (P1) |
 
 ## Patch workflow, audio reliability, shared routing and material pass (2026-11-12)
 
@@ -54,6 +54,22 @@ what is built from its parts: [ADDENDUM_02_REUSE_AUDIT.md](ADDENDUM_02_REUSE_AUD
 | E Type change | done | d63b386 | `edit::changeSourceType`: in place, nothing lost, refusals; kernel and product `[source][type]` |
 | F Integration | done here; hands-on open | this commit | kernel 63, product 18 cases; paired pictures; the report's nine hands-on checks |
 
+## Addendum 02, second pass: Analog's own effect racks, MIX, live traces, own presets (2026-11-12)
+
+The owner's four choices from the first report, built. Details and limits:
+[ADDENDUM_02_REPORT.md](ADDENDUM_02_REPORT.md), "Second pass".
+
+| What | State | Where | Evidence |
+|---|---|---|---|
+| Upstream seam: Analog's FX rack reads its instrument through `FxRackSource` only; the FX parameter table in the JUCE-free engine library; settable preset root | done | Analog `40bf866` | Analog `[fx][parameters]`, `[analog][fx][rack][seam]`; Analog's and OSP's complete suites (ctest) |
+| Shared racks: opt-in MIX knob (ECHO, SPACE), preset folder setter | done | OSP `c21fe80` | default unchanged (OSP's suites and visual regressions); exercised in Modular `[rack][native][live]` |
+| Effect modules carry the whole library table (schema 2, migration) | done | this commit | kernel `[fx][table]`, `[state][fx]`; old vs new renders bit-identical (STATE_SCHEMA.md) |
+| PHASER, FLANGER, FREQUENCY SHIFTER, COMPRESSOR, FX FILTER, STEREO SPREAD, RETRO, CONVOLUTION open Analog's rack class: pages, modes, presets, meters | done | this commit | product `[rack][native][fx]`; `docs/screenshots/parity/` |
+| MIX inside the ECHO and SPACE racks (and on the tile) | done | this commit | product `[rack][native][live]` |
+| FILTER live trace; MORPH result trace | done | this commit | product `[rack][native][live]`; `rack-proc-filter-live-1448.png` |
+| Presets in ANDOR Modular's own folders | done | this commit | product `[rack][native][fx]` (paths); D-38 |
+| Hands-on (Mac, DAW, listening) | **open** | — | the report's checks |
+
 ## What works (demonstrable now)
 - Double-click any module: its ANDOR device opens along the board's foot (ECHO, SPACE and
   MOVEMENT are the family's very racks). A source is one SOURCE whose TYPE changes on its card.
@@ -87,8 +103,13 @@ per-voice MORPH at tiny buffers with many voices, REIMAGINED, Key DNA, topology 
 mini-map, free macro range sliders.
 
 ## NEXT
-0a. Owner: the nine hands-on checks and the four choices in ADDENDUM_02_REPORT.md (the
-   upstream seam for Analog's effect racks is the first).
+0a. Owner: the hands-on checks in ADDENDUM_02_REPORT.md (both passes).
+0b. Analog (its own decision): the FX parameters meant to be linear are skewed whenever
+   their range contains -1, the table's "no centre" marker (COMPRESSOR THRESHOLD most of all:
+   nearly all of its knob travel is the top 6 dB). Found while binding the rack; not changed
+   here because it changes how hosts' automation maps. See the report.
+0c. When Analog moves to OSP's shared FX line (OSP default branch: `shared/andor-ui/FxRack`),
+   move both pins and switch `RackHost` from `FxRackSource` to the host's own `fxProcessor`.
 0. Owner: the twelve hands-on checks in PATCH_WORKFLOW_REPORT.md (Mac, DAW, trackpad,
    the Concept 2 image beside the plugin); then a next pass from what was heard and felt.
 1. Owner: listen to the demo renders; review the new screenshots (docs/screenshots).

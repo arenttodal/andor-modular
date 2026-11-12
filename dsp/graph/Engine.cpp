@@ -1176,8 +1176,10 @@ void Engine::renderGraph (CompiledGraph& g, float* left, float* right, int numSa
         else
         {
             std::size_t pick = 0;
+            bool sounding = true;
             if (n.domain == Domain::voice && n.lane >= 0)
             {
+                sounding = false;
                 std::uint64_t newest = 0;
                 const auto& lane = g.lanes[static_cast<std::size_t> (n.lane)];
                 for (std::size_t v = 0; v < lane.voices.size(); ++v)
@@ -1185,8 +1187,10 @@ void Engine::renderGraph (CompiledGraph& g, float* left, float* right, int numSa
                     {
                         newest = lane.voices[v].order;
                         pick = v;
+                        sounding = true;
                     }
             }
+            n.sounding.store (sounding, std::memory_order_relaxed);
             if (pick < n.instances.size() && n.instances[pick].processor != nullptr)
                 n.instances[pick].processor->telemetry (t);
         }

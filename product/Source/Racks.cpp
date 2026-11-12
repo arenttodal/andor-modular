@@ -1,8 +1,13 @@
 #include "Racks.h"
 
 #include "FxIdentity.h"
+#include "FxParameters.h"
+#include "FxPresets.h"
+#include "FxRack.h"
 #include "ModuleRack.h"
 #include "MacroPopups.h"
+
+#include "nodes/AnalogFx.h"
 
 namespace andor::modular::ui
 {
@@ -39,7 +44,67 @@ namespace
         plate.tapeDeck = tapeDeck;
         rack->host->setFaceplate (static_cast<int> (kind), std::move (plate));
         rack->host->outputPeakNow = peakOf (s, id);
+        // ECHO and SPACE: the module's MIX is a knob of the rack too (in ANDOR OSP and Analog it
+        // is the macro above the rack; here the rack is the whole device).
+        if (kind == Kind::echo)
+            rack->host->setAmountParameter (static_cast<int> (kind), "echo");
+        else if (kind == Kind::space)
+            rack->host->setAmountParameter (static_cast<int> (kind), "space");
         rack->make = [host = rack->host.get(), kind] { return osp::plugin::createRackModule (kind, *host); };
+        rack->provenance = "shared";
+        return rack;
+    }
+
+    //==============================================================================================
+    // The effects of ANDOR Analog's FX library (COMPRESSOR, PHASER, FLANGER, FREQUENCY SHIFTER,
+    // FX FILTER, STEREO SPREAD, RETRO, CONVOLUTION): Analog's own rack (FxRack.cpp: its pages,
+    // modes, preset browser and graphs), on the library's own parameters. The module carries
+    // every one of them (dsp/nodes/AnalogFx.h); ON is the module's light; what the graphs meter
+    // is the processor running in this module.
+    const AnalogFxAccess* runningFx (Session& s, const std::string& id)
+    {
+        if (const auto* g = s.graph())
+            if (const auto it = g->nodeIndexById.find (id); it != g->nodeIndexById.end())
+            {
+                const auto& n = g->nodes[static_cast<std::size_t> (it->second)];
+                if (! n.instances.empty())
+                    return dynamic_cast<const AnalogFxAccess*> (n.instances.front().processor.get());
+            }
+        return nullptr;
+    }
+
+    std::unique_ptr<NativeRack> libraryEffect (Session& s, const std::string& id)
+    {
+        const auto* n = s.document().findNode (id);
+        an::fx::Type type {};
+        if (n == nullptr || ! analogFxType (n->type, type))
+            return nullptr;
+        const an::fx::InstanceId slot { type, 0 };
+        std::vector<RackParam> binding;
+        for (const auto& link : analogFxLinks (n->type))
+            binding.push_back ({ an::fxparams::idOf (slot, juce::String (link.setting)), link.param, link.scale, 0.0, {}, {}, {}, {} });
+        RackParam on { an::fxparams::idOf (slot, "on"), {}, 1.0, 0.0, {}, {}, {}, {} };
+        on.read = [&s, id] {
+            const auto* node = s.document().findNode (id);
+            return node != nullptr && node->enabled ? 1.0 : 0.0;
+        };
+        on.write = [&s, id] (double v) { s.setEnabled (id, v >= 0.5); };
+        binding.push_back (std::move (on));
+
+        RackHost::Layout layout;
+        an::fxparams::addTo (layout);
+        auto rack = std::make_unique<NativeRack>();
+        rack->host = std::make_unique<RackHost> (s, id, std::move (layout), std::move (binding));
+        rack->host->outputPeakNow = peakOf (s, id);
+        rack->host->fxProcessorNow = [&s, id] () -> const an::fx::Processor* {
+            const auto* fx = runningFx (s, id);
+            return fx != nullptr ? fx->analogFx() : nullptr;
+        };
+        rack->host->fxImpulseNow = [&s, id] () -> std::shared_ptr<const an::fx::Impulse> {
+            const auto* fx = runningFx (s, id);
+            return fx != nullptr ? fx->analogImpulse() : nullptr;
+        };
+        rack->make = [host = rack->host.get(), slot] { return an::createFxRackFor (*host, slot); };
         rack->provenance = "shared";
         return rack;
     }
@@ -145,7 +210,17 @@ namespace
 
     const std::map<std::string, Builder>& library()
     {
-        static const std::map<std::string, Builder> racks { { "fx.echo", echo }, { "fx.space", space }, { "fx.movement", movement } };
+        static const std::map<std::string, Builder> racks { { "fx.echo", echo },
+                                                             { "fx.space", space },
+                                                             { "fx.movement", movement },
+                                                             { "fx.compressor", libraryEffect },
+                                                             { "fx.phaser", libraryEffect },
+                                                             { "fx.flanger", libraryEffect },
+                                                             { "fx.shifter", libraryEffect },
+                                                             { "fx.filter", libraryEffect },
+                                                             { "fx.spread", libraryEffect },
+                                                             { "fx.retro", libraryEffect },
+                                                             { "fx.convolution", libraryEffect } };
         return racks;
     }
 }
@@ -157,6 +232,14 @@ std::unique_ptr<NativeRack> createNativeRack (Session& session, const std::strin
     const auto* n = session.document().findNode (nodeId);
     if (n == nullptr)
         return nullptr;
+    // ANDOR Modular's own preset folders (set once): a rack's presets are this instrument's,
+    // not the ones ANDOR OSP and Analog keep on the same machine.
+    static const bool foldersSet = [] {
+        osp::plugin::setRackPresetFolder (Session::rackPresetDirectory());
+        an::fxpresets::setUserRoot (Session::rackPresetDirectory());
+        return true;
+    }();
+    juce::ignoreUnused (foldersSet);
     // The family's own rack where it has one for this device; else a rack built from its parts
     // for this module (ModuleRack.cpp). Only a module this version does not know has neither.
     const auto it = library().find (n->type);

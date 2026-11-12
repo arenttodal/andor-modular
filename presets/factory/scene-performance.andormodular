@@ -1,6 +1,6 @@
 {
   "format": "andormodular",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Scene Performance",
   "author": "ANDOR",
   "description": "Four scenes from stillness to motion to fracture to afterglow; morph through them with the scene fader.",

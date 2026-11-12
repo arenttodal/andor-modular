@@ -1,11 +1,11 @@
-# Saved state (`andormodular` schema 1)
+# Saved state (`andormodular` schema 2)
 
 A patch is deterministic JSON (`dsp/graph/Document.cpp`), keys in a fixed order, parameter maps
 sorted; saved atomically (`file.tmp` then rename).
 
 ```jsonc
 {
-  "format": "andormodular", "schemaVersion": 1,
+  "format": "andormodular", "schemaVersion": 2,
   "name": "...", "author": "...", "description": "...",
   "settings": { "polyphony": 8, "voiceMode": 0, "glide": 0, "seed": "1", "masterDb": 0, "bendRange": 2, "limiter": true },
   "nodes": [ { "id": "n-0001", "type": "osc.analog", "version": 1, "domain": "voice", "x": 0, "y": 0, "size": 1,
@@ -60,6 +60,43 @@ Rules:
 
 **Migration.** Schema 0 (the kernel's pre-release form: `edges` with `src`/`dst` "node:port",
 `pos: [x, y]`) migrates to 1 (`tests/GraphTests.cpp`). A newer schema is refused, never misread.
+
+**Schema 2 (2026-11-12): the effect modules carry ANDOR Analog's whole FX library table.**
+`fx.phaser`, `fx.flanger`, `fx.shifter`, `fx.compressor`, `fx.filter`, `fx.retro`, `fx.spread`
+and `fx.convolution` keep every parameter they had (id, unit, order) and gain one parameter for
+each further setting of the effect, named as the library names it (`knee`, `fet.input`,
+`multi.depth`, `wow.depth`, `sync`, `division`…; `dsp/nodes/AnalogFx.h`, the table is Analog's
+`dsp/fx/FxParameterTable`). Ten existing parameters grew to the library's range:
+
+| Module | Parameter | Schema 1 | Schema 2 |
+|---|---|---|---|
+| PHASER | `centre` | 100..5000 Hz | 80..8000 Hz |
+| PHASER | `feedback` | 0..95 % | -85..95 % |
+| FLANGER | `delay` | 0.5..10 ms | 0.2..12 ms |
+| COMPRESSOR | `mode` | CLEAN, FET | CLEAN, FET, MULTIBAND |
+| COMPRESSOR | `threshold` | -48..0 dB | -60..0 dB |
+| COMPRESSOR | `makeup` | 0..24 dB | -12..24 dB |
+| CONVOLUTION | `predelay` | 0..200 ms | 0..250 ms |
+| CONVOLUTION | `width` | 0..100 % | 0..200 % |
+| CONVOLUTION | `lowcut` | 20..1000 Hz | 20..2000 Hz |
+| CONVOLUTION | `decay` | 0.2..8 s | 0.1..20 s |
+
+Migration 1 → 2 (`Document.cpp`, `migrateV1`; fixture `tests/fixtures/patch-v1-fx.json`,
+`[state][fx]`):
+- values are saved in their own units and are untouched;
+- what is saved normalised over a parameter's range (a macro's or a group control's mapping,
+  a modulation cable's depth) is moved to the new range, so it reaches exactly the values it
+  did;
+- COMPRESSOR's FET input used to follow THRESHOLD live; `fet.input` starts at the patch's
+  value, and whatever moved THRESHOLD (a macro or group control mapping, a modulation cable, a
+  scene) gets a companion on `fet.input` moving it the same way;
+- a new setting left at its default is not written to the processor, which then plays the
+  library's built-in value: a schema 1 patch renders bit for bit as before (measured: eight
+  modules at default and non-default settings, identical samples; the migrated fixture with
+  macros and modulation within 5e-6 of full scale, float rounding of the moved ranges).
+
+One thing is not kept: a modulation deep enough to push one of the ten parameters against the
+end of its old range now carries on to the new end.
 
 **Modules** (`.andormodule`): the same JSON with `"format": "andormodule"`, `"module"` (name),
 `"root"` (the group id), `"hash"` (FNV-1a of its nodes and cables) and only the group's nodes,

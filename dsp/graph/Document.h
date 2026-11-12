@@ -18,7 +18,7 @@ struct NodeDesc;
 /**
     The editable patch (message thread). Everything audible and everything a musician built is
     here, by stable ids; the compiled graph is derived from it and never edited.
-    docs/STATE_SCHEMA.md describes the saved form ("andormodular" JSON, schemaVersion 1).
+    docs/STATE_SCHEMA.md describes the saved form ("andormodular" JSON, schemaVersion 2).
 */
 
 /** What a sound source keeps of a type it is not playing at the moment (edit::changeSourceType):
@@ -166,7 +166,7 @@ struct EvolveState
 
 struct Document
 {
-    static constexpr int schemaVersion = 1;
+    static constexpr int schemaVersion = 2;
     static constexpr const char* format = "andormodular";
 
     std::string name = "Untitled";

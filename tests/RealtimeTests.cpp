@@ -5,6 +5,8 @@
 
 #include "edit/Factory.h"
 
+#include "core/Prng.h"
+
 #include <atomic>
 #include <cstdlib>
 #include <new>
@@ -98,6 +100,73 @@ TEST_CASE ("process() never allocates or frees: every factory patch, notes, macr
                 calls += heapCalls.load();
                 e.collectGarbage();
                 for (int i = 0; i < block; ++i)
+                    REQUIRE (std::isfinite (l[static_cast<std::size_t> (i)]));
+            }
+            CHECK (calls == 0);
+        }
+    }
+}
+
+TEST_CASE ("process() never allocates: the effect modules with every setting of the library's table moved", "[realtime][fx]")
+{
+    // Each effect of ANDOR Analog's library after VOICE MIX, its detail settings away from
+    // their defaults (so every one is written, through the table, on the audio thread), in
+    // every mode, while a macro and a modulation move a setting.
+    for (const char* type : { "fx.phaser", "fx.flanger", "fx.shifter", "fx.compressor", "fx.filter", "fx.retro", "fx.spread", "fx.convolution" })
+    {
+        const auto* desc = reg().find (type);
+        REQUIRE (desc != nullptr);
+        const int modes = static_cast<int> (desc->params[0].choices.size());
+        for (int mode = 0; mode < std::max (1, std::min (modes, 3)); ++mode)
+        {
+            INFO (type << " mode " << mode);
+            Document doc = test::basicPatch();
+            const auto fx = edit::addModule (doc, reg(), type, 600, 0, test::nodeOfType (doc, "util.voicemix")).focus;
+            REQUIRE_FALSE (fx.empty());
+            auto* n = doc.findNode (fx);
+            osp::Prng r (static_cast<std::uint64_t> (17 + mode));
+            std::string moved;
+            for (const auto& p : desc->params)
+            {
+                if (p.structural)
+                    continue;
+                if (p.detail)
+                    n->params[p.id] = p.denormalise (0.15 + 0.7 * r.nextDouble());
+                if (p.detail && p.modulatable && p.curve != ParamCurve::choice && p.curve != ParamCurve::toggle && moved.empty())
+                    moved = p.id;
+            }
+            if (desc->params[0].curve == ParamCurve::choice && ! desc->params[0].structural)
+                n->params[desc->params[0].id] = mode;
+            if (! moved.empty())
+                REQUIRE (edit::mapMacro (doc, reg(), 0, fx, moved, 0.1, 0.9));
+            Engine e;
+            e.prepare (48000.0, 512);
+            CompileOptions o;
+            o.maxBlock = 512;
+            e.publish (compileGraph (doc, reg(), o));
+            std::vector<float> l (512), rr (512);
+            osp::HostTiming t;
+            t.valid = t.playing = true;
+            t.bpm = 120.0;
+            long calls = 0;
+            for (int b = 0; b < 120; ++b)
+            {
+                std::vector<MidiMessage> midi;
+                if (b % 30 == 0)
+                    for (int k = 0; k < 4; ++k)
+                        midi.push_back ({ 0, MidiMessage::Kind::noteOn, 1, static_cast<std::uint8_t> (45 + 5 * k), 0.9f, 0 });
+                if (b % 30 == 20)
+                    for (int k = 0; k < 4; ++k)
+                        midi.push_back ({ 0, MidiMessage::Kind::noteOff, 1, static_cast<std::uint8_t> (45 + 5 * k), 0.0f, 0 });
+                e.setMacro (0, static_cast<float> (b % 23) / 23.0f);
+                t.ppq += 333.0 / 48000.0 * 2.0;
+                heapCalls = 0;
+                watching = true;
+                e.process (l.data(), rr.data(), 333, midi.data(), static_cast<int> (midi.size()), t);
+                watching = false;
+                calls += heapCalls.load();
+                e.collectGarbage();
+                for (int i = 0; i < 333; ++i)
                     REQUIRE (std::isfinite (l[static_cast<std::size_t> (i)]));
             }
             CHECK (calls == 0);

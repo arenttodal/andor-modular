@@ -1,0 +1,324 @@
+{
+  "format": "andormodular",
+  "schemaVersion": 1,
+  "name": "schema 1 effects",
+  "description": "A schema 1 patch: macros, a group control and an LFO on effect parameters whose ranges grew in schema 2.",
+  "settings": {
+    "polyphony": 8,
+    "seed": "7"
+  },
+  "nodes": [
+    {
+      "id": "k",
+      "type": "event.keyboard",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "o",
+      "type": "osc.analog",
+      "x": 200,
+      "y": 0,
+      "domain": "voice"
+    },
+    {
+      "id": "m",
+      "type": "util.voicemix",
+      "x": 400,
+      "y": 0
+    },
+    {
+      "id": "ph",
+      "type": "fx.phaser",
+      "x": 600,
+      "y": 0,
+      "params": {
+        "mode": 0,
+        "rate": 0.5,
+        "depth": 0.6,
+        "centre": 1200,
+        "feedback": 0.35,
+        "stages": 1,
+        "mix": 0.5
+      }
+    },
+    {
+      "id": "fl",
+      "type": "fx.flanger",
+      "x": 800,
+      "y": 0,
+      "params": {
+        "mode": 0,
+        "rate": 0.25,
+        "depth": 0.5,
+        "delay": 2.0,
+        "feedback": 0.4,
+        "mix": 0.5
+      }
+    },
+    {
+      "id": "comp",
+      "type": "fx.compressor",
+      "x": 1000,
+      "y": 0,
+      "params": {
+        "mode": 1,
+        "threshold": -30,
+        "ratio": 3,
+        "attack": 10,
+        "release": 180,
+        "makeup": 0,
+        "mix": 1
+      }
+    },
+    {
+      "id": "comp2",
+      "type": "fx.compressor",
+      "x": 1200,
+      "y": 0,
+      "params": {
+        "mode": 0,
+        "threshold": 0,
+        "ratio": 3,
+        "attack": 10,
+        "release": 180,
+        "makeup": 0,
+        "mix": 1
+      }
+    },
+    {
+      "id": "conv",
+      "type": "fx.convolution",
+      "x": 1400,
+      "y": 0,
+      "params": {
+        "impulse": 1,
+        "mix": 0.3,
+        "predelay": 0,
+        "width": 1,
+        "lowcut": 20,
+        "highcut": 20000,
+        "decay": 4
+      },
+      "group": "g1"
+    },
+    {
+      "id": "lfo",
+      "type": "ctl.lfo",
+      "x": 800,
+      "y": 300
+    },
+    {
+      "id": "out",
+      "type": "util.output",
+      "x": 1600,
+      "y": 0
+    }
+  ],
+  "connections": [
+    {
+      "id": "c1",
+      "from": "k",
+      "fromPort": "notes",
+      "to": "o",
+      "toPort": "notes"
+    },
+    {
+      "id": "c2",
+      "from": "o",
+      "fromPort": "out",
+      "to": "m",
+      "toPort": "in"
+    },
+    {
+      "id": "c3",
+      "from": "m",
+      "fromPort": "out",
+      "to": "ph",
+      "toPort": "in"
+    },
+    {
+      "id": "c4",
+      "from": "ph",
+      "fromPort": "out",
+      "to": "fl",
+      "toPort": "in"
+    },
+    {
+      "id": "c5",
+      "from": "fl",
+      "fromPort": "out",
+      "to": "comp",
+      "toPort": "in"
+    },
+    {
+      "id": "c6",
+      "from": "comp",
+      "fromPort": "out",
+      "to": "comp2",
+      "toPort": "in"
+    },
+    {
+      "id": "c7",
+      "from": "comp2",
+      "fromPort": "out",
+      "to": "conv",
+      "toPort": "in"
+    },
+    {
+      "id": "c8",
+      "from": "conv",
+      "fromPort": "out",
+      "to": "out",
+      "toPort": "in"
+    },
+    {
+      "id": "c9",
+      "from": "lfo",
+      "fromPort": "out",
+      "to": "fl",
+      "toPort": "delay",
+      "toParam": true,
+      "depth": 0.1
+    },
+    {
+      "id": "c10",
+      "from": "lfo",
+      "fromPort": "out",
+      "to": "comp",
+      "toPort": "threshold",
+      "toParam": true,
+      "depth": 0.1
+    }
+  ],
+  "groups": [
+    {
+      "id": "g1",
+      "name": "ROOM",
+      "x": 1400,
+      "y": 0,
+      "collapsed": true,
+      "ports": [
+        {
+          "name": "IN",
+          "node": "conv",
+          "port": "in",
+          "input": true
+        },
+        {
+          "name": "OUT",
+          "node": "conv",
+          "port": "out",
+          "input": false
+        }
+      ],
+      "controls": [
+        {
+          "name": "SIZE",
+          "value": 0.5,
+          "default": 0.5,
+          "color": 0,
+          "smooth": 0.03,
+          "mappings": [
+            {
+              "node": "conv",
+              "param": "width",
+              "min": 0.0,
+              "max": 1.0,
+              "curve": "linear"
+            },
+            {
+              "node": "conv",
+              "param": "lowcut",
+              "min": 0.0,
+              "max": 1.0,
+              "curve": "linear"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "macros": [
+    {
+      "name": "SWEEP",
+      "value": 0.5,
+      "default": 0.5,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "ph",
+          "param": "centre",
+          "min": 0.25,
+          "max": 0.75,
+          "curve": "linear"
+        },
+        {
+          "node": "ph",
+          "param": "feedback",
+          "min": 0.0,
+          "max": 1.0,
+          "curve": "linear"
+        },
+        {
+          "node": "ph",
+          "param": "mix",
+          "min": 0.2,
+          "max": 0.8,
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "name": "SQUASH",
+      "value": 0.5,
+      "default": 0.5,
+      "color": 0,
+      "smooth": 0.03,
+      "mappings": [
+        {
+          "node": "comp",
+          "param": "threshold",
+          "min": 0.25,
+          "max": 0.75,
+          "curve": "linear"
+        },
+        {
+          "node": "comp",
+          "param": "makeup",
+          "min": 0.0,
+          "max": 0.5,
+          "curve": "linear"
+        },
+        {
+          "node": "comp",
+          "param": "mode",
+          "min": 0.0,
+          "max": 1.0,
+          "curve": "linear"
+        }
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "name": "I",
+      "captured": true,
+      "values": {
+        "comp/threshold": -40.0,
+        "ph/depth": 0.9
+      },
+      "macros": [
+        0.5,
+        0.5,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

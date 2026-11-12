@@ -1,6 +1,6 @@
 {
   "format": "andormodular",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Basic Poly",
   "author": "ANDOR",
   "description": "One CLASSIC saw per note through the ladder filter, a filter envelope and a hall. The starting point.",

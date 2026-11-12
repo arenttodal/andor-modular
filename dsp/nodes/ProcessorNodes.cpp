@@ -76,6 +76,12 @@ namespace
             double hz = p[cutoff];
             if (ctx.voice != nullptr)
                 hz *= std::exp2 (static_cast<double> (p[keytrack]) * (ctx.voice->pitch - 60.0) / 12.0);
+            // (what its rack draws: the cutoff before the envelope, the envelope now and how far
+            // it reaches, the resonance as modulated)
+            lastBaseHz = static_cast<float> (hz);
+            lastEnv = io.inConnected[1] ? io.in[1][0][0] : -1.0f;
+            lastReachHz = static_cast<float> (hz * std::exp2 (7.0 * static_cast<double> (p[envAmount])));
+            lastResonance = p[resonance];
             if (io.inConnected[1])
                 hz *= std::exp2 (7.0 * static_cast<double> (p[envAmount]) * io.in[1][0][0]);
             hz = std::clamp (hz, 16.0, 0.47 * rate);
@@ -112,16 +118,22 @@ namespace
             }
             lastHz = static_cast<float> (hz);
         }
+        /** The cutoff it used last (Hz); before the envelope; where the envelope at 1 would take
+            it; the envelope input now (-1: nothing plugged in); the resonance as modulated. */
         void telemetry (Telemetry& t) const noexcept override
         {
             t.values[0] = lastHz;
-            t.count = 1;
+            t.values[1] = lastBaseHz;
+            t.values[2] = lastReachHz;
+            t.values[3] = lastEnv;
+            t.values[4] = lastResonance;
+            t.count = 5;
         }
 
     private:
         double rate = 48000.0;
         bool stereo = false, primed = false;
-        float g = 0.1f, lastHz = 1000.0f;
+        float g = 0.1f, lastHz = 1000.0f, lastBaseHz = 1000.0f, lastReachHz = 1000.0f, lastEnv = -1.0f, lastResonance = 0.0f;
         std::array<andor::analog::LadderFilter, 2> ladder {};
         std::array<andor::analog::OtaFilter, 2> ota {};
         std::array<Svf, 2> svf {};

@@ -81,9 +81,13 @@ void RackHost::pull()
     {
         const auto& b = bound[index];
         auto* p = state->getParameter (id);
-        const float target = p->convertTo0to1 (static_cast<float> (b.read ? b.read() : toRack (b, doc.paramValue (session.registry(), node, b.param))));
-        if (std::abs (p->getValue() - target) > 1.0e-6f)
-            p->setValueNotifyingHost (target);
+        // Compared in the control's own units, never normalised: a strongly skewed range (ANDOR
+        // Analog's COMPRESSOR THRESHOLD) squeezes most of its values into a sliver near 0.
+        const auto& range = p->getNormalisableRange();
+        const float wanted = juce::jlimit (range.start, range.end, static_cast<float> (b.read ? b.read() : toRack (b, doc.paramValue (session.registry(), node, b.param))));
+        const float shown = p->convertFrom0to1 (p->getValue());
+        if (std::abs (shown - wanted) > 1.0e-6f * std::max (1.0f, range.end - range.start))
+            p->setValueNotifyingHost (p->convertTo0to1 (wanted));
     }
 }
 
@@ -146,12 +150,24 @@ const osp::plugin::rack::Faceplate* RackHost::rackFaceplate (int kind) const noe
     return it != plates.end() ? &it->second : nullptr;
 }
 
+// What a module's rack remembers between openings (the preset it shows, its page) is kept with
+// the session, by module: two echoes never share a preset name.
 juce::String RackHost::rackPresetMemory (const juce::String& key) const
 {
-    const auto it = presetMemory.find (key);
-    return it != presetMemory.end() ? it->second : juce::String();
+    const auto& memory = session.rackMemory (node).presets;
+    const auto it = memory.find (key);
+    return it != memory.end() ? it->second : juce::String();
 }
 
-void RackHost::setRackPresetMemory (const juce::String& key, const juce::String& code) { presetMemory[key] = code; }
+void RackHost::setRackPresetMemory (const juce::String& key, const juce::String& code) { session.rackMemory (node).presets[key] = code; }
+
+// (The module's own name: two compressors are never both "COMPRESSOR 1".)
+juce::String RackHost::fxRackTitle (andor::analog::fx::InstanceId) const
+{
+    const auto* n = session.document().findNode (node);
+    return n != nullptr ? juce::String (session.document().displayName (session.registry(), *n)).toUpperCase() : juce::String();
+}
+
+andor::analog::FxRackSource::Memory* RackHost::fxRackMemory (andor::analog::fx::InstanceId) { return &session.rackMemory (node).fx; }
 
 } // namespace andor::modular::ui

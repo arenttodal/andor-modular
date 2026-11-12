@@ -7,7 +7,6 @@
 #include "StepGrid.h"
 
 #include "engine/DriveProcessor.h"
-#include "fx/Effects.h"
 
 #include <complex>
 
@@ -176,36 +175,120 @@ namespace
         const int mode = juce::roundToInt (valueOf (s, id, "mode"));
         const double cutoff = valueOf (s, id, "cutoff"), reso = valueOf (s, id, "resonance");
         // 20 Hz .. 20 kHz, +18 .. -42 dB
-        const auto xOf = [plot] (double hz) { return plot.getX() + plot.getWidth() * static_cast<float> (std::log (hz / 20.0) / std::log (1000.0)); };
-        curve (g, plot, [&] (float t) { return static_cast<float> ((filterResponseDb (mode, cutoff, reso, 20.0 * std::pow (1000.0, static_cast<double> (t))) + 42.0) / 60.0); }, look.trace);
-        g.setColour (look.trace.withAlpha (0.55f));
-        g.fillRect (juce::Rectangle<float> (xOf (std::clamp (cutoff, 20.0, 20000.0)), plot.getY(), 1.0f, plot.getHeight()));
+        const auto xOf = [plot] (double hz) {
+            return plot.getX() + plot.getWidth() * static_cast<float> (std::log (std::clamp (hz, 20.0, 20000.0) / 20.0) / std::log (1000.0));
+        };
+        const auto response = [mode] (double hz, double q) {
+            return [mode, hz, q] (float t) { return static_cast<float> ((filterResponseDb (mode, hz, q, 20.0 * std::pow (1000.0, static_cast<double> (t))) + 42.0) / 60.0); };
+        };
         const auto* n = s.document().findNode (id);
-        caption (g, area, juce::String ("RESPONSE  ") + (n != nullptr && n->domain == Domain::voice ? "AT REST, PER VOICE" : "GLOBAL"), juce::Justification::topLeft, words());
-        caption (g, area, juce::String (s.registry().find ("proc.filter")->params[1].format (cutoff)).toUpperCase(), juce::Justification::topRight, look.trace);
+        const bool perVoice = n != nullptr && n->domain == Domain::voice;
+        // What the filter does now (the module's telemetry, as ANDOR Analog's FILTER graph reads
+        // its engine's): the newest sounding voice's cutoff after key tracking, modulation and
+        // the envelope; where it was before the envelope; where the envelope's top takes it.
+        const auto* live = liveOf (s, id);
+        const bool sounding = live != nullptr && live->sounding.load (std::memory_order_relaxed) && live->telemetryCount.load (std::memory_order_relaxed) >= 5;
+        const double now = sounding ? static_cast<double> (telemetryOf (live, 0)) : cutoff;
+        const double base = sounding ? static_cast<double> (telemetryOf (live, 1)) : cutoff;
+        const double reach = sounding ? static_cast<double> (telemetryOf (live, 2)) : cutoff;
+        const bool envelope = sounding && telemetryOf (live, 3) >= 0.0f;
+        const double resoNow = sounding ? static_cast<double> (telemetryOf (live, 4)) : reso;
+        const bool moved = sounding && (std::abs (std::log2 (std::max (1.0, now) / std::max (1.0, cutoff))) > 0.01 || std::abs (resoNow - reso) > 0.005);
+        if (moved)
+        {
+            // The setting, quiet, behind what plays.
+            juce::Graphics::ScopedSaveState state (g);
+            g.setOpacity (0.38f);
+            curve (g, plot, response (cutoff, reso), look.trace.withAlpha (0.38f), 160, false);
+        }
+        curve (g, plot, response (now, resoNow), look.trace);
+        if (envelope && std::abs (std::log2 (std::max (1.0, reach) / std::max (1.0, base))) > 0.01)
+        {
+            // The envelope's travel along the foot: from the cutoff it starts at to its top.
+            const float x0 = xOf (base), x1 = xOf (reach), y = plot.getBottom() - 3.0f;
+            g.setColour (look.trace.withAlpha (0.45f));
+            g.fillRect (juce::Rectangle<float> (std::min (x0, x1), y, std::abs (x1 - x0), 1.5f));
+            g.fillRect (juce::Rectangle<float> (x0 - 0.5f, y - 3.0f, 1.0f, 7.5f));
+            g.fillRect (juce::Rectangle<float> (x1 - 0.5f, y - 3.0f, 1.0f, 7.5f));
+        }
+        g.setColour (look.trace.withAlpha (sounding ? 0.8f : 0.55f));
+        g.fillRect (juce::Rectangle<float> (xOf (now), plot.getY(), 1.0f, plot.getHeight()));
+        juce::String what = "RESPONSE  ";
+        if (sounding)
+            what << (perVoice ? "LIVE, THE NEWEST VOICE" : "LIVE") << (envelope ? "  ENV " + juce::String (juce::roundToInt (100.0f * juce::jlimit (0.0f, 1.0f, telemetryOf (live, 3)))) + " %" : juce::String());
+        else
+            what << (perVoice ? "AT REST, PER VOICE" : "AT REST");
+        caption (g, area, what, juce::Justification::topLeft, sounding ? look.trace : words());
+        caption (g, area, juce::String (s.registry().find ("proc.filter")->params[1].format (std::clamp (now, 20.0, 20000.0))).toUpperCase(), juce::Justification::topRight, look.trace);
         caption (g, area, "20 Hz", juce::Justification::bottomLeft, words().withAlpha (0.6f));
         caption (g, area, "20 kHz", juce::Justification::bottomRight, words().withAlpha (0.6f));
     }
 
-    /** FX FILTER: ANDOR Analog's FxFilter computes its own response (as its rack's graph does). */
-    void paintFxFilter (juce::Graphics& g, juce::Rectangle<float> area, Session& s, const std::string& id, const ModuleLook& look)
+    /** MORPH: the two sounds' first partials (GLOBAL MORPH: their octave bands) as they play (the module measures them), and
+        between each pair the result the method makes of them at this position: ANDOR Analog's
+        MORPH graph (carrier, card C, result), drawn from what sounds instead of a concept. */
+    void paintMorph (juce::Graphics& g, juce::Rectangle<float> area, Session& s, const std::string& id, const ModuleLook& look)
     {
-        const auto plot = plotIn (area);
-        grid (g, plot, 3, 4);
-        an::fx::FxFilter model;
-        model.prepare (48000.0, 64);
-        an::fx::Settings all;
-        auto& fs = all.filter[0];
-        fs.type = juce::roundToInt (valueOf (s, id, "type"));
-        fs.hz = valueOf (s, id, "hz");
-        fs.resonance = valueOf (s, id, "resonance");
-        fs.driveDb = valueOf (s, id, "drive");
-        model.set (all, 0);
-        model.reset();
-        curve (g, plot, [&] (float t) { return static_cast<float> ((model.responseDb (20.0 * std::pow (1000.0, static_cast<double> (t))) + 42.0) / 60.0); }, look.trace);
-        caption (g, area, "RESPONSE", juce::Justification::topLeft, words());
-        caption (g, area, "20 Hz", juce::Justification::bottomLeft, words().withAlpha (0.6f));
-        caption (g, area, "20 kHz", juce::Justification::bottomRight, words().withAlpha (0.6f));
+        const auto* n = s.document().findNode (id);
+        if (n == nullptr)
+            return;
+        const bool global = n->type == "proc.morph.global";
+        const auto* live = liveOf (s, id);
+        const auto plot = plotIn (area).withTrimmedBottom (8.0f);
+        const float position = global && live != nullptr && live->telemetryCount.load() > 14 ? juce::jlimit (0.0f, 1.0f, telemetryOf (live, 14))
+                                                                                             : juce::jlimit (0.0f, 1.0f, valueOf (s, id, "position"));
+        const int method = juce::jlimit (0, global ? 1 : 2, juce::roundToInt (valueOf (s, id, "method")));
+        const bool fused = global || telemetryOf (live, 14) >= 0.5f;
+        const auto a = colour::identity (0).wave, b = colour::identity (1).wave;
+        const auto yOf = [plot] (float db) { return plot.getBottom() - plot.getHeight() * juce::jlimit (0.0f, 1.0f, (db + 80.0f) / 80.0f); };
+        g.setColour (colour::wellGrid.withAlpha (0.55f));
+        for (const float db : { -20.0f, -40.0f, -60.0f })
+            g.fillRect (juce::Rectangle<float> (plot.getX(), yOf (db) - 0.5f, plot.getWidth(), 1.0f));
+        const float slot = plot.getWidth() / 7.0f;
+        for (int h = 0; h < 7; ++h)
+        {
+            const float la = telemetryOf (live, h), lb = telemetryOf (live, 7 + h);
+            const float x = plot.getX() + slot * (static_cast<float> (h) + 0.5f);
+            // The method's rule, as ANDOR Analog's graph states it: IMPRINT moves A's partials
+            // under B's shape, FUSE blends the levels, WEAVE takes groups from one or the other.
+            float result = la;
+            juce::Colour rc = a;
+            if (method == 0)
+            {
+                result = la + position * (lb - la);
+                rc = a.interpolatedWith (b, 0.5f * position);
+            }
+            else if (method == 1)
+            {
+                result = (1.0f - position) * la + position * lb;
+                rc = a.interpolatedWith (b, position);
+            }
+            else
+            {
+                const bool fromB = (h / 2) % 2 == 1 ? position > 0.25f : position > 0.75f;
+                result = fromB ? lb : la;
+                rc = fromB ? b : a;
+            }
+            g.setColour (a.withAlpha (0.35f));
+            g.fillRect (juce::Rectangle<float> (x - 0.36f * slot, yOf (la), 0.2f * slot, plot.getBottom() - yOf (la)));
+            g.setColour (b.withAlpha (0.35f));
+            g.fillRect (juce::Rectangle<float> (x + 0.16f * slot, yOf (lb), 0.2f * slot, plot.getBottom() - yOf (lb)));
+            if (fused)
+            {
+                g.setColour (rc.withAlpha (0.95f));
+                g.fillRect (juce::Rectangle<float> (x - 0.09f * slot, yOf (result), 0.18f * slot, plot.getBottom() - yOf (result)));
+            }
+            g.setColour (words().withAlpha (0.6f));
+            g.setFont (fonts::make (8.5f, Weight::medium, 0.06f));
+            g.drawText (juce::String (h + 1), juce::Rectangle<float> (x - 10.0f, plot.getBottom() + 2.0f, 20.0f, 10.0f), juce::Justification::centred, false);
+        }
+        g.setColour (colour::wellGrid);
+        g.fillRect (juce::Rectangle<float> (plot.getX(), plot.getBottom(), plot.getWidth(), 1.0f));
+        static const char* methods[] { "IMPRINT", "FUSE", "WEAVE" };
+        caption (g, area, juce::String (methods[method]) + "  MORPH " + juce::String (juce::roundToInt (100.0f * position)) + " %", juce::Justification::topLeft, look.trace);
+        caption (g, area, "A", juce::Justification::topRight, a);
+        caption (g, area, "B      ", juce::Justification::topRight, b);
+        caption (g, area, fused ? juce::String (global ? "SEVEN OCTAVE BANDS" : "PARTIALS 1-7") + " AS THEY PLAY; BETWEEN THEM, WHAT THE METHOD MAKES" : juce::String ("PLAY TWO SOURCES"), juce::Justification::bottomLeft, words().withAlpha (0.6f));
     }
 
     /** DRIVE: the circuit's steady-state transfer curve (DriveProcessor::transfer, as ANDOR's
@@ -224,42 +307,6 @@ namespace
         curve (g, plot, [&] (float t) { return 0.5f + 0.5f * static_cast<float> (osp::DriveProcessor::transfer (ds, 2.0 * t - 1.0)); }, look.trace, 200, false);
         caption (g, area, "TRANSFER  IN > OUT", juce::Justification::topLeft, words());
         caption (g, area, juce::String (juce::roundToInt (100.0f * valueOf (s, id, "amount"))) + " %", juce::Justification::topRight, look.trace);
-    }
-
-    /** COMPRESSOR: CLEAN's static curve (Compressor::cleanCurveDb, as ANDOR Analog's graph), the
-        threshold on it; the level leaving the module now. */
-    void paintCompressor (juce::Graphics& g, juce::Rectangle<float> area, Session& s, const std::string& id, const ModuleLook& look)
-    {
-        const auto plot = plotIn (area).withSizeKeepingCentre (std::min (plotIn (area).getWidth(), plotIn (area).getHeight() * 1.8f), plotIn (area).getHeight());
-        grid (g, plot, 4, 4);
-        an::fx::CompSettings cs;
-        cs.mode = juce::roundToInt (valueOf (s, id, "mode"));
-        cs.thresholdDb = valueOf (s, id, "threshold");
-        cs.ratio = valueOf (s, id, "ratio");
-        cs.makeupDb = valueOf (s, id, "makeup");
-        // -60 .. 0 dB in, -60 .. 0 dB out
-        g.setColour (words().withAlpha (0.35f));
-        g.drawLine (plot.getX(), plot.getBottom(), plot.getRight(), plot.getY(), 1.0f);
-        if (cs.mode == 0)
-        {
-            curve (g, plot, [&] (float t) { return (an::fx::Compressor::cleanCurveDb (cs, -60.0f + 60.0f * t) + 60.0f) / 60.0f; }, look.trace, 120, false);
-            g.setColour (look.trace.withAlpha (0.5f));
-            g.fillRect (juce::Rectangle<float> (plot.getX() + plot.getWidth() * (cs.thresholdDb + 60.0f) / 60.0f, plot.getY(), 1.0f, plot.getHeight()));
-            caption (g, area, "CURVE  IN > OUT", juce::Justification::topLeft, words());
-        }
-        else
-            caption (g, area, "FET: INPUT DRIVES IT INTO A FIXED THRESHOLD", juce::Justification::topLeft, words());
-        // what it is doing now: the processor's own gain reduction, and what leaves it
-        const auto* live = liveOf (s, id);
-        const float peak = live != nullptr ? live->peak.load (std::memory_order_relaxed) : 0.0f;
-        const float reduction = live != nullptr && live->telemetryCount.load() > 0 ? std::abs (telemetryOf (live, 0)) : 0.0f;
-        const auto bar = juce::Rectangle<float> (area.getX() + 12.0f, area.getBottom() - 30.0f, 110.0f, 5.0f);
-        g.setColour (colour::wellGrid);
-        g.fillRoundedRectangle (bar, 2.0f);
-        g.setColour (look.trace);
-        g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * juce::jlimit (0.0f, 1.0f, reduction / 24.0f)), 2.0f);
-        caption (g, area, "GAIN REDUCTION  " + juce::String (reduction, 1) + " dB", juce::Justification::bottomLeft, words());
-        caption (g, area, peak > 0.0005f ? "OUT " + juce::String (juce::Decibels::gainToDecibels (peak), 1) + " dB" : juce::String ("SILENT"), juce::Justification::bottomRight, look.trace);
     }
 
     /** An envelope's shape from its own times and level (to scale: the whole of A + D + a held
@@ -416,7 +463,12 @@ namespace
             return;
         const auto& type = n->type;
         const bool steps = type == "event.arp" || type == "event.stepseq" || type == "event.generative" || type == "event.clock";
-        if (steps || type == "proc.morph" || type == "proc.morph.global")
+        if (type == "proc.morph" || type == "proc.morph.global")
+        {
+            paintMorph (g, area, s, id, look);
+            return;
+        }
+        if (steps)
         {
             paintModuleDisplay (g, area.reduced (10.0f, 24.0f), s, id, false, look, 2.2f);
             if (steps)
@@ -439,104 +491,6 @@ namespace
             return;
         }
         paintMeter (g, area, s, id, look);
-    }
-
-    /** PHASER: where its notches are now (the processor's own, on 20 Hz .. 20 kHz) and CENTRE. */
-    void paintPhaser (juce::Graphics& g, juce::Rectangle<float> area, Session& s, const std::string& id, const ModuleLook& look)
-    {
-        const auto plot = plotIn (area);
-        grid (g, plot, 3, 2);
-        const auto xOf = [plot] (float hz) { return plot.getX() + plot.getWidth() * std::log (juce::jlimit (20.0f, 20000.0f, hz) / 20.0f) / std::log (1000.0f); };
-        g.setColour (words().withAlpha (0.5f));
-        g.fillRect (juce::Rectangle<float> (xOf (valueOf (s, id, "centre")), plot.getY(), 1.0f, plot.getHeight()));
-        const auto* live = liveOf (s, id);
-        int notches = 0;
-        for (int i = 0; i < 6; ++i)
-            if (const float hz = telemetryOf (live, i); hz > 20.0f)
-            {
-                const float x = xOf (hz);
-                g.setGradientFill (juce::ColourGradient (look.trace.withAlpha (0.0f), x - 9.0f, 0.0f, look.trace.withAlpha (0.0f), x + 9.0f, 0.0f, false));
-                g.setColour (look.trace.withAlpha (0.22f));
-                g.fillRect (juce::Rectangle<float> (x - 5.0f, plot.getY(), 10.0f, plot.getHeight()));
-                g.setColour (look.trace);
-                g.fillRect (juce::Rectangle<float> (x - 0.75f, plot.getY(), 1.5f, plot.getHeight()));
-                ++notches;
-            }
-        caption (g, area, notches > 0 ? "NOTCHES NOW" : "ITS NOTCHES SHOW WHILE IT RUNS", juce::Justification::topLeft, words());
-        caption (g, area, "20 Hz", juce::Justification::bottomLeft, words().withAlpha (0.6f));
-        caption (g, area, "20 kHz", juce::Justification::bottomRight, words().withAlpha (0.6f));
-    }
-
-    /** FLANGER: its delay now (the processor's own) against DELAY, 0 .. 12 ms. */
-    void paintFlanger (juce::Graphics& g, juce::Rectangle<float> area, Session& s, const std::string& id, const ModuleLook& look)
-    {
-        const auto plot = plotIn (area);
-        grid (g, plot, 6, 2);
-        const auto xOf = [plot] (float ms) { return plot.getX() + plot.getWidth() * juce::jlimit (0.0f, 12.0f, ms) / 12.0f; };
-        const float set = valueOf (s, id, "delay"), now = telemetryOf (liveOf (s, id), 0);
-        g.setColour (words().withAlpha (0.5f));
-        g.fillRect (juce::Rectangle<float> (xOf (set), plot.getY(), 1.0f, plot.getHeight()));
-        if (now > 0.0f)
-        {
-            g.setColour (look.trace.withAlpha (0.25f));
-            g.fillRect (juce::Rectangle<float> (std::min (xOf (set), xOf (now)), plot.getCentreY() - 10.0f, std::abs (xOf (now) - xOf (set)), 20.0f));
-            g.setColour (look.trace);
-            g.fillEllipse (juce::Rectangle<float> (10.0f, 10.0f).withCentre ({ xOf (now), plot.getCentreY() }));
-        }
-        caption (g, area, "DELAY NOW", juce::Justification::topLeft, words());
-        caption (g, area, now > 0.0f ? juce::String (now, 2) + " ms" : juce::String (set, 2) + " ms", juce::Justification::topRight, look.trace);
-        caption (g, area, "0", juce::Justification::bottomLeft, words().withAlpha (0.6f));
-        caption (g, area, "12 ms", juce::Justification::bottomRight, words().withAlpha (0.6f));
-    }
-
-    /** STEREO SPREAD: what it does to the picture now: correlation, and side against mid. */
-    void paintSpread (juce::Graphics& g, juce::Rectangle<float> area, Session& s, const std::string& id, const ModuleLook& look)
-    {
-        const auto plot = plotIn (area);
-        const auto* live = liveOf (s, id);
-        const float corr = live != nullptr && live->telemetryCount.load() > 0 ? juce::jlimit (-1.0f, 1.0f, telemetryOf (live, 0)) : 1.0f;
-        const auto row = juce::Rectangle<float> (plot.getX(), plot.getY() + 0.25f * plot.getHeight() - 5.0f, plot.getWidth(), 10.0f);
-        g.setColour (colour::wellGrid);
-        g.fillRoundedRectangle (row, 2.5f);
-        g.setColour (corr < 0.0f ? juce::Colour (0xffe2684a) : look.trace);
-        g.fillEllipse (juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ row.getCentreX() + 0.5f * row.getWidth() * corr, row.getCentreY() }));
-        meter (g, juce::Rectangle<float> (plot.getX(), plot.getY() + 0.68f * plot.getHeight() - 5.0f, plot.getWidth(), 10.0f), telemetryOf (live, 1), look.trace);
-        caption (g, area, "CORRELATION  -1 .. +1", juce::Justification::topLeft, words());
-        caption (g, area, juce::String (corr, 2), juce::Justification::topRight, look.trace);
-        caption (g, area, "SIDE LEVEL", juce::Justification::centredLeft, words());
-    }
-
-    /** RETRO: what the machine is doing to the signal now (the processor's own figures). */
-    void paintRetro (juce::Graphics& g, juce::Rectangle<float> area, Session& s, const std::string& id, const ModuleLook& look)
-    {
-        const auto plot = plotIn (area);
-        const auto* live = liveOf (s, id);
-        const bool running = live != nullptr && live->telemetryCount.load() >= 4;
-        const float bits = running ? telemetryOf (live, 0) : 16.0f, rate = running ? telemetryOf (live, 1) : 48.0f, wow = running ? telemetryOf (live, 2) : 0.0f;
-        struct Row
-        {
-            const char* name;
-            float fraction;
-            juce::String value;
-        };
-        const Row rows[] = { { "BITS", juce::jlimit (0.0f, 1.0f, bits / 16.0f), juce::String (bits, 1) },
-                             { "RATE", juce::jlimit (0.0f, 1.0f, rate / 48.0f), juce::String (rate, 1) + " kHz" },
-                             { "WOW", juce::jlimit (0.0f, 1.0f, std::abs (wow) / 50.0f), juce::String (wow, 1) + " ct" } };
-        const float h = plot.getHeight() / 3.0f;
-        g.setFont (fonts::make (9.5f, Weight::medium, 0.1f));
-        for (int i = 0; i < 3; ++i)
-        {
-            const auto line = juce::Rectangle<float> (plot.getX(), plot.getY() + h * static_cast<float> (i), plot.getWidth(), h);
-            const auto bar = juce::Rectangle<float> (line.getX() + 52.0f, line.getCentreY() - 3.0f, line.getWidth() - 132.0f, 6.0f);
-            g.setColour (words());
-            g.drawText (rows[i].name, line.withWidth (50.0f), juce::Justification::centredLeft, false);
-            g.setColour (colour::wellGrid);
-            g.fillRoundedRectangle (bar, 2.0f);
-            g.setColour (look.trace);
-            g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * rows[i].fraction), 2.0f);
-            g.drawText (rows[i].value, line.withTrimmedLeft (line.getWidth() - 74.0f), juce::Justification::centredRight, false);
-        }
-        caption (g, area, "THE MACHINE NOW", juce::Justification::topLeft, words());
     }
 
     /** MIXER: its four channels as set (level; muted or not soloed: dark), the master, and
@@ -592,16 +546,6 @@ namespace
             spec.subtitle = "VOICE FILTER";
             spec.first = { "cutoff", "resonance", "drive", "envAmount", "keytrack", "comp" };
         }
-        else if (type == "fx.filter")
-            spec.graph = paintFxFilter;
-        else if (type == "fx.phaser")
-            spec.graph = paintPhaser;
-        else if (type == "fx.flanger")
-            spec.graph = paintFlanger;
-        else if (type == "fx.spread")
-            spec.graph = paintSpread;
-        else if (type == "fx.retro")
-            spec.graph = paintRetro;
         else if (type == "util.mixer")
         {
             spec.graph = paintMixer;
@@ -626,8 +570,6 @@ namespace
         }
         else if (type == "proc.drive")
             spec.graph = paintDrive;
-        else if (type == "fx.compressor")
-            spec.graph = paintCompressor;
         else if (type == "ctl.env" || type == "proc.vca")
         {
             spec.graph = paintEnvelope;

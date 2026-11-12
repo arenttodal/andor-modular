@@ -1,6 +1,6 @@
 # Addendum 02 — reuse audit: the family's racks and source cards
 
-_2026-11-12. Modular `5c4ee89` + this work. Pins read: OSP `e7a3834`, Analog `1c0cb6d`._
+_2026-11-12. Modular `5c4ee89` + this work. Pins read: OSP `e7a3834`, Analog `1c0cb6d`. Sections 1 to 3 describe those commits; **section 4 is as built after the second pass** (the seam of section 4 exists now: Analog `40bf866`, OSP `c21fe80`)._
 
 What Modular can show of ANDOR OSP's and ANDOR Analog's racks **as the very same code**, what
 is tied to their instruments, and what the bridge provides. Read from the source; file and line
@@ -60,60 +60,76 @@ One per open rack. It implements `osp::plugin::InstrumentHost` for exactly one n
 A rack is opened, swapped and closed without touching the audio graph; turning its controls is
 a live parameter write (tested: no graph swap).
 
-## 4. Extraction map (as built)
+## 4. Extraction map (as built, second pass)
 
-"shared": the very class ANDOR OSP and Analog show, unmodified, on `RackHost`. "parts": a
-rack built in Modular from the family's rack parts (`ParameterRack`, `rackui` cells, the
-hardware faceplate) in the device's own identity, with a picture specific to the device
+"shared": the very class ANDOR OSP and Analog show, on `RackHost`. "parts": a rack built in
+Modular from the family's rack parts (`ParameterRack`, `rackui` cells, the hardware
+faceplate) in the device's own identity, with a picture specific to the device
 (product/Source/ModuleRack.cpp).
 
 | Module | Rack | Code | Its picture |
 |---|---|---|---|
-| `fx.echo` | ANDOR's ECHO (`EchoRack`), Analog's ECHO faceplate, tape deck, presets | **shared** | the rack's own repeats graph (parameters and tempo); reels turn while the module sounds |
-| `fx.space` | ANDOR's SPACE (`SpaceRack`), all four engines, presets | **shared** | the rack's own (decay portrait, LOW / HIGH CUT handles) |
+| `fx.echo` | ANDOR's ECHO (`EchoRack`), Analog's ECHO faceplate, tape deck, presets, **MIX** | **shared** | the rack's own repeats graph; reels turn while the module sounds |
+| `fx.space` | ANDOR's SPACE (`SpaceRack`), all four engines, presets, **MIX** | **shared** | the rack's own (decay portrait, LOW / HIGH CUT handles) |
 | `fx.movement` | ANDOR's MOVEMENT (`MovementRack`), five modes, pattern editor, presets | **shared** | the rack's own; SHAPER's playhead from the module's telemetry |
-| `proc.filter` | FILTER | parts, Analog's voice-filter identity | small-signal response: Analog's linearisation of its ladder and OTA models (ported, see 5), the module's SVF for the 12 dB modes |
-| `proc.morph`, `proc.morph.global` | MORPH | parts, Analog's MORPH identity | the two sounds band by band, live (the module's telemetry) |
-| `proc.drive` | DRIVE | parts, Analog's DRIVE identity | `osp::DriveProcessor::transfer` (the same function Analog's graph draws) |
-| `fx.compressor` | COMPRESSOR | parts, Analog's identity | `Compressor::cleanCurveDb`; gain reduction and output, live |
-| `fx.filter` | FX FILTER | parts | `fx::FxFilter::responseDb` (as Analog's graph) |
-| `fx.phaser` / `fx.flanger` / `fx.spread` / `fx.retro` | their devices | parts | the processors' own meters, now telemetry: notches, delay now, correlation and side level, bits / rate / wow |
-| `fx.shifter`, `fx.chorus`, `fx.convolution`, `proc.tone` | their devices | parts | output level on a scale (no picture of their own yet) |
+| `fx.compressor`, `fx.phaser`, `fx.flanger`, `fx.shifter`, `fx.filter`, `fx.spread`, `fx.retro`, `fx.convolution` | ANDOR Analog's effect rack (`FxRack.cpp`, `createFxRackFor`): its pages (MAIN / DETAIL; RETRO's four), modes, preset browser with Analog's factory presets, every control | **shared** | Analog's own graphs, metering the processor that runs in this module (gain reduction, notches, comb, correlation, the impulse) |
+| `proc.filter` | FILTER | parts, Analog's voice-filter identity | response at the setting, and **live**: the newest voice's cutoff and resonance, the envelope's travel (the module's telemetry) |
+| `proc.morph`, `proc.morph.global` | MORPH | parts, Analog's MORPH identity | the two sounds as measured, and between them **the result** the method makes at this position |
+| `proc.drive` | DRIVE | parts, Analog's DRIVE identity | `osp::DriveProcessor::transfer` (the function Analog's graph draws); kept because Analog's rack has no OUTPUT |
+| `fx.chorus`, `proc.tone` | their devices | parts | output level on a scale (Analog has no rack for these two) |
 | `ctl.env`, `proc.vca` | ENVELOPE / AMP ENVELOPE | parts, modulation accent | the ADSR to scale and its level now |
 | `ctl.lfo` | LFO | parts | its shape and its value now |
 | `event.stepseq` | STEP SEQUENCER | parts, arpeggiator amber | its sixteen steps, edited on the glass |
 | `event.arp`, `event.generative`, `event.clock` | their devices | parts | the notes or steps as they play |
-| sources (`osc.analog`, `src.*`) | SOURCE | parts, the layer's colour | the front panel's display (wave, recording and playhead, grains, status); TYPE, recording and plugin on the rail and selector row |
+| sources (`osc.analog`, `src.*`) | SOURCE | parts, the layer's colour | the front panel's display; TYPE, recording and plugin on the rail and selector row |
 | `spatial.satellite` | SATELLITE | parts, Analog's SPREAD identity | its pan position now |
 | `util.mixer` | MIXER (LEVELS / PAN / MUTE-SOLO) | parts, UTILITY identity | channels as set, output now |
 | other utilities and controllers | their devices | parts | output level or control value now |
 | a group | the plain rack (rename its controls, save as module) | Modular | — |
 
-**Not used:** Analog's `createFilterRack`, `createMorphRack`, `createFxRack`. They cannot be
-linked or called without Analog's shell and engine (section 2), and FILTER's is Analog's whole
-voice. The seam that would let the effect racks be shared was not built in this pass:
+**The seam (built upstream, each on its repository's `claude/epic-feynman-fsf8ij`, with its
+suites):**
 
-**Upstream seam proposed (Analog, additive, on a branch; pin moved only after Analog's own
-suites pass):**
-- `FxRack.cpp` / `AnalogRacks.cpp`: replace the two `dynamic_cast` chains by a telemetry
-  provider interface (`fxProcessor (id)`, `convolutionImpulse (slot)`, `filterTap`,
-  `cutoffNoteHigh`) that `AnalogEngine` implements and registers; move `openFxRack
-  (ShellEditor&)` to a shell-only file; a setter for the shown instance.
-- `FxParameters.cpp`: the specification table in JUCE-free form under `dsp/fx`, so Modular's
-  effect nodes can expose the same settings (COMPRESSOR's KNEE, MULTIBAND, FET's own
-  controls, RETRO's machine pages...). With both, `fx.*` nodes could open Analog's own effect
-  racks with their pages, presets and meters.
+- Analog `product/Source/FxRackSource.h`: what the rack reads of its instrument beyond the
+  parameters (`fxProcessor`, `fxConvolutionImpulse`, a rack's memory, its title). A host that
+  is one needs nothing; ANDOR Analog installs a finder for its engine (`FxRackShell.cpp`, the
+  only file of the rack that knows the shell: `openFxRack (ShellEditor&)` lives there too).
+  `FxRack.cpp` no longer includes or casts to `AnalogEngine`, `ShellProcessor` or
+  `ShellEditor`. `createFxRackFor (host, id)` shows one named effect without the process-wide
+  "shown" state.
+- Analog `dsp/fx/FxParameterTable.*`: the one table of every effect's settings (names,
+  ranges, defaults, how each is written), free of JUCE. `FxParameters.cpp` builds Analog's
+  host parameters from it, unchanged (tested name by name).
+- Analog `fxpresets::setUserRoot`; OSP `setRackPresetFolder`: an instrument's own preset
+  folders.
+- OSP `InstrumentHost::rackAmountParameter (kind)`: the opt-in MIX knob of ECHO and SPACE.
+
+**How Modular uses it:** `RackHost` is an `FxRackSource` for its one module (the processor
+found in the running graph through `AnalogFxAccess`, `dsp/nodes/AnalogFx.h`); its parameter
+state is Analog's FX layout, each ID bound to the module's parameter by the table's name
+(`analogFxLinks`); ON is the module's light. Two compressors are two hosts, two processors,
+two memories.
+
+**OSP's newer default line** already holds the FX library as shared code
+(`shared/andor-ui/Source/FxRack.*`, `host.fxProcessor`), but no Analog commit is on that line
+and Modular's OSP pin is not an ancestor of it. The seam above has the same shape, so the
+binding carries over when the pins move (D-34).
+
+**Not used:** Analog's `createFilterRack` and `createMorphRack` (FILTER's is Analog's whole
+voice, MORPH's speaks of oscillators 1 / 2 and card C: findings 3 and 4), and its DRIVE rack
+(no OUTPUT).
 
 ## 5. Exceptions and deviations
 
 | What | Why | Source reused |
 |---|---|---|
-| The amount of ECHO and SPACE (Analog's macros) is not a control of their racks | In Analog it is the macro knob above the rack. In Modular it is the module's MIX on its tile; the racks' LED and graphs read it | — |
-| ECHO / SPACE / MOVEMENT presets live in `Documents/ANDOR/{Echo,Space,Movement} Presets` | The family's own presets and folders, shared with OSP and Analog on the same machine | `RackPresetModel` |
+| ECHO and SPACE carry a MIX knob the family's racks do not show | In Analog the amount is the macro knob above the rack; here the rack is the whole device (opt-in of the shared rack, D-37) | `UnifiedRack` |
+| Rack presets live in `<user data>/ANDOR/Modular/Rack Presets/` | ANDOR Modular's own (the owner's choice); factory presets are the family's, in code | `RackPresetModel`, `fxpresets` |
+| An effect's heading is the module's name, not "COMPRESSOR 1" | A patch has any number of each | `FxRackSource::fxRackTitle` |
+| THRESHOLD's knob travel in the COMPRESSOR rack is strongly skewed | It is Analog's own parameter range (its "no centre" marker, -1, lies inside -60..0 dB); the same in Analog. Reported, not changed here | — |
 | MOVEMENT's DRIFT / TAPE / CHORUS / PULSE controls share three values (A, B, C) | The module has one set that the chosen mode reads; the rack names them per mode | — |
-| FILTER's response formula is ported (40 lines), not linked | `filtergraph::responseDb` is defined in `AnalogRacks.cpp`, which cannot be linked (section 2) | Analog `AnalogRacks.cpp:29-68`, cited in `ModuleRack.cpp` |
+| FILTER's response formula is ported (40 lines), not linked | `filtergraph::responseDb` is defined in `AnalogRacks.cpp`, which is Analog's voice rack | Analog `AnalogRacks.cpp:29-68`, cited in `ModuleRack.cpp` |
 | FILTER has no VOICE / PAIR pages, MORPH no CARRIER / card C root | They are Analog's synth, not this module (findings 3, 4) | identity, cells |
-| Effect racks show the module's parameters, fewer than Analog's | Finding 5; the proposed seam closes it | identity, cells, the processors' own curves and meters |
-| No preset browser on parts racks | Analog's effect presets are tied to its parameter IDs | — |
+| No preset browser on parts racks | They are not a family rack; their modules have no presets yet | — |
 
 Paired pictures (Analog's reference above, Modular below): `docs/screenshots/parity/`.

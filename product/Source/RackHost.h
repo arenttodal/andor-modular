@@ -2,6 +2,7 @@
 
 #include "Session.h"
 
+#include "FxRackSource.h"
 #include "InstrumentHost.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -47,9 +48,15 @@ struct RackParam
         graph (tempo, sample rate, telemetry), or with "nothing" where Modular has no such thing
         (layers, presets of the instrument, the modulation matrix).
 
+      - For ANDOR Analog's effect racks it is also their FxRackSource: the processor running in
+        this module (its own meters) and, for CONVOLUTION, the impulse it plays.
+
     Nothing of ANDOR Analog's engine or the shell is constructed or cast to. Message thread.
 */
-class RackHost final : public osp::plugin::InstrumentHost, private juce::AudioProcessorValueTreeState::Listener, private juce::AudioProcessorParameter::Listener
+class RackHost final : public osp::plugin::InstrumentHost,
+                       public andor::analog::FxRackSource,
+                       private juce::AudioProcessorValueTreeState::Listener,
+                       private juce::AudioProcessorParameter::Listener
 {
 public:
     using Layout = juce::AudioProcessorValueTreeState::ParameterLayout;
@@ -74,6 +81,11 @@ public:
     /** Live answers (set by the rack's factory for the module it shows). */
     std::function<float()> shaperPhaseNow, outputPeakNow;
     std::function<juce::String (const juce::String& topic)> statusNow;
+    /** An effect of ANDOR Analog's library: the processor this module runs and its impulse. */
+    std::function<const andor::analog::fx::Processor*()> fxProcessorNow;
+    std::function<std::shared_ptr<const andor::analog::fx::Impulse>()> fxImpulseNow;
+    /** A shared rack of `kind` shows this ID as its own MIX knob (the module's MIX). */
+    void setAmountParameter (int kind, juce::String rackId) { amounts[kind] = std::move (rackId); }
     /** MOVEMENT's SHAPER: the module's own sixteen steps (read, and written as one action). */
     std::function<osp::ShaperPattern()> shaperPatternNow;
     std::function<void (const osp::ShaperPattern&)> writeShaperPattern;
@@ -91,6 +103,17 @@ public:
     juce::String rackPresetMemory (const juce::String& key) const override;
     void setRackPresetMemory (const juce::String& key, const juce::String& code) override;
     juce::String productWordmark() const override { return "ANDOR/MODULAR"; }
+    juce::String rackAmountParameter (int kind) const override
+    {
+        const auto it = amounts.find (kind);
+        return it != amounts.end() ? it->second : juce::String();
+    }
+
+    // -- andor::analog::FxRackSource ---------------------------------------------------------
+    const andor::analog::fx::Processor* fxProcessor (andor::analog::fx::InstanceId) const override { return fxProcessorNow ? fxProcessorNow() : nullptr; }
+    std::shared_ptr<const andor::analog::fx::Impulse> fxConvolutionImpulse (int) const override { return fxImpulseNow ? fxImpulseNow() : nullptr; }
+    Memory* fxRackMemory (andor::analog::fx::InstanceId) override;
+    juce::String fxRackTitle (andor::analog::fx::InstanceId) const override;
 
     // (Modular has no A / B / C layers, instrument presets or modulation matrix: the racks
     // never ask for them; these answer "none".)
@@ -150,7 +173,7 @@ private:
     std::map<juce::String, std::size_t> byRackId;
     std::map<juce::String, float> held;
     std::map<int, osp::plugin::rack::Faceplate> plates;
-    std::map<juce::String, juce::String> presetMemory;
+    std::map<int, juce::String> amounts;
     std::unique_ptr<Carrier> carrier;
     std::unique_ptr<juce::AudioProcessorValueTreeState> state;
     juce::UndoManager unused;

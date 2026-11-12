@@ -65,6 +65,9 @@ struct ParamDesc
     /** Changing it rebuilds the node (an impulse, a network size): the editor recompiles the
         patch instead of sending the value live. Never modulatable. */
     bool structural = false;
+    /** A detail of the module: edited in its rack, never on its tile, and left alone by EVOLVE
+        (an effect's deeper settings: a compressor's knee, a tape's dropouts). */
+    bool detail = false;
     /** Progressive disclosure: shown only while choice/toggle parameter `showIf` has one of
         the values in `showIfMask` (bit n = value n). Empty: always shown. */
     std::string showIf;

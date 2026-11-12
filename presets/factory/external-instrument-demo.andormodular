@@ -1,6 +1,6 @@
 {
   "format": "andormodular",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "External Instrument Demo",
   "author": "ANDOR",
   "description": "An installed instrument plugin (e.g. Kontakt strings) imprinted onto an analog carrier by GLOBAL MORPH. Without the plugin the carrier plays alone (the module waits, its state kept).",

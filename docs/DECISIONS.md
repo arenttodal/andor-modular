@@ -206,3 +206,46 @@ that plays once for all notes joins where its chain's voices meet rather than be
 and the edit says so. Only when no such place exists, or a limit would break, is the change
 refused. Where a type runs is the musician's choice only if the type left offered one.
 
+## D-34 The seam for Analog's effect racks is built in Analog, on the pinned line
+ANDOR OSP's newer default line already shares the FX library (`shared/andor-ui/FxRack`,
+`host.fxProcessor`), but neither Modular's OSP pin nor any Analog commit is on that line
+yet. The seam was therefore built on the commits Modular pins (Analog `1c0cb6d`, OSP
+`e7a3834`), in the same shape: the rack reads its instrument through `FxRackSource`
+(processor, impulse, memory, title) and `InstrumentHost` only; `openFxRack (ShellEditor&)`
+and the engine lookup moved to a shell-only file. When Analog moves to OSP's shared FX,
+Modular's binding carries over (`fxProcessor` becomes the host's own virtual).
+
+## D-35 The effect modules carry the library's whole table; old parameters keep their place
+One definition of the settings (Analog's `dsp/fx/FxParameterTable`, JUCE-free). A module
+keeps the parameters it had, written as they always were, and gains the rest as detail
+parameters (edited in the rack, off the tile, left alone by EVOLVE). Rejected: a second,
+hand-kept list in Modular; renaming old ids to the library's; narrowing the rack's knobs to
+the old ranges (presets would clamp, negative phaser feedback and MULTIBAND would be missing).
+
+## D-36 Schema 2 with a migration, rather than ranges changed in place
+Mappings and modulation depths are saved normalised, so widening a range silently would move
+what a macro reaches. The schema went to 2 and `migrateV1` moves them; values are in their own
+units and untouched. A setting left at its default is not written, so the processor plays its
+built-in value and schema 1 patches render bit for bit (the table's 12 % is `0.01f * 12`, one
+float from the built-in `0.12f`).
+
+## D-37 MIX is a knob of the ECHO and SPACE racks through an opt-in of the shared rack
+`InstrumentHost::rackAmountParameter` (OSP, default none: ANDOR OSP and Analog keep the macro
+above the rack and are pixel-identical). The column grows by what the extra knob needs in the
+two densest modes. Rejected: an overlay drawn by Modular over the family's rack.
+
+## D-38 Presets of the racks are ANDOR Modular's own
+`<user data>/ANDOR/Modular/Rack Presets/` (`Echo Presets`, `Space Presets`, `Movement
+Presets`, `FX Presets/<TYPE>`), set once through `setRackPresetFolder` (OSP) and
+`fxpresets::setUserRoot` (Analog). Factory presets ship in the family's code and are the same
+everywhere. SHAPER's drawn patterns stay in the family's pattern folder (they are patterns,
+shared on purpose, not rack presets).
+
+## D-39 FILTER and MORPH stay Modular's racks and gain a live trace
+Analog's FILTER rack is its whole voice and its MORPH graph is a concept view of oscillators
+and card C; neither is this module. FILTER now reports the newest voice's cutoff, the cutoff
+before the envelope, the envelope's top and the resonance as modulated; its rack draws the
+setting quiet behind what plays (as Analog's live FILTER page). MORPH draws the two sounds as
+measured and, between them, what the method makes of them (Analog's carrier / card C /
+result, from what sounds). DRIVE keeps its sibling rack: Analog's has no OUTPUT.
+

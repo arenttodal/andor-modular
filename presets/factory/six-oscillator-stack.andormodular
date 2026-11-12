@@ -1,6 +1,6 @@
 {
   "format": "andormodular",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Six Oscillator Stack",
   "author": "ANDOR",
   "description": "Six oscillators (all three models) per note: a huge detuned stack into one OTA filter and the ensemble chorus.",

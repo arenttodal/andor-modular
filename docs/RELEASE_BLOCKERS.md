@@ -21,15 +21,17 @@ the plugin, except the items below which depend on things this environment does 
 ## P2
 | Item | State |
 |---|---|
-| FILTER, MORPH and the effects as Analog's own rack classes | built from the family's parts instead (Analog's classes cast to its shell and engine); the upstream seam is specified in ADDENDUM_02_REUSE_AUDIT.md and not built |
-| Effect modules' full settings (COMPRESSOR's KNEE and MULTIBAND, RETRO's machine pages…) | the modules expose a subset of Analog's; closing it needs Analog's parameter table in JUCE-free form |
-| Pictures for SHIFTER, CHORUS, CONVOLUTION, TONE EQ | an output meter |
+| FILTER and MORPH as Analog's own rack classes | not possible as they are (Analog's FILTER rack is its whole voice, its MORPH graph is about card C); Modular's racks in Analog's identity, with a live trace (D-39). The effects **are** Analog's rack class now |
+| DRIVE as Analog's rack class | Modular's sibling kept: Analog's has no OUTPUT |
+| Pictures for CHORUS and TONE EQ | an output meter (Analog has no rack for either) |
+| EQUALIZER and UTILITY of Analog's library as modules | not offered yet (the table and the rack would carry them as they are) |
+| Analog's FX CHAIN presets | not offered: a chain is Analog's route, not a module |
+| A modulation deep enough to hit the old end of one of ten widened ranges (schema 1 patches) | now carries on to the new end (STATE_SCHEMA.md) |
+| COMPRESSOR THRESHOLD's knob travel | strongly skewed, as in Analog (its parameter range; reported upstream, not changed here) |
 | A group's rack | the plain rack |
-| MIX inside the ECHO / SPACE racks | on the tile (Analog has it as the macro above the rack) |
 | Scenes per source type | a scene's values follow parameter names across types |
 | Undo / redo of mute, solo and bypass | rebuilds the graph (the action itself is a 12 ms ramp); bypassing a note module rebuilds too |
-| A filter's response curve in the rack | the rack shows its output level; no drawn response |
-| Rack state in the patch | not saved (closed when a patch opens) |
+| Rack state in the patch | not saved (closed when a patch opens); a rack's page and shown preset name are kept for the session only |
 | Quick Add click-through | a click outside the menu closes it and is not passed on |
 | The live accent under the new trim | still the copper from Analog's finish; owner decision |
 | A 4× housing level | the pack has the shared 2× level only |

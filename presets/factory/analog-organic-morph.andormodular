@@ -1,6 +1,6 @@
 {
   "format": "andormodular",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Analog Organic Morph",
   "author": "ANDOR",
   "description": "A DCO and a bowed recording of one note fused by MORPH (FUSE), then filtered per voice.",

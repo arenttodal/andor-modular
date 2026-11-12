@@ -1,6 +1,6 @@
 {
   "format": "andormodular",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Three Arps",
   "author": "ANDOR",
   "description": "Three sources, three note streams: one sustains, one plays eighths, one runs up three octaves through a SATELLITE orbit. One keyboard.",

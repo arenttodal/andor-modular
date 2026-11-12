@@ -145,6 +145,9 @@ struct CompiledNode
     // telemetry (audio writes, UI reads)
     std::array<std::atomic<float>, 16> telemetry {};
     std::atomic<int> telemetryCount { 0 };
+    /** The telemetry is of something playing now: a global module always; a per-voice module
+        while one of its lane's voices sounds (else it is the last voice's, as it ended). */
+    std::atomic<bool> sounding { false };
     std::atomic<float> peak { 0.0f };
     int latency = 0;                              ///< accumulated path latency at the output
 };

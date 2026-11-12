@@ -350,6 +350,10 @@ bool Session::loadDocument (const Document& d, const juce::String& text)
 {
     doc = d;
     ++loads;
+    // Another patch: what its racks remembered belongs to the modules of the one before (ids
+    // repeat between patches). Emptied in place: an open rack may still point at its entry.
+    for (auto& [id, memory] : rackMemories)
+        memory = {};
     edit::resolveOverlaps (doc, registry());   // (a patch from before the rule: tidied once, on load)
     hist.clear();
     gestureOpen = false;
@@ -471,6 +475,8 @@ juce::File Session::userDirectory()
 {
     return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("ANDOR").getChildFile ("Modular");
 }
+
+juce::File Session::rackPresetDirectory() { return userDirectory().getChildFile ("Rack Presets"); }
 
 juce::File Session::factoryDirectory() { return userDirectory().getChildFile ("Factory"); }
 

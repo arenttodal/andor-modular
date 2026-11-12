@@ -34,7 +34,10 @@ Keep both green on every commit.
    one says why (`NodeDesc::available`, `unavailableReason`).
 7. **Every smart action is one undoable transaction** that reports what it did.
 8. Features shared with OSP/Analog (SPACE, ECHO, ARP) come from their shared code; Modular
-   wraps, it does not fork.
+   wraps, it does not fork. An effect module's settings are ANDOR Analog's FX table
+   (`dsp/nodes/AnalogFx.h`): never a second list here; the parameters a module had before the
+   table keep their ids, units and order. Their racks are the family's own classes, bound to
+   one module through `RackHost` (docs/ADDENDUM_02_REUSE_AUDIT.md, section 4).
 9. **The interface is the ANDOR interface** (`external/osp/andor-design-system/guide`), composed
    from the family's code and rendered assets in the submodules (docs/UI_COMPONENTS.md). No new
    colour, font, knob, key or radius is defined here: `product/Source/Theme.h` names and maps

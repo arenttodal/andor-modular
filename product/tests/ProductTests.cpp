@@ -6,7 +6,15 @@
 #include "PluginProcessor.h"
 
 #include "ModularMaterialsData.h"
+#include "FxParameters.h"
+#include "FxPresets.h"
+#include "MacroPopups.h"
 #include "ParameterRack.h"
+#include "Racks.h"
+
+#include "fx/Effects.h"
+#include "fx/FxParameterTable.h"
+#include "nodes/AnalogFx.h"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_session.hpp>
@@ -946,6 +954,398 @@ TEST_CASE ("Every module opens a device of its own: the family's rack, or one bu
     editor.openRack ({});
 }
 
+TEST_CASE ("An effect module opens ANDOR Analog's own effect rack: every setting, its presets and its meters, on that one module", "[product][ui][rack][native][fx]")
+{
+    namespace afx = andor::analog::fx;
+    namespace fxparams = andor::analog::fxparams;
+    namespace fxpresets = andor::analog::fxpresets;
+    Instrument in;
+    REQUIRE (in.editor != nullptr);
+    in.editor->setSize (1448, 1086);
+    auto& s = in.session();
+    s.newPatch();
+    const auto osc = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), "osc.analog", 0, 0); }).focus;
+    REQUIRE_FALSE (osc.empty());
+    const auto mix = in.firstOfType ("util.voicemix");
+    const auto first = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), "fx.compressor", 600, 0, mix); }).focus;
+    const auto second = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), "fx.compressor", 800, 0, first); }).focus;
+    REQUIRE_FALSE (first.empty());
+    REQUIRE_FALSE (second.empty());
+    settle();
+    auto& editor = *in.editor;
+    auto& rack = editor.rackView();
+    const auto value = [&] (const std::string& node, const char* param) { return s.document().paramValue (s.registry(), node, param); };
+    const afx::InstanceId comp { afx::Type::compressor, 0 };
+    const auto id = [&] (const char* name) { return fxparams::idOf (comp, name); };
+
+    run (in.processor, 0.1);
+    const int swaps = in.processor.engine().swapsCompleted();
+    editor.openRack (first);
+    REQUIRE (rack.isOpen());
+    REQUIRE (rack.isNative());
+    auto* module = rack.module();
+    REQUIRE (module != nullptr);
+    auto* host = rack.binding();
+    REQUIRE (host != nullptr);
+    CHECK (host->nodeId() == first);
+    // ANDOR Analog's rack (FxRack.cpp), under the module's own name: its pages, modes, preset
+    // browser and its settings by the library's own IDs.
+    CHECK (module->title() == juce::String (s.document().displayName (s.registry(), *s.document().findNode (first))).toUpperCase());
+    auto* device = dynamic_cast<osp::plugin::rack::ParameterRack*> (module);
+    REQUIRE (device != nullptr);
+    CHECK (device->hasFaceplate());
+    device->showPage (1);
+    CHECK (device->page() == 1);   // (MAIN / DETAIL)
+    device->showPage (0);
+    for (const auto& spec : fxparams::specsOf (afx::Type::compressor))
+    {
+        INFO (spec.name);
+        REQUIRE (host->apvts().getParameter (fxparams::idOf (comp, spec.name)) != nullptr);
+        if (spec.name != "on")
+            CHECK_FALSE (host->paramFor (fxparams::idOf (comp, spec.name)).empty());   // (no control of the rack is dead)
+    }
+    CHECK (host->parameterValue (id ("threshold")) == Catch::Approx (value (first, "threshold")).margin (0.01));
+    CHECK (host->parameterValue (id ("mix")) == Catch::Approx (100.0 * value (first, "mix")).margin (0.01));
+
+    // A control of the rack is this module's parameter and only this module's; one undo step;
+    // the running graph is never rebuilt.
+    const auto before = saveToString (s.document());
+    host->setParameterValue (id ("knee"), 12.0f);
+    CHECK (value (first, "knee") == Catch::Approx (12.0).margin (1.0e-4));
+    CHECK (value (second, "knee") == Catch::Approx (6.0).margin (1.0e-4));
+    s.undo();
+    CHECK (saveToString (s.document()) == before);
+    CHECK (host->parameterValue (id ("knee")) == Catch::Approx (6.0).margin (0.01));
+    run (in.processor, 0.1);
+    const int afterUndo = in.processor.engine().swapsCompleted();
+    settle (80);
+    host->setParameterValue (id ("mode"), 2.0f);   // MULTIBAND: a mode the module did not have before
+    CHECK (juce::roundToInt (value (first, "mode")) == 2);
+    CHECK (juce::roundToInt (value (second, "mode")) == 0);
+    CHECK (rack.module() == module);
+    settle (80);
+    host->setParameterValue (id ("multi.depth"), 80.0f);
+    CHECK (value (first, "multi.depth") == Catch::Approx (0.8).margin (1.0e-4));
+    // ON in its title row is the module's light (its bypass), not a parameter.
+    host->setParameterValue (id ("on"), 0.0f);
+    CHECK_FALSE (s.document().findNode (first)->enabled);
+    CHECK (s.document().findNode (second)->enabled);
+    host->setParameterValue (id ("on"), 1.0f);
+    CHECK (s.document().findNode (first)->enabled);
+    run (in.processor, 0.1);
+    CHECK (in.processor.engine().swapsCompleted() == afterUndo);
+    juce::ignoreUnused (swaps);
+
+    // The module moved from elsewhere (its tile, a macro, a scene): the rack follows, every
+    // setting (THRESHOLD's range in ANDOR Analog is strongly skewed: compared in dB, not 0..1).
+    s.beginGesture ("tile");
+    for (const auto& link : analogFxLinks ("fx.compressor"))
+    {
+        INFO (link.setting);
+        const auto* desc = s.registry().find ("fx.compressor");
+        const auto& pd = desc->params[static_cast<std::size_t> (desc->paramIndex (link.param))];
+        const auto* spec = [&] () -> const fxparams::Spec* {
+            for (const auto& sp : fxparams::specsOf (afx::Type::compressor))
+                if (sp.name == juce::String (link.setting))
+                    return &sp;
+            return nullptr;
+        }();
+        REQUIRE (spec != nullptr);
+        for (const double at : { 0.25, 0.8 })
+        {
+            const double rackValue = pd.curve == ParamCurve::choice || pd.curve == ParamCurve::toggle
+                                         ? std::round (static_cast<double> (spec->low) + at * static_cast<double> (spec->high - spec->low))
+                                         : static_cast<double> (spec->low) + at * static_cast<double> (spec->high - spec->low);
+            s.setParam (first, link.param, rackValue / link.scale);
+            CHECK (host->parameterValue (fxparams::idOf (comp, spec->name)) == Catch::Approx (rackValue).margin (1.0e-3 * (1.0 + std::abs (rackValue))));
+        }
+        s.setParam (first, link.param, pd.def);
+    }
+    settle (80);
+
+    // A factory preset of ANDOR Analog's loads into this module, as one step of the history.
+    const auto& presets = fxpresets::factory (afx::Type::compressor);
+    const auto punch = std::find_if (presets.begin(), presets.end(), [] (const fxpresets::Preset& p) { return p.name == "FET Punch"; });
+    REQUIRE (punch != presets.end());
+    settle (80);
+    const auto beforePreset = saveToString (s.document());
+    fxpresets::apply (*host, comp, *punch);
+    CHECK (juce::roundToInt (value (first, "mode")) == 1);
+    CHECK (value (first, "fet.input") == Catch::Approx (18.0).margin (1.0e-3));
+    CHECK (value (first, "fet.output") == Catch::Approx (-14.0).margin (1.0e-3));
+    CHECK (value (first, "fet.attack") == Catch::Approx (400.0).margin (0.5));
+    CHECK (fxpresets::matches (*host, comp, *punch));
+    CHECK (juce::roundToInt (value (second, "mode")) == 0);
+    s.undo();
+    CHECK (saveToString (s.document()) == beforePreset);
+    // ... and its user presets are ANDOR Modular's own, never ANDOR Analog's folder.
+    CHECK (fxpresets::userFolder (afx::Type::compressor).isAChildOf (Session::rackPresetDirectory()));
+
+    // What the rack's graph meters is the processor running in this module.
+    s.beginGesture ("squash");
+    s.setParam (first, "mode", 0.0);
+    s.setParam (first, "threshold", -50.0);
+    s.setParam (first, "ratio", 12.0);
+    s.setParam (second, "threshold", 0.0);
+    run (in.processor, 0.4, { juce::MidiMessage::noteOn (1, 48, 1.0f), juce::MidiMessage::noteOn (1, 55, 1.0f) });
+    const auto* running = dynamic_cast<const afx::Compressor*> (host->fxProcessor (comp));
+    REQUIRE (running != nullptr);
+    CHECK (running->reductionDb.load() > 3.0f);   // (dB of gain reduction, as its graph's GR reads)
+    editor.openRack (second);
+    host = rack.binding();
+    REQUIRE (host != nullptr);
+    CHECK (host->nodeId() == second);
+    const auto* other = dynamic_cast<const afx::Compressor*> (host->fxProcessor (comp));
+    REQUIRE (other != nullptr);
+    CHECK (other != running);
+    CHECK (other->reductionDb.load() < 1.0f);   // (its threshold is 0 dB: it does not compress)
+    run (in.processor, 0.1, { juce::MidiMessage::noteOff (1, 48), juce::MidiMessage::noteOff (1, 55) });
+
+    // Each module's rack remembers its own page and preset name (two compressors, one slot).
+    auto* memory = host->fxRackMemory (comp);
+    REQUIRE (memory != nullptr);
+    memory->preset = "Mine";
+    editor.openRack (first);
+    CHECK (rack.binding()->fxRackMemory (comp) != memory);
+    CHECK (rack.binding()->fxRackMemory (comp)->preset.isEmpty());
+    editor.openRack (second);
+    CHECK (rack.binding()->fxRackMemory (comp)->preset == "Mine");
+
+    // Every effect of the library: Analog's rack, every setting bound, every mode and page
+    // drawn without a control outside the device.
+    for (const char* type : { "fx.phaser", "fx.flanger", "fx.shifter", "fx.compressor", "fx.filter", "fx.spread", "fx.retro", "fx.convolution" })
+    {
+        INFO (type);
+        const auto node = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), type, 1000, 200, mix); }).focus;
+        REQUIRE_FALSE (node.empty());
+        afx::Type fx {};
+        REQUIRE (analogFxType (type, fx));
+        const afx::InstanceId slot { fx, 0 };
+        editor.openRack (node);
+        REQUIRE (rack.isNative());
+        auto* h = rack.binding();
+        REQUIRE (h != nullptr);
+        auto* dev = dynamic_cast<osp::plugin::rack::ParameterRack*> (rack.module());
+        REQUIRE (dev != nullptr);
+        for (const auto& spec : fxparams::specsOf (fx))
+            if (spec.name != "on")
+                CHECK_FALSE (h->paramFor (fxparams::idOf (slot, spec.name)).empty());
+        const auto* modeSpec = [&] () -> const fxparams::Spec* {
+            for (const auto& spec : fxparams::specsOf (fx))
+                if (spec.name == "mode" || spec.name == "type")
+                    return &spec;
+            return nullptr;
+        }();
+        const int modes = modeSpec != nullptr ? modeSpec->choices.size() : 1;
+        for (int m = 0; m < modes; ++m)
+        {
+            if (modeSpec != nullptr)
+            {
+                h->setParameterValue (fxparams::idOf (slot, modeSpec->name), static_cast<float> (m));
+                settle (30);
+                dev = dynamic_cast<osp::plugin::rack::ParameterRack*> (rack.module());
+                REQUIRE (dev != nullptr);
+            }
+            for (int page = 0; page < 6; ++page)
+            {
+                dev->showPage (page);
+                if (dev->page() != page)
+                    break;
+                for (const auto& cell : dev->cellBounds())
+                {
+                    CHECK (cell.getX() >= 0);
+                    CHECK (cell.getRight() <= dev->graphBounds().getX());
+                }
+                CHECK (rack.createComponentSnapshot (rack.getLocalBounds(), true, 1.0f).isValid());
+            }
+            dev->showPage (0);
+        }
+        // every preset ANDOR Analog ships for it loads: each value lands in the module
+        for (const auto& preset : fxpresets::factory (fx))
+        {
+            INFO (preset.name);
+            settle (70);
+            fxpresets::apply (*h, slot, preset);
+            CHECK (fxpresets::matches (*h, slot, preset));
+        }
+        run (in.processor, 0.05);
+        CHECK (h->fxProcessor (slot) != nullptr);
+    }
+
+    // CONVOLUTION: the impulse its graph draws is the one the module plays; REVERSE rebuilds it.
+    {
+        const auto conv = [&] {
+            for (const auto& n : s.document().nodes)
+                if (n.type == "fx.convolution")
+                    return n.id;
+            return std::string();
+        }();
+        REQUIRE_FALSE (conv.empty());
+        const afx::InstanceId slot { afx::Type::convolution, 0 };
+        editor.openRack (conv);
+        auto* h = rack.binding();
+        run (in.processor, 0.1);
+        const auto impulse = h->fxConvolutionImpulse (0);
+        REQUIRE (impulse != nullptr);
+        const bool reversed = h->parameterValue (fxparams::idOf (slot, "reverse")) >= 0.5f;
+        settle (80);
+        h->setParameterValue (fxparams::idOf (slot, "reverse"), reversed ? 0.0f : 1.0f);
+        for (int i = 0; i < 20 && rack.binding()->fxConvolutionImpulse (0) == impulse; ++i)
+        {
+            settle (40);
+            run (in.processor, 0.05);
+        }
+        REQUIRE (rack.binding() != nullptr);
+        CHECK (rack.binding()->fxConvolutionImpulse (0) != nullptr);
+        CHECK (rack.binding()->fxConvolutionImpulse (0) != impulse);
+    }
+    editor.openRack ({});
+}
+
+TEST_CASE ("ECHO and SPACE carry their MIX in the rack; FILTER and MORPH draw what plays now", "[product][ui][rack][native][live]")
+{
+    using osp::plugin::rack::Kind;
+    Instrument in;
+    REQUIRE (in.editor != nullptr);
+    in.editor->setSize (1448, 1086);
+    auto& s = in.session();
+    s.newPatch();
+    const auto osc = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), "osc.analog", 0, 0); }).focus;
+    const auto mix = in.firstOfType ("util.voicemix");
+    const auto echo = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), "fx.echo", 600, 0, mix); }).focus;
+    const auto space = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), "fx.space", 800, 0, echo); }).focus;
+    const auto filter = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), "proc.filter", 300, 0, osc); }).focus;
+    REQUIRE_FALSE (echo.empty());
+    REQUIRE_FALSE (space.empty());
+    REQUIRE_FALSE (filter.empty());
+    settle();
+    auto& editor = *in.editor;
+    auto& rack = editor.rackView();
+    const auto value = [&] (const std::string& node, const char* param) { return s.document().paramValue (s.registry(), node, param); };
+
+    // ECHO: MIX is a knob of the rack (the last of its knobs), this module's MIX; in every
+    // machine, with the tape deck and without, nothing leaves its column.
+    editor.openRack (echo);
+    REQUIRE (rack.isNative());
+    auto* host = rack.binding();
+    CHECK (host->rackAmountParameter (static_cast<int> (Kind::echo)) == "echo");
+    for (const int type : { 0, 1, 2 })
+        for (const int sync : { 0, 1 })
+        {
+            INFO ("echo type " << type << " sync " << sync);
+            settle (70);
+            host->setParameterValue ("echo.type", static_cast<float> (type));
+            host->setParameterValue ("echo.sync", static_cast<float> (sync));
+            settle (40);
+            auto* module = rack.module();
+            REQUIRE (module != nullptr);
+            REQUIRE (osp::plugin::rackCell (*module, "MIX") != nullptr);
+            const auto cells = osp::plugin::rackCellBounds (*module);
+            const auto picture = osp::plugin::rackSlot (*module, 5);
+            for (std::size_t i = 0; i < cells.size(); ++i)
+            {
+                CHECK (cells[i].getX() >= 0);
+                if (! osp::plugin::rackTapeDeckShown (*module))
+                    CHECK (cells[i].getRight() <= picture.getX());
+                else
+                    CHECK (cells[i].getRight() <= osp::plugin::rackTapeDeckBounds (*module).getX());
+                if (i > 0)
+                    CHECK (cells[i].getX() >= cells[i - 1].getRight());
+            }
+        }
+    settle (70);
+    host->setParameterValue ("echo", 80.0f);
+    CHECK (value (echo, "mix") == Catch::Approx (0.8).margin (1.0e-4));
+    s.beginGesture ("tile");
+    s.setParam (echo, "mix", 0.25);   // (the tile's MIX is the same parameter: the rack follows)
+    CHECK (host->parameterValue ("echo") == Catch::Approx (25.0).margin (0.01));
+
+    // SPACE: the same, in each of its four engines.
+    editor.openRack (space);
+    host = rack.binding();
+    CHECK (host->rackAmountParameter (static_cast<int> (Kind::space)) == "space");
+    for (const int engine : { 0, 1, 2, 3 })
+    {
+        INFO ("space engine " << engine);
+        settle (70);
+        host->setParameterValue ("space.engine", static_cast<float> (engine));
+        settle (40);
+        auto* module = rack.module();
+        REQUIRE (module != nullptr);
+        REQUIRE (osp::plugin::rackCell (*module, "MIX") != nullptr);
+        const auto cells = osp::plugin::rackCellBounds (*module);
+        const auto picture = osp::plugin::rackSlot (*module, 5);
+        for (std::size_t i = 0; i < cells.size(); ++i)
+        {
+            CHECK (cells[i].getRight() <= picture.getX());
+            if (i > 0)
+                CHECK (cells[i].getX() >= cells[i - 1].getRight());
+        }
+    }
+    settle (70);
+    host->setParameterValue ("space", 55.0f);
+    CHECK (value (space, "mix") == Catch::Approx (0.55).margin (1.0e-4));
+    // MOVEMENT has no MIX of this kind (its AMOUNT is its own control already).
+    CHECK (host->rackAmountParameter (static_cast<int> (Kind::movement)).isEmpty());
+
+    // FILTER: the module reports the newest voice's cutoff, where it was before the envelope
+    // and where the envelope's top takes it; the rack draws them while the note sounds.
+    const auto env = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), "ctl.env", 300, 300); }).focus;
+    REQUIRE_FALSE (env.empty());
+    REQUIRE (s.perform ("wire", [&] (Document& d) { return edit::connectSmart (d, s.registry(), env, "out", filter, "env"); }).ok);
+    s.beginGesture ("filter");
+    s.setParam (filter, "cutoff", 400.0);
+    s.setParam (filter, "envAmount", 0.5);
+    s.setParam (filter, "keytrack", 0.0);
+    editor.openRack (filter);
+    REQUIRE (rack.isNative());
+    run (in.processor, 0.3);
+    const auto liveNode = [&] () -> const CompiledNode* {
+        const auto* g = s.graph();
+        const auto it = g->nodeIndexById.find (filter);
+        return it != g->nodeIndexById.end() ? &g->nodes[static_cast<std::size_t> (it->second)] : nullptr;
+    };
+    REQUIRE (liveNode() != nullptr);
+    CHECK_FALSE (liveNode()->sounding.load());   // (nothing played yet: the rack shows the setting, AT REST)
+    CHECK (rack.createComponentSnapshot (rack.getLocalBounds(), true, 1.0f).isValid());
+    run (in.processor, 0.05, { juce::MidiMessage::noteOn (1, 60, 0.9f) });
+    const auto* n = liveNode();
+    REQUIRE (n->sounding.load());
+    REQUIRE (n->telemetryCount.load() >= 5);
+    const float now = n->telemetry[0].load(), base = n->telemetry[1].load(), reach = n->telemetry[2].load(), envNow = n->telemetry[3].load();
+    INFO ("cutoff now " << now << " Hz, before the envelope " << base << " Hz, the envelope's top " << reach << " Hz, envelope " << envNow);
+    CHECK (base == Catch::Approx (400.0).epsilon (0.02));
+    CHECK (reach == Catch::Approx (400.0 * std::pow (2.0, 3.5)).epsilon (0.02));
+    CHECK (envNow > 0.0f);
+    CHECK (now > base);
+    CHECK (now <= reach * 1.001f);
+    CHECK (n->telemetry[4].load() == Catch::Approx (value (filter, "resonance")).margin (0.01));
+    const auto livePicture = rack.createComponentSnapshot (rack.getLocalBounds(), true, 1.0f);
+    run (in.processor, 0.05, { juce::MidiMessage::noteOff (1, 60) });
+    run (in.processor, 3.0);
+    CHECK_FALSE (liveNode()->sounding.load());
+    const auto restPicture = rack.createComponentSnapshot (rack.getLocalBounds(), true, 1.0f);
+    // the picture while the note sounded is not the picture at rest
+    int different = 0;
+    for (int y = 0; y < livePicture.getHeight(); y += 2)
+        for (int x = livePicture.getWidth() / 2; x < livePicture.getWidth(); x += 2)
+            different += livePicture.getPixelAt (x, y) != restPicture.getPixelAt (x, y) ? 1 : 0;
+    CHECK (different > 200);
+
+    // MORPH: its rack draws the two sounds as they play and what the method makes of them.
+    const auto morph = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), "proc.morph", 300, 500); }).focus;
+    REQUIRE_FALSE (morph.empty());
+    editor.openRack (morph);
+    REQUIRE (rack.isNative());
+    for (const double method : { 0.0, 1.0, 2.0 })
+    {
+        s.beginGesture ("method");
+        s.setParam (morph, "method", method);
+        CHECK (rack.createComponentSnapshot (rack.getLocalBounds(), true, 1.0f).isValid());
+    }
+    editor.openRack ({});
+}
+
 TEST_CASE ("One SOURCE: added at once, then any kind of sound from its card, its tile or its rack", "[product][ui][source][type]")
 {
     Instrument in;
@@ -1500,8 +1900,9 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
         editor->openRack ({});
     }
     // The devices: one patch per module, its rack open (1448)
-    for (const char* type : { "proc.drive", "fx.compressor", "fx.phaser", "fx.retro", "fx.filter", "proc.vca", "ctl.lfo", "ctl.env", "event.arp", "proc.morph",
-                              "src.organic", "src.granular", "spatial.satellite", "util.mixer", "util.voicemix", "event.generative" })
+    for (const char* type : { "proc.drive", "fx.compressor", "fx.phaser", "fx.flanger", "fx.shifter", "fx.spread", "fx.convolution", "fx.retro", "fx.filter",
+                              "proc.vca", "ctl.lfo", "ctl.env", "event.arp", "proc.morph", "src.organic", "src.granular", "spatial.satellite", "util.mixer",
+                              "util.voicemix", "event.generative" })
     {
         p.session().newPatch();
         editor->setSize (1448, 1086);
@@ -1525,6 +1926,70 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
         settle (120);
         snapshot (*editor, "rack-" + juce::String (type).replaceCharacter ('.', '-') + "-1448");
         run (p, 0.1, { juce::MidiMessage::noteOff (1, 48), juce::MidiMessage::noteOff (1, 55) });
+        editor->openRack ({});
+    }
+    // ANDOR Analog's COMPRESSOR rack on a module: its modes and its DETAIL page; at each width
+    {
+        p.session().newPatch();
+        editor->setSize (1448, 1086);
+        editor->showPlay (false);
+        const auto osc = p.session().perform ("add", [&] (Document& d) { return edit::addModule (d, p.session().registry(), "osc.analog", 0, 0); }).focus;
+        const auto made = p.session().perform ("add", [&] (Document& d) { return edit::addModule (d, p.session().registry(), "fx.compressor", 0, 240, osc); });
+        REQUIRE (made.ok);
+        settle (300);
+        editor->canvasView().fitAll();
+        editor->canvasView().select (made.focus, false);
+        editor->openRack (made.focus);
+        p.session().beginGesture ("compress");
+        p.session().setParam (made.focus, "threshold", -36.0);
+        p.session().setParam (made.focus, "ratio", 8.0);
+        const auto shoot = [&] (const juce::String& name) {
+            run (p, 0.4, { juce::MidiMessage::noteOn (1, 48, 1.0f), juce::MidiMessage::noteOn (1, 55, 1.0f) });
+            settle (120);
+            snapshot (*editor, name);
+            run (p, 0.1, { juce::MidiMessage::noteOff (1, 48), juce::MidiMessage::noteOff (1, 55) });
+        };
+        for (const int width : { 869, 1810 })
+        {
+            editor->setSize (width, width * 3 / 4);
+            shoot ("patch-rack-compressor-" + juce::String (width));
+        }
+        editor->setSize (1448, 1086);
+        if (auto* device = dynamic_cast<osp::plugin::rack::ParameterRack*> (editor->rackView().module()))
+        {
+            device->showPage (1);
+            shoot ("rack-fx-compressor-detail-1448");
+            device->showPage (0);
+        }
+        p.session().setParam (made.focus, "mode", 1.0);
+        settle (120);
+        shoot ("rack-fx-compressor-fet-1448");
+        p.session().setParam (made.focus, "mode", 2.0);
+        settle (120);
+        shoot ("rack-fx-compressor-multiband-1448");
+        editor->openRack ({});
+    }
+    // FILTER while a note sounds: the live trace (the newest voice's cutoff, the envelope's travel)
+    {
+        p.session().newPatch();
+        editor->setSize (1448, 1086);
+        editor->showPlay (false);
+        const auto osc = p.session().perform ("add", [&] (Document& d) { return edit::addModule (d, p.session().registry(), "osc.analog", 0, 0); }).focus;
+        const auto filter = p.session().perform ("add", [&] (Document& d) { return edit::addModule (d, p.session().registry(), "proc.filter", 300, 0, osc); }).focus;
+        const auto env = p.session().perform ("add", [&] (Document& d) { return edit::addModule (d, p.session().registry(), "ctl.env", 300, 300); }).focus;
+        p.session().perform ("wire", [&] (Document& d) { return edit::connectSmart (d, p.session().registry(), env, "out", filter, "env"); });
+        p.session().beginGesture ("filter");
+        p.session().setParam (filter, "cutoff", 500.0);
+        p.session().setParam (filter, "envAmount", 0.45);
+        p.session().setParam (filter, "resonance", 0.55);
+        settle (300);
+        editor->canvasView().fitAll();
+        editor->canvasView().select (filter, false);
+        editor->openRack (filter);
+        run (p, 0.12, { juce::MidiMessage::noteOn (1, 55, 0.9f) });
+        settle (120);
+        snapshot (*editor, "rack-proc-filter-live-1448");
+        run (p, 0.1, { juce::MidiMessage::noteOff (1, 55) });
         editor->openRack ({});
     }
     // the step sequencer's rack (its step editor in the centre)

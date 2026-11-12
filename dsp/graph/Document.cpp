@@ -350,6 +350,118 @@ namespace
         v1.set ("schemaVersion", 1);
         return v1;
     }
+    /** Schema 1 -> 2 (tests/fixtures/patch-v1-fx.json). The effect modules took the whole of
+        ANDOR ANALOG's FX library table: every setting became a parameter, and nine parameters
+        that already existed grew to the library's ranges (COMPRESSOR's MODE gained MULTIBAND).
+        Values are saved in their own units and are untouched; what is saved normalised over a
+        parameter's range - a macro's or a group control's mapping, a modulation's depth - is
+        moved to the new range here, so it reaches exactly the values it did. (One thing cannot
+        be kept: a modulation deep enough to push a parameter against the end of its old range
+        now carries on to the new end.) COMPRESSOR's FET input used to follow THRESHOLD, live;
+        it is a parameter of its own now: it starts where the patch had it, and whatever moved
+        THRESHOLD (a macro, a group's control, a modulation, a scene) moves it the same way. */
+    void migrateV1 (Document& doc)
+    {
+        struct Range
+        {
+            const char* type;
+            const char* param;
+            double lo, hi, newLo, newHi;
+            bool log;
+        };
+        static const Range ranges[] {
+            { "fx.phaser", "centre", 100.0, 5000.0, 80.0, 8000.0, true },
+            { "fx.phaser", "feedback", 0.0, 0.95, -0.85, 0.95, false },
+            { "fx.flanger", "delay", 0.5, 10.0, 0.2, 12.0, false },
+            { "fx.compressor", "mode", 0.0, 1.0, 0.0, 2.0, false },
+            { "fx.compressor", "threshold", -48.0, 0.0, -60.0, 0.0, false },
+            { "fx.compressor", "makeup", 0.0, 24.0, -12.0, 24.0, false },
+            { "fx.convolution", "predelay", 0.0, 200.0, 0.0, 250.0, false },
+            { "fx.convolution", "width", 0.0, 1.0, 0.0, 2.0, false },
+            { "fx.convolution", "lowcut", 20.0, 1000.0, 20.0, 2000.0, true },
+            { "fx.convolution", "decay", 0.2, 8.0, 0.1, 20.0, true },
+        };
+        // n' = offset + gain * n: where a normalised position of the old range lies in the new.
+        auto moved = [&doc] (const std::string& node, const std::string& param, double& offset, double& gain) {
+            const auto* n = doc.findNode (node);
+            if (n == nullptr)
+                return false;
+            for (const auto& r : ranges)
+                if (n->type == r.type && param == r.param)
+                {
+                    if (r.log)
+                    {
+                        const double span = std::log (r.newHi / r.newLo);
+                        offset = std::log (r.lo / r.newLo) / span;
+                        gain = std::log (r.hi / r.lo) / span;
+                    }
+                    else
+                    {
+                        const double span = r.newHi - r.newLo;
+                        offset = (r.lo - r.newLo) / span;
+                        gain = (r.hi - r.lo) / span;
+                    }
+                    return true;
+                }
+            return false;
+        };
+        auto followsThreshold = [&doc] (const std::string& node, const std::string& param) {
+            const auto* n = doc.findNode (node);
+            return n != nullptr && n->type == "fx.compressor" && param == "threshold";
+        };
+        double offset = 0.0, gain = 1.0;
+        std::vector<Connection> followers;
+        for (auto& c : doc.connections)
+            if (c.toParam && moved (c.to, c.toPort, offset, gain))
+            {
+                c.depth *= gain;
+                if (followsThreshold (c.to, c.toPort))
+                {
+                    // FET input = -THRESHOLD, both 60 dB wide now: the same depth, the other way.
+                    auto f = c;
+                    f.toPort = "fet.input";
+                    f.depth = -c.depth;
+                    followers.push_back (std::move (f));
+                }
+            }
+        for (auto& f : followers)
+        {
+            f.id = doc.makeId ("c");
+            doc.connections.push_back (std::move (f));
+        }
+        auto mappings = [&] (std::vector<MacroMapping>& list) {
+            std::vector<MacroMapping> added;
+            for (auto& m : list)
+                if (moved (m.node, m.param, offset, gain))
+                {
+                    m.min = offset + gain * m.min;
+                    m.max = offset + gain * m.max;
+                    if (followsThreshold (m.node, m.param))
+                    {
+                        // THRESHOLD -60..0 dB at n is FET input 0..60 dB of its -12..48: 1.2 - n.
+                        auto f = m;
+                        f.param = "fet.input";
+                        f.min = 1.2 - m.min;
+                        f.max = 1.2 - m.max;
+                        added.push_back (std::move (f));
+                    }
+                }
+            list.insert (list.end(), added.begin(), added.end());
+        };
+        for (auto& macro : doc.macros)
+            mappings (macro.mappings);
+        for (auto& group : doc.groups)
+            for (auto& control : group.controls)
+                mappings (control.mappings);
+        for (auto& n : doc.nodes)
+            if (n.type == "fx.compressor")   // (no schema 1 patch has the parameter: it follows THRESHOLD as it did)
+            {
+                n.params["fet.input"] = std::clamp (-n.param ("threshold", -18.0), 0.0, 48.0);
+                for (auto& scene : doc.scenes)
+                    if (const auto it = scene.values.find (n.id + "/threshold"); it != scene.values.end())
+                        scene.values[n.id + "/fet.input"] = std::clamp (-it->second, 0.0, 48.0);
+            }
+    }
 }
 
 json::Value toJson (const Document& doc)
@@ -807,6 +919,15 @@ LoadResult fromJson (const json::Value& input, Document& out)
     doc.idCounter = std::max<std::uint64_t> (seedFrom (v["idCounter"], 1), 1);   // (makeId skips ids in use)
 
     out = std::move (doc);
+    if (version < 2)
+    {
+        migrateV1 (out);
+        if (version == 1)
+        {
+            result.migratedFrom = 1;
+            result.warnings.push_back ("migrated from schema 1");
+        }
+    }
     result.ok = true;
     return result;
 }

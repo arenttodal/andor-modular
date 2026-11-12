@@ -1,6 +1,6 @@
 {
   "format": "andormodular",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Satellite Orchestra",
   "author": "ANDOR",
   "description": "Three voices in three orbits (ORBIT, BOUNCE, PAN) around one room.",

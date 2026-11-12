@@ -1,6 +1,6 @@
 {
   "format": "andormodular",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Generative Sequence",
   "author": "ANDOR",
   "description": "A seeded melody in D dorian for two oscillators an octave apart: the same seed plays the same notes, always.",

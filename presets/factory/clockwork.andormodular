@@ -1,6 +1,6 @@
 {
   "format": "andormodular",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Clockwork",
   "author": "ANDOR",
   "description": "A wide pad breathing with a ticking clock loop at the host tempo: the clock's envelope opens its filter and its level; mute the clock and the groove stays.",

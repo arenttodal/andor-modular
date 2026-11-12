@@ -2,6 +2,8 @@
 
 #include "ExternalHost.h"
 
+#include "FxRackSource.h"
+
 #include "edit/Edits.h"
 #include "graph/Engine.h"
 #include "io/AssetLoader.h"
@@ -10,6 +12,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <functional>
+#include <map>
 #include <memory>
 
 namespace andor::modular
@@ -103,6 +106,16 @@ public:
 
     /** Where ANDOR Modular keeps its files (factory recordings, user patches and modules). */
     static juce::File userDirectory();
+    /** Where the racks' user presets live: ANDOR Modular's own (ECHO, SPACE and MOVEMENT's
+        folders and the effects' "FX Presets"), never the folders ANDOR OSP and Analog share. */
+    static juce::File rackPresetDirectory();
+    /** What a module's rack remembers between openings (interface state: not saved). */
+    struct RackMemory
+    {
+        std::map<juce::String, juce::String> presets;   ///< the family racks' chosen preset, by key
+        andor::analog::FxRackSource::Memory fx;          ///< an effect rack's page and preset
+    };
+    RackMemory& rackMemory (const std::string& nodeId) { return rackMemories[nodeId]; }
     static juce::File factoryDirectory();
     /** Writes the factory recordings to factoryDirectory() if missing. */
     static void installFactoryContent();
@@ -146,6 +159,7 @@ private:
     float lastScene = -1.0f;
     bool gestureOpen = false;
     int loads = 0;
+    std::map<std::string, RackMemory> rackMemories;
 };
 
 } // namespace andor::modular

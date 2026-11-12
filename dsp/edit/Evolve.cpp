@@ -90,6 +90,8 @@ EvolveResult evolve (const Document& original, const Registry& reg, const Evolve
                 continue;
             for (const auto& p : desc->params)
             {
+                if (p.detail)
+                    continue;   // (a module's deeper settings are the musician's)
                 if (p.structural || isPlumbing (p.id) || (options.preserveLevel && isLevel (p.id)) || (options.lockScale && isScale (p.id))
                     || (options.lockRhythm && isRhythm (*desc, p.id)))
                     continue;

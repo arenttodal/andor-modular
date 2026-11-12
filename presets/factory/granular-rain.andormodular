@@ -1,6 +1,6 @@
 {
   "format": "andormodular",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Granular Rain",
   "author": "ANDOR",
   "description": "A rain recording as a global grain bed that follows the last note, and a bowed note in grains per voice, into ABYSS.",

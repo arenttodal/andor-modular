@@ -122,7 +122,8 @@ add_library(modular_analog_dsp STATIC
     ${MODULAR_ANALOG_DIR}/dsp/fx/FxDynamics.cpp
     ${MODULAR_ANALOG_DIR}/dsp/fx/FxModulation.cpp
     ${MODULAR_ANALOG_DIR}/dsp/fx/FxSpectral.cpp
-    ${MODULAR_ANALOG_DIR}/dsp/fx/FxRetro.cpp)
+    ${MODULAR_ANALOG_DIR}/dsp/fx/FxRetro.cpp
+    ${MODULAR_ANALOG_DIR}/dsp/fx/FxParameterTable.cpp)
 target_include_directories(modular_analog_dsp SYSTEM PUBLIC ${MODULAR_ANALOG_DIR}/dsp)
 target_link_libraries(modular_analog_dsp PUBLIC osp_dsp)
 set_target_properties(modular_analog_dsp PROPERTIES POSITION_INDEPENDENT_CODE ON)

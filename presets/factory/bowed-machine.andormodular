@@ -1,6 +1,6 @@
 {
   "format": "andormodular",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Bowed Machine",
   "author": "ANDOR",
   "description": "A bowed recording morphed into a DCO and filtered per voice, grouped as one instrument with four controls.",

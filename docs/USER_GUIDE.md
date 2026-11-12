@@ -24,13 +24,23 @@ one level. On a port or a cable the menu only offers what fits there.
 foot of the board, as in ANDOR Analog: its name and light on the rail, its mode in the row
 under it, its controls, and its picture on the glass. ECHO, SPACE and MOVEMENT are the very
 racks of ANDOR OSP and Analog (the tape deck, the repeats, the room's portrait, the pattern
-editor, their presets). Every other module has a device of its own in its own colours: a
-filter shows its response, DRIVE its curve, a compressor its curve and gain reduction, an
-envelope its shape, the step sequencer its steps to draw on. A row is filled first; MORE
-holds the rest. Cables that modulate the module show as depth knobs. The board keeps its width
-and its place. Double-click another module to swap; **X** or **Escape** closes it. The
-module's MIX (how much of an echo or a space) stays on its tile. Double-clicking a group
-opens the group instead.
+editor, their presets), each with a **MIX** knob of its own (the same MIX as on the tile).
+The effects (COMPRESSOR, PHASER, FLANGER, FREQUENCY SHIFTER, FX FILTER, STEREO SPREAD, RETRO,
+CONVOLUTION) open ANDOR Analog's own effect racks: MAIN and DETAIL pages, every mode (the
+compressor's CLEAN, FET 76 and MULTIBAND; RETRO's tape, vinyl and digital machines), Analog's
+presets in the rail, and a graph that meters this module as it plays. **ON** in the rail is
+the module's light. Every other module has a device of its own in its own colours: FILTER
+shows its response and, while a note sounds, where the newest voice's cutoff is and how far
+the envelope carries it; MORPH the two sounds as they play and what the method makes of them;
+DRIVE its curve, an envelope its shape, the step sequencer its steps to draw on. A row is
+filled first; MORE holds the rest. Cables that modulate the module show as depth knobs. The
+board keeps its width and its place. Double-click another module to swap; **X** or
+**Escape** closes it. Double-clicking a group opens the group instead.
+
+**Presets of a rack** (the browser in its rail; the disk saves, "···" holds rename, delete and
+the folder) are ANDOR Modular's own: they are kept in `ANDOR/Modular/Rack Presets` in your
+user data folder, apart from ANDOR OSP's and Analog's. A preset holds that one device's
+settings and loads into any module of its kind; the factory presets are the family's.
 
 ## Sources
 A sound source is one thing, **SOURCE**, with a **TYPE**: ANALOG (CLASSIC, DCO and WIDE are
