@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   kernel:
@@ -11,7 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         # Windows: OSP's library target needs SQLite3 (vcpkg) at configure time; added once that is set up.
-        os: [ubuntu-24.04, macos-14]
+        os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -32,45 +33,120 @@ jobs:
       - name: Performance matrix (quick)
         run: ./build/tools/modular-bench --quick
 
-  plugin:
-    name: Plugin + product tests (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-14]
-    runs-on: ${{ matrix.os }}
+  plugin-linux:
+    name: Plugin + product tests (Linux)
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
       - name: Linux packages
-        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build libsqlite3-dev libasound2-dev libx11-dev libxrandr-dev libxinerama-dev \
             libxcursor-dev libxext-dev libfreetype-dev libfontconfig1-dev libgl1-mesa-dev xvfb
-      - name: macOS packages
-        if: runner.os == 'macOS'
-        run: brew install ninja
       - name: Configure
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMODULAR_BUILD_PLUGIN=ON
       - name: Build
         run: cmake --build build --parallel
-      - name: Product tests + screenshots (Linux, virtual display)
-        if: runner.os == 'Linux'
-        run: MODULAR_SCREENSHOT_DIR=screens xvfb-run -a -s "-screen 0 1920x1200x24" ./build/product/modular_product_tests
-      - name: Product tests + screenshots (macOS)
-        if: runner.os == 'macOS'
-        run: MODULAR_SCREENSHOT_DIR=screens ./build/product/modular_product_tests
-      - name: auval
-        if: runner.os == 'macOS'
+      - name: Product tests + screenshots (virtual display)
+        run: |
+          MODULAR_SCREENSHOT_DIR="$PWD/screens" xvfb-run -a -s "-screen 0 1920x1400x24" \
+            ./build/product/modular_product_tests_artefacts/Release/modular_product_tests
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screens-linux
+          path: screens
+
+  plugin-macos:
+    # The plugin as it ships (universal: Apple Silicon and Intel), its product tests, auval, and
+    # the downloads: the installer (.pkg) and the per-user test build (.zip).
+    name: Plugin, tests and installer (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Dependencies
+        run: brew install ninja
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMODULAR_BUILD_PLUGIN=ON "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+      - name: Build
+        id: build
+        run: cmake --build build --parallel
+      # The downloads follow every successful build, also when a test below fails (the job
+      # stays red then): a failing check must be seen, but it must not withhold the build.
+      - name: Package the macOS test build
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          out="ANDOR-Modular-macOS-test"
+          mkdir -p "$out"
+          art="build/product/ANDOR_Modular_artefacts/Release"
+          cp -R "$art/AU/ANDOR Modular.component" "$art/VST3/ANDOR Modular.vst3" "$art/Standalone/ANDOR Modular.app" "$out/"
+          cp packaging/macos-test/install.command packaging/macos-test/README.txt "$out/"
+          chmod +x "$out/install.command"
+          lipo -info "$out/ANDOR Modular.component/Contents/MacOS/ANDOR Modular"
+          ditto -c -k --keepParent "$out" ANDOR-Modular-macOS-test.zip
+      - name: Upload the macOS test build
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ANDOR-Modular-macOS-test
+          path: ANDOR-Modular-macOS-test.zip
+          if-no-files-found: error
+      # The installer: signed and notarised when the repository has the Apple secrets,
+      # otherwise UNSIGNED but identical.
+      - name: Build the macOS installer
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          APPLE_CERTIFICATES_P12: ${{ secrets.APPLE_CERTIFICATES_P12 }}
+          APPLE_CERTIFICATES_PASSWORD: ${{ secrets.APPLE_CERTIFICATES_PASSWORD }}
+          MODULAR_APP_IDENTITY: ${{ secrets.MODULAR_APP_IDENTITY }}
+          MODULAR_INSTALLER_IDENTITY: ${{ secrets.MODULAR_INSTALLER_IDENTITY }}
+          MODULAR_NOTARY_KEY: ${{ secrets.MODULAR_NOTARY_KEY }}
+          MODULAR_NOTARY_KEY_ID: ${{ secrets.MODULAR_NOTARY_KEY_ID }}
+          MODULAR_NOTARY_ISSUER: ${{ secrets.MODULAR_NOTARY_ISSUER }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATES_P12" ]; then
+            kc="$RUNNER_TEMP/signing.keychain-db"; kcpw="$(uuidgen)"
+            security create-keychain -p "$kcpw" "$kc"
+            security set-keychain-settings -lut 21600 "$kc"
+            security unlock-keychain -p "$kcpw" "$kc"
+            printf '%s' "$APPLE_CERTIFICATES_P12" | base64 --decode > "$RUNNER_TEMP/certs.p12"
+            security import "$RUNNER_TEMP/certs.p12" -P "$APPLE_CERTIFICATES_PASSWORD" -A -t cert -f pkcs12 -k "$kc"
+            security list-keychain -d user -s "$kc"
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$kcpw" "$kc" > /dev/null
+            rm -f "$RUNNER_TEMP/certs.p12"
+          else
+            unset MODULAR_APP_IDENTITY MODULAR_INSTALLER_IDENTITY
+          fi
+          version="$(python3 -c "import json;print(json.load(open('product/product.json'))['version'])")"
+          packaging/macos/build-installer.sh "build/product/ANDOR_Modular_artefacts/Release" "$version" installer
+          ls -l installer
+      - name: Upload the macOS installer
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ANDOR-Modular-macOS-installer
+          path: installer/
+          if-no-files-found: error
+      - name: Product tests + screenshots
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: MODULAR_SCREENSHOT_DIR="$PWD/screens" ./build/product/modular_product_tests_artefacts/Release/modular_product_tests
+      - name: Validate the AU (auval)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           mkdir -p ~/Library/Audio/Plug-Ins/Components
           cp -R "build/product/ANDOR_Modular_artefacts/Release/AU/ANDOR Modular.component" ~/Library/Audio/Plug-Ins/Components/
           killall -9 AudioComponentRegistrar || true
-          auval -v aumu Amdr Ospx
+          # (its full listing is thousands of lines: kept as a file, its verdict printed)
+          status=0
+          auval -v aumu Amdr Ospx > auval.log 2>&1 || status=$?
+          tail -40 auval.log
+          exit $status
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: screens-${{ matrix.os }}
+          name: screens-macos
           path: screens
