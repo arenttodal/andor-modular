@@ -282,7 +282,15 @@ namespace
     /** Completes `d` (whose parameters are the module's own, `legacy` naming their settings)
         with the rest of the effect's settings and returns what the processor writes of them.
         `structural`: settings that rebuild the module (CONVOLUTION's impulse). */
-    Extras bind (NodeDesc& d, afx::Type type, std::vector<LegacyLink> legacy, std::vector<std::string> structural = {})
+    /** A setting on the module's tile, under a short name (a module made after the table has
+        no parameters of its own: a few of the table's are its face). */
+    struct Front
+    {
+        const char* setting;
+        const char* name;
+    };
+
+    Extras bind (NodeDesc& d, afx::Type type, std::vector<LegacyLink> legacy, std::vector<std::string> structural = {}, std::vector<Front> front = {})
     {
         Bound bound;
         bound.type = type;
@@ -302,6 +310,12 @@ namespace
                 p.structural = true;
                 p.modulatable = false;
             }
+            if (const auto f = std::find_if (front.begin(), front.end(), [&] (const Front& x) { return spec.name == x.setting; }); f != front.end())
+            {
+                p.name = f->name;
+                p.detail = false;
+                p.quick = true;
+            }
             extras->push_back ({ static_cast<int> (d.params.size()), &spec, static_cast<float> (scale), static_cast<float> (p.def) });
             bound.links.push_back ({ spec.name, p.id, scale });
             d.params.push_back (std::move (p));
@@ -314,6 +328,14 @@ namespace
     {
         auto extras = bind (d, type, std::move (legacy));
         d.create = [type, fill, extras] { return std::make_unique<AnalogFx> (type, fill, extras); };
+        r.add (d);
+    }
+
+    /** An effect that became a module after the table: every parameter is the table's. */
+    void addWhole (Registry& r, NodeDesc d, afx::Type type, std::vector<Front> front)
+    {
+        auto extras = bind (d, type, {}, {}, std::move (front));
+        d.create = [type, extras] { return std::make_unique<AnalogFx> (type, [] (afx::Settings&, const float*) {}, extras); };
         r.add (d);
     }
 }
@@ -475,6 +497,18 @@ add (r, d, afx::Type::retro,
                                   { "size", "normalize", "reverse" });
         d.create = [extras] { return std::make_unique<Convolution> (extras); };
         r.add (d);
+    }
+    {
+        auto d = fxBase ("fx.eq", "EQUALIZER", "ANDOR ANALOG's parametric equalizer: four bands (peak, shelf or pass) with a high and a low pass",
+                         { "eq", "equalizer", "parametric", "band", "shelf", "bass", "treble" });
+        d.cost.units = 0.6f;
+        addWhole (r, d, afx::Type::eq, { { "band1.gain", "LOW" }, { "band2.gain", "LOW MID" }, { "band3.gain", "HIGH MID" }, { "band4.gain", "HIGH" } });
+    }
+    {
+        auto d = fxBase ("fx.utility", "UTILITY", "Gain, balance and width; polarity, mono bass, a gentle high and low pass",
+                         { "utility", "gain", "balance", "width", "polarity", "phase", "mono", "trim" });
+        d.cost.units = 0.2f;
+        addWhole (r, d, afx::Type::utility, { { "gain", "GAIN" }, { "pan", "BALANCE" }, { "width", "WIDTH" } });
     }
 }
 

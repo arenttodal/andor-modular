@@ -57,7 +57,7 @@ namespace
 
     //==============================================================================================
     // The effects of ANDOR Analog's FX library (COMPRESSOR, PHASER, FLANGER, FREQUENCY SHIFTER,
-    // FX FILTER, STEREO SPREAD, RETRO, CONVOLUTION): Analog's own rack (FxRack.cpp: its pages,
+    // FX FILTER, STEREO SPREAD, RETRO, CONVOLUTION, EQUALIZER, UTILITY): Analog's own rack (FxRack.cpp: its pages,
     // modes, preset browser and graphs), on the library's own parameters. The module carries
     // every one of them (dsp/nodes/AnalogFx.h); ON is the module's light; what the graphs meter
     // is the processor running in this module.
@@ -220,7 +220,9 @@ namespace
                                                              { "fx.filter", libraryEffect },
                                                              { "fx.spread", libraryEffect },
                                                              { "fx.retro", libraryEffect },
-                                                             { "fx.convolution", libraryEffect } };
+                                                             { "fx.convolution", libraryEffect },
+                                                             { "fx.eq", libraryEffect },
+                                                             { "fx.utility", libraryEffect } };
         return racks;
     }
 }

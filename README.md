@@ -51,7 +51,7 @@ Tools: `build/tools/modular-render` (headless WAV renders, `--list`, `--validate
 
 | Path | What |
 |---|---|
-| `dsp/` | the kernel, pure C++20 (no JUCE): graph, compiler, engine, 53 module types, edits, EVOLVE, assets |
+| `dsp/` | the kernel, pure C++20 (no JUCE): graph, compiler, engine, 55 module types, edits, EVOLVE, assets |
 | `product/` | the JUCE plugin: PATCH canvas, Quick Add, the rack, PLAY, external host, the housing pack |
 | `presets/` | 12 factory patches, 6 factory modules, 3 synthesised recordings |
 | `tests/` | kernel tests (Catch2); `product/tests` product tests |

@@ -25,10 +25,11 @@ foot of the board, as in ANDOR Analog: its name and light on the rail, its mode 
 under it, its controls, and its picture on the glass. ECHO, SPACE and MOVEMENT are the very
 racks of ANDOR OSP and Analog (the tape deck, the repeats, the room's portrait, the pattern
 editor, their presets), each with a **MIX** knob of its own (the same MIX as on the tile).
-The effects (COMPRESSOR, PHASER, FLANGER, FREQUENCY SHIFTER, FX FILTER, STEREO SPREAD, RETRO,
-CONVOLUTION) open ANDOR Analog's own effect racks: MAIN and DETAIL pages, every mode (the
+The effects (COMPRESSOR, EQUALIZER, PHASER, FLANGER, FREQUENCY SHIFTER, FX FILTER, STEREO
+SPREAD, RETRO, CONVOLUTION, UTILITY) open ANDOR Analog's own effect racks: MAIN and DETAIL pages, every mode (the
 compressor's CLEAN, FET 76 and MULTIBAND; RETRO's tape, vinyl and digital machines), Analog's
-presets in the rail, and a graph that meters this module as it plays. **ON** in the rail is
+presets in the rail, and a graph that meters this module as it plays (EQUALIZER's is its
+whole face: drag a band's point for frequency and gain, with the spectrum behind it). **ON** in the rail is
 the module's light. Every other module has a device of its own in its own colours: FILTER
 shows its response and, while a note sounds, where the newest voice's cutoff is and how far
 the envelope carries it; MORPH the two sounds as they play and what the method makes of them;

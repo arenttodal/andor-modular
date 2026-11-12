@@ -87,7 +87,8 @@ ModuleLook lookFor (const std::string& type, int sourceOrdinal)
                                    { "fx.space", T::space },         { "fx.convolution", T::convolution }, { "fx.spread", T::spread },
                                    { "spatial.satellite", T::spread }, { "fx.compressor", T::compressor }, { "proc.tone", T::eq },
                                    { "fx.filter", T::filter },       { "fx.phaser", T::phaser },         { "fx.flanger", T::flanger },
-                                   { "fx.chorus", T::flanger },      { "fx.shifter", T::shifter },       { "fx.retro", T::retro } };
+                                   { "fx.chorus", T::flanger },      { "fx.shifter", T::shifter },       { "fx.retro", T::retro },
+                                   { "fx.eq", T::eq },               { "fx.utility", T::utility } };
     for (const auto& d : devices)
         if (type == d.type)
             return enamel (visualIdentityFor (d.fx));

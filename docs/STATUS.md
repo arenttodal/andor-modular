@@ -64,10 +64,12 @@ The owner's four choices from the first report, built. Details and limits:
 | Upstream seam: Analog's FX rack reads its instrument through `FxRackSource` only; the FX parameter table in the JUCE-free engine library; settable preset root | done | Analog `0f5e01b` | Analog `[fx][parameters]`, `[analog][fx][rack][seam]`; Analog's and OSP's complete suites (ctest) |
 | Shared racks: opt-in MIX knob (ECHO, SPACE), preset folder setter | done | OSP `c21fe80` | default unchanged (OSP's suites and visual regressions); exercised in Modular `[rack][native][live]` |
 | Effect modules carry the whole library table (schema 2, migration) | done | this commit | kernel `[fx][table]`, `[state][fx]`; old vs new renders bit-identical (STATE_SCHEMA.md) |
-| PHASER, FLANGER, FREQUENCY SHIFTER, COMPRESSOR, FX FILTER, STEREO SPREAD, RETRO, CONVOLUTION open Analog's rack class: pages, modes, presets, meters | done | this commit | product `[rack][native][fx]`; `docs/screenshots/parity/` |
+| PHASER, FLANGER, FREQUENCY SHIFTER, COMPRESSOR, FX FILTER, STEREO SPREAD, RETRO, CONVOLUTION open Analog's rack class: pages, modes, presets, meters | done | b2e8d26 | product `[rack][native][fx]`; `docs/screenshots/parity/` |
 | MIX inside the ECHO and SPACE racks (and on the tile) | done | this commit | product `[rack][native][live]` |
 | FILTER live trace; MORPH result trace | done | this commit | product `[rack][native][live]`; `rack-proc-filter-live-1448.png` |
 | Presets in ANDOR Modular's own folders | done | this commit | product `[rack][native][fx]` (paths); D-38 |
+| EQUALIZER and UTILITY of Analog's library as modules (`fx.eq`, `fx.utility`), every parameter the table's, Analog's racks | done | this commit | kernel `[fx][table]`, `[realtime][fx]`; product `[rack][native][fx]`; `parity/eq.png`, `parity/utility.png` |
+| Pull requests for the upstream branches | open | arenttodal/OSP#15, arenttodal/analog#10 | their CI green (Analog: engine, macOS, Windows) |
 | Hands-on (Mac, DAW, listening) | **open** | — | the report's checks |
 
 ## What works (demonstrable now)
@@ -82,7 +84,7 @@ The owner's four choices from the first report, built. Details and limits:
   Analog's device enamels on the board), scaled as one piece from 869 to 1810 px wide; its
   keyboard, PITCH wheel and VOLUME play and set the patch.
 - Empty patch → Quick Add "analog" → Return → sound, inside the real editor, in < 100 ms.
-- All 53 module types (52 available; REIMAGINED listed unavailable with its reason).
+- All 55 module types (54 available; REIMAGINED listed unavailable with its reason).
 - Independent note streams per chain, merged streams without stuck notes, mono/legato, steals.
 - Edits while notes hold: click-free swaps, held keys continue.
 - Every factory patch plays in the plugin with ANDOR's own recordings; state recalls.

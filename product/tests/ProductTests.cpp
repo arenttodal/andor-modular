@@ -1113,7 +1113,7 @@ TEST_CASE ("An effect module opens ANDOR Analog's own effect rack: every setting
 
     // Every effect of the library: Analog's rack, every setting bound, every mode and page
     // drawn without a control outside the device.
-    for (const char* type : { "fx.phaser", "fx.flanger", "fx.shifter", "fx.compressor", "fx.filter", "fx.spread", "fx.retro", "fx.convolution" })
+    for (const char* type : { "fx.phaser", "fx.flanger", "fx.shifter", "fx.compressor", "fx.filter", "fx.spread", "fx.retro", "fx.convolution", "fx.eq", "fx.utility" })
     {
         INFO (type);
         const auto node = s.perform ("add", [&] (Document& d) { return edit::addModule (d, s.registry(), type, 1000, 200, mix); }).focus;
@@ -1900,7 +1900,7 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
         editor->openRack ({});
     }
     // The devices: one patch per module, its rack open (1448)
-    for (const char* type : { "proc.drive", "fx.compressor", "fx.phaser", "fx.flanger", "fx.shifter", "fx.spread", "fx.convolution", "fx.retro", "fx.filter",
+    for (const char* type : { "proc.drive", "fx.compressor", "fx.phaser", "fx.flanger", "fx.shifter", "fx.spread", "fx.convolution", "fx.retro", "fx.filter", "fx.eq", "fx.utility",
                               "proc.vca", "ctl.lfo", "ctl.env", "event.arp", "proc.morph", "src.organic", "src.granular", "spatial.satellite", "util.mixer",
                               "util.voicemix", "event.generative" })
     {

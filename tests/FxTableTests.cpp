@@ -18,7 +18,7 @@ namespace afx = andor::analog::fx;
 
 namespace
 {
-    const char* const fxModules[] { "fx.phaser", "fx.flanger", "fx.shifter", "fx.compressor", "fx.filter", "fx.retro", "fx.spread", "fx.convolution" };
+    const char* const fxModules[] { "fx.phaser", "fx.flanger", "fx.shifter", "fx.compressor", "fx.filter", "fx.retro", "fx.spread", "fx.convolution", "fx.eq", "fx.utility" };
 
     const ParamDesc* paramOf (const NodeDesc& d, const std::string& id)
     {
@@ -40,6 +40,9 @@ TEST_CASE ("Effect modules: every setting of the library's table is a parameter;
         { "fx.retro", { "mode", "character", "wear", "saturation", "noise", "bits", "mix" } },
         { "fx.spread", { "mode", "width", "detune", "mix" } },
         { "fx.convolution", { "impulse", "mix", "predelay", "width", "lowcut", "highcut", "decay" } },
+        // (modules made after the table: every parameter is the table's own)
+        { "fx.eq", {} },
+        { "fx.utility", {} },
     };
     for (const auto* type : fxModules)
     {
@@ -76,12 +79,21 @@ TEST_CASE ("Effect modules: every setting of the library's table is a parameter;
             if (spec.name != "on")
                 CHECK (settings.count (spec.name) == 1);
         CHECK (params.size() == d->params.size());
-        // The new ones are details: off the tile, left alone by EVOLVE.
+        // The new ones are details: off the tile, left alone by EVOLVE. A module made after
+        // the table has a few of its settings on its tile instead (two to four).
+        int onTile = 0;
         for (std::size_t i = was.size(); i < d->params.size(); ++i)
         {
-            CHECK (d->params[i].detail);
-            CHECK_FALSE (d->params[i].quick);
+            CHECK (d->params[i].detail != d->params[i].quick);
+            onTile += d->params[i].quick ? 1 : 0;
         }
+        if (was.empty())
+        {
+            CHECK (onTile >= 2);
+            CHECK (onTile <= 4);
+        }
+        else
+            CHECK (onTile == 0);
     }
     CHECK_FALSE (analogFxLinks ("fx.echo").size() > 0);
     afx::Type none {};
@@ -174,6 +186,15 @@ TEST_CASE ("Effect modules: a new setting is heard; MULTIBAND and the FET's own 
     CHECK (differ (renderWith ("fx.retro", { { "mode", 1.0 }, { "crackle", 0.0 } }), renderWith ("fx.retro", { { "mode", 1.0 }, { "crackle", 1.0 } })) > 0.1);
     // CONVOLUTION: REVERSE rebuilds the impulse.
     CHECK (differ (renderWith ("fx.convolution", { { "reverse", 0.0 } }), renderWith ("fx.convolution", { { "reverse", 1.0 } })) > 1.0);
+    // EQUALIZER: a band's gain is heard, and flat it leaves the sound alone. UTILITY: its gain.
+    const auto flat = renderWith ("fx.eq", {});
+    CHECK (differ (flat, renderWith ("fx.eq", { { "band2.gain", 12.0 }, { "band2.freq", 400.0 } })) > 1.0);
+    CHECK (differ (flat, renderWith ("fx.utility", {})) < 1.0e-3);   // (both neutral at their defaults)
+    const auto quieter = renderWith ("fx.utility", { { "gain", -12.0 } });
+    // (about 12 dB: the patch's output limiter takes a little off the louder one)
+    const double dropDb = 20.0 * std::log10 (rms (quieter.left) / rms (flat.left));
+    CHECK (dropDb < -10.5);
+    CHECK (dropDb > -12.5);
     // ... and at their defaults the new settings of CONVOLUTION are the impulse it always built.
     const auto conv = renderWith ("fx.convolution", {});
     CHECK (rms (conv.left) > 0.005);

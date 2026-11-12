@@ -65,10 +65,20 @@ folders stay there (they are OSP's and Analog's too) and are no longer listed in
 copy the files across if you want them. Factory presets are in the family's code and appear
 as before.
 
-**Not done in this pass, on purpose:** DRIVE keeps Modular's rack (Analog's has no OUTPUT);
-CHORUS and TONE EQ keep an output meter (Analog has no rack for them); Analog's EQUALIZER and
-UTILITY are not offered as modules; Analog's FX CHAIN presets are not offered (a chain is
-Analog's route). OSP's newer default line already shares the FX library, but no Analog commit
+**After your "yes to both" (same day):**
+- Pull requests are open: arenttodal/OSP#15 (into `claude/space-presets`, the line Analog
+  pins; it does not merge cleanly into OSP's default branch, which has diverged) and
+  arenttodal/analog#10 (into Analog's default branch). OSP's should merge first: Analog's
+  moves its OSP pin to it.
+- **EQUALIZER and UTILITY are modules** (Quick Add → Effects): Analog's processors, every
+  setting from the table, Analog's racks (EQUALIZER's full-width graphic with its spectrum;
+  UTILITY's meter bridge), Analog's presets. On their tiles: LOW / LOW MID / HIGH MID / HIGH
+  and GAIN / BALANCE / WIDTH. TONE EQ stays as it is. Pictures: `parity/eq.png` (Analog's
+  reference there is from before its full-width EQ; the code is the same), `parity/utility.png`.
+
+**Not done, on purpose:** DRIVE keeps Modular's rack (Analog's has no OUTPUT); CHORUS and
+TONE EQ keep an output meter (Analog has no rack for them); Analog's FX CHAIN presets are not
+offered (a chain is Analog's route). OSP's newer default line already shares the FX library, but no Analog commit
 is on that line; the seam has the same shape so the binding carries over when the pins move.
 
 ## Commits
@@ -151,7 +161,7 @@ oscillator also at 869 and 1810 (`patch-rack-*`).
 
 ## Tests
 
-Kernel `modular_tests`: **68 cases, all passing** (2,812,009 assertions), GCC and
+Kernel `modular_tests`: **68 cases, all passing** (2,892,347 assertions), GCC and
 clang / libc++; the zero-allocation test included. Product `modular_product_tests`:
 **20 cases, all passing**. Upstream, with the second pass's changes, on Linux: Analog's engine tests, OSP's plugin tests, ANDOR Example's and ANDOR Analog's product tests, every visual regression, OSP's unit, integration and regression tests: `ctest`, **13 of 13 passed** (Linux; their macOS CI was not run from here).
 
@@ -207,13 +217,11 @@ Second pass, by test:
 
 ## Your choices
 
-The four from the first pass are built (above). New, from the second pass:
+The four from the first pass, the pull requests and the two modules are done (above). Open:
 
 1. Analog's skewed THRESHOLD (and the milder cases): fix it in Analog? It changes how recorded
-   automation of those parameters plays back there.
-2. Open pull requests for the upstream branches (`claude/epic-feynman-fsf8ij` in OSP and in
-   Analog)? None was opened; Modular's pins point at those branches' commits.
-3. EQUALIZER and UTILITY as modules (Analog's racks would open as they are)?
+   automation of those parameters plays back there. (A task card was left for it.)
+2. Merging the two pull requests is yours.
 
 ## Hands-on checks (not verifiable here)
 
@@ -252,3 +260,5 @@ Second pass:
     `ANDOR/Modular/Rack Presets`; they do not appear in ANDOR Analog.
 15. A patch of yours from before today with a phaser, flanger, compressor or convolution and
     a macro or LFO on it: same sound?
+16. Add EQUALIZER and UTILITY from Quick Add: drag a band in the EQ's graphic while playing;
+    UTILITY's WIDTH to 0 is mono; both beside ANDOR Analog's.

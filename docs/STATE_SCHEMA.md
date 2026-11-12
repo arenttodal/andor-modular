@@ -95,6 +95,10 @@ Migration 1 → 2 (`Document.cpp`, `migrateV1`; fixture `tests/fixtures/patch-v1
   modules at default and non-default settings, identical samples; the migrated fixture with
   macros and modulation within 5e-6 of full scale, float rounding of the moved ranges).
 
+`fx.eq` (EQUALIZER) and `fx.utility` (UTILITY) were added after the table: every parameter
+of theirs is the table's own name (`band2.gain`, `hp.freq`, `monoBass`…). New module types
+need no migration; a build from before them keeps such a module as a missing module.
+
 One thing is not kept: a modulation deep enough to push one of the ten parameters against the
 end of its old range now carries on to the new end.
 

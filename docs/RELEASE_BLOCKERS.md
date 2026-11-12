@@ -24,7 +24,6 @@ the plugin, except the items below which depend on things this environment does 
 | FILTER and MORPH as Analog's own rack classes | not possible as they are (Analog's FILTER rack is its whole voice, its MORPH graph is about card C); Modular's racks in Analog's identity, with a live trace (D-39). The effects **are** Analog's rack class now |
 | DRIVE as Analog's rack class | Modular's sibling kept: Analog's has no OUTPUT |
 | Pictures for CHORUS and TONE EQ | an output meter (Analog has no rack for either) |
-| EQUALIZER and UTILITY of Analog's library as modules | not offered yet (the table and the rack would carry them as they are) |
 | Analog's FX CHAIN presets | not offered: a chain is Analog's route, not a module |
 | A modulation deep enough to hit the old end of one of ten widened ranges (schema 1 patches) | now carries on to the new end (STATE_SCHEMA.md) |
 | COMPRESSOR THRESHOLD's knob travel | strongly skewed, as in Analog (its parameter range; reported upstream, not changed here) |

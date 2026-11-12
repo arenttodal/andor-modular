@@ -249,3 +249,10 @@ setting quiet behind what plays (as Analog's live FILTER page). MORPH draws the 
 measured and, between them, what the method makes of them (Analog's carrier / card C /
 result, from what sounds). DRIVE keeps its sibling rack: Analog's has no OUTPUT.
 
+## D-40 EQUALIZER and UTILITY are modules made of the table alone
+Analog's two remaining library effects became `fx.eq` and `fx.utility` with no parameter
+list of their own: every parameter is the table's, under its name; a few are named for the
+tile (LOW / LOW MID / HIGH MID / HIGH; GAIN / BALANCE / WIDTH). Their racks are Analog's.
+TONE EQ (`proc.tone`, per voice or global, three knobs and a tilt) stays: it is a different,
+smaller thing and old patches use it.
+
