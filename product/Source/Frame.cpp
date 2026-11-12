@@ -253,7 +253,7 @@ void PitchWheel::paint (juce::Graphics& g)
     const auto lit = juce::Rectangle<float> (window.getX(), centre - 0.5f * length, window.getWidth(), length).getIntersection (window);
     if (lit.getHeight() > 1.0f)
     {
-        // The walnut finish's copper, lit from above (the family's amber gradient in the accent).
+        // The live accent, lit from above (the family's amber gradient in the accent).
         const auto a = colour::accent;
         juce::ColourGradient light (a.brighter (0.75f), 0.0f, lit.getY(), a.darker (0.55f), 0.0f, lit.getBottom(), false);
         light.addColour (0.12, a.brighter (0.65f));

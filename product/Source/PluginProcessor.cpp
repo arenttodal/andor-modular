@@ -24,7 +24,8 @@ ModularProcessor::ModularProcessor()
       apvts (*this, nullptr, "PARAMETERS", layout()),
       sessionModel (audioEngine)
 {
-    // ANDOR Modular's finish (walnut, aged copper, bone ceramic): once, before any window.
+    // ANDOR Modular's finish (ebonized ash, black anodized aluminium, bone ceramic): once,
+    // before any window.
     ui::applyMaterials();
     for (int i = 0; i < maxMacros; ++i)
         macroParams[static_cast<std::size_t> (i)] = apvts.getRawParameterValue (macroId (i));

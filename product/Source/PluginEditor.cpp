@@ -589,8 +589,9 @@ void Editor::paint (juce::Graphics& g)
 
 void Editor::paintSurface (juce::Graphics& g)
 {
-    // InstrumentFrame.cpp, frame::paint: the housing (ANDOR Analog's walnut cheeks from its
-    // pack), the identity, the keyboard's bed, the macro panel, then the ceramic keys.
+    // InstrumentFrame.cpp, frame::paint: the housing (Modular's ebonized ash cheeks and black
+    // rails, from its pack), the identity, the keyboard's bed, the macro panel, then the
+    // ceramic keys.
     draw::housing (g, surface.getLocalBounds().toFloat());
     {
         const auto bold = fonts::make (60.0f, Weight::displayBold).withHorizontalScale (1.07f);

@@ -5,6 +5,8 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 
+#include "ModularMaterialsData.h"
+
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -763,6 +765,83 @@ TEST_CASE ("The board follows the scroll gesture; F is only a letter; FIT is the
     for (const auto& n : in.session().document().nodes)
         if (n.group.empty())
             CHECK (canvas.getLocalBounds().contains (tileOf (n.id)));
+}
+
+TEST_CASE ("The finish: ebonized ash cheeks and black rails round the family's light ceramic", "[product][ui][materials]")
+{
+    // The pack is Modular's own, in the family's format; the shared defaults are untouched.
+    {
+        juce::MemoryInputStream bytes (ModularMaterialsData::ebonizedashskin_zip, static_cast<size_t> (ModularMaterialsData::ebonizedashskin_zipSize), false);
+        juce::ZipFile zip (bytes);
+        const auto* entry = zip.getEntry ("manifest.json");
+        REQUIRE (entry != nullptr);
+        std::unique_ptr<juce::InputStream> in (zip.createStreamForEntry (*entry));
+        const auto manifest = juce::JSON::parse (in->readEntireStreamAsString());
+        CHECK (manifest["name"].toString() == "modular-ebonized-ash");
+        CHECK (static_cast<int> (manifest["schemaVersion"]) == 1);
+        juce::StringArray names;
+        for (const auto& piece : *manifest["pieces"].getArray())
+            names.add (piece["name"].toString());
+        CHECK (names.contains ("housing"));
+        CHECK (ui::design::Materials::osp().pack == nullptr);
+    }
+    Instrument in;
+    REQUIRE (in.editor != nullptr);
+    in.session().newPatch();
+    for (const int width : { 869, 1448, 1810 })
+    {
+        INFO ("width " << width);
+        const int height = width * 1086 / 1448;
+        in.editor->setSize (width, height);
+        in.editor->showPlay (false);
+        settle();
+        const auto image = in.editor->createComponentSnapshot (in.editor->getLocalBounds(), true, 1.0f);
+        const float scale = static_cast<float> (width) / 1448.0f;
+        // (reference pixels in: the mean colour of a small patch)
+        const auto at = [&] (float x, float y, float w = 3.0f, float h = 3.0f) {
+            double r = 0.0, g = 0.0, b = 0.0;
+            int count = 0;
+            for (int py = juce::roundToInt (y * scale); py < juce::roundToInt ((y + h) * scale) + 1; ++py)
+                for (int px = juce::roundToInt (x * scale); px < juce::roundToInt ((x + w) * scale) + 1; ++px)
+                {
+                    const auto c = image.getPixelAt (juce::jlimit (0, image.getWidth() - 1, px), juce::jlimit (0, image.getHeight() - 1, py));
+                    r += c.getRed();
+                    g += c.getGreen();
+                    b += c.getBlue();
+                    ++count;
+                }
+            return std::array<double, 3> { r / count, g / count, b / count };
+        };
+        const auto lum = [] (const std::array<double, 3>& c) { return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]; };
+        // Both cheeks: near-black, an espresso undertone (never walnut's warmth), never flat.
+        for (const float x : { 8.0f, 1428.0f })
+        {
+            const auto cheek = at (x, 300.0f, 10.0f, 400.0f);
+            CHECK (lum (cheek) < 60.0);
+            CHECK (lum (cheek) > 12.0);
+            CHECK (cheek[0] >= cheek[2]);
+            CHECK (cheek[0] - cheek[2] < 26.0);
+            double low = 255.0, high = 0.0;
+            for (float gx = x; gx < x + 11.0f; gx += 1.0f / scale)
+            {
+                const double v = lum (at (gx, 500.0f, 0.0f, 0.0f));
+                low = std::min (low, v);
+                high = std::max (high, v);
+            }
+            CHECK (high - low > 5.0);   // the grain is there
+        }
+        // The rails: dark, neutral metal along the body's top and bottom edges.
+        for (const float y : { 13.0f, 1067.0f })
+        {
+            const auto rail = at (500.0f, y, 300.0f, 3.0f);
+            CHECK (lum (rail) < 60.0);
+            CHECK (std::abs (rail[0] - rail[2]) < 9.0);
+        }
+        // The instrument itself stays light: the ceramic body, the board's face.
+        CHECK (lum (at (700.0f, 28.0f, 40.0f, 6.0f)) > 200.0);
+        CHECK (lum (at (700.0f, 500.0f, 60.0f, 40.0f)) > 225.0);
+        CHECK (lum (at (40.0f, 1020.0f, 4.0f, 30.0f)) > 190.0);
+    }
 }
 
 TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")

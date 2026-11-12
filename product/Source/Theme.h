@@ -11,7 +11,8 @@
 /**
     ANDOR Modular's interface is the ANDOR interface (andor-design-system/guide): the same
     tokens, type, look-and-feel, rendered ceramic and ivory, composed from the family's own code
-    (shared/andor-ui) and assets, in ANDOR Analog's walnut finish. Nothing here defines a new
+    (shared/andor-ui) and assets, in Modular's own trim (ebonized ash, black anodized aluminium:
+    docs/MATERIALS.md). Nothing here defines a new
     colour, font, knob, key, texture or radius: this file only *names* what Modular uses and maps
     its modules onto the family's existing vocabulary (docs/UI_COMPONENTS.md):
 
@@ -34,8 +35,11 @@ namespace skin = osp::plugin::skin;
 using LookAndFeel = osp::plugin::OspLookAndFeel;
 using Weight = osp::plugin::fonts::Weight;
 
-/** ANDOR Modular's materials: ANDOR Analog's walnut housing and aged copper, the family's bone
-    ceramic. Applied once per process, before any window (design::useMaterials). */
+/** ANDOR Modular's materials: ebonized ash cheeks and black anodized aluminium rails round the
+    family's bone ceramic (its own housing pack), the family's interaction colours. Applied once
+    per process, before any window (design::useMaterials: a process-wide choice, as in every
+    ANDOR product; each plugin binary carries its own copy, so another ANDOR instrument in the
+    same host keeps its own finish). */
 void applyMaterials();
 
 /** The routing board's inks and lines (ANDOR Analog's ROUTING view, FxRouting.cpp): Modular's

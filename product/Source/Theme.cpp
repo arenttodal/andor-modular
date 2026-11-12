@@ -16,9 +16,12 @@ void applyMaterials()
     if (applied)
         return;
     applied = true;
-    // ANDOR Analog's walnut finish (its docs/WALNUT_VISUAL_DESIGN.md), value for value: aged
-    // copper for the live accent, layer A's amber trace, the mineral macro identities with
-    // SPACE in spore, and its walnut housing pack. The ceramic is the family's bone ivory.
+    // Modular's finish (docs/MATERIALS.md): ebonized ash cheeks, satin black anodized aluminium
+    // rails and end caps, dark countersunk fasteners: its own housing pack (tools/
+    // make_ebonized_ash_skin.py), in place of the shared teak. Only the trim is dark: the body
+    // is the family's bone ceramic, and the interaction colours are unchanged (the live accent,
+    // layer A's amber trace, the mineral macro identities with SPACE in spore), so modules,
+    // sources and selected controls read as they did.
     auto m = design::Materials::osp();
     m.accent = juce::Colour (0xffc8703f);
     m.accentTop = juce::Colour (0xffd57e48);
@@ -31,8 +34,8 @@ void applyMaterials()
     m.graphiteOnWell = true;
     m.macros = { juce::Colour (0xffbe7552), juce::Colour (0xffb5843a), juce::Colour (0xff7b8d69),
                  juce::Colour (0xff73899c), juce::Colour (0xff8b9180), juce::Colour (0xff5c9490) };
-    m.pack = ModularMaterialsData::walnutskin_zip;
-    m.packSize = static_cast<size_t> (ModularMaterialsData::walnutskin_zipSize);
+    m.pack = ModularMaterialsData::ebonizedashskin_zip;
+    m.packSize = static_cast<size_t> (ModularMaterialsData::ebonizedashskin_zipSize);
     design::useMaterials (m);
 }
 
@@ -238,7 +241,7 @@ void paintGlass (juce::Graphics& g, juce::Rectangle<float> r, const ModuleLook& 
 
 void paintBadge (juce::Graphics& g, juce::Rectangle<float> r, int identity, const juce::String& letter)
 {
-    // The rendered badge (layer A's in copper from the walnut pack); the letter in white.
+    // The rendered badge (layer A's in the accent, from Modular's pack); the letter in white.
     static const char* names[] = { "badge-A", "badge-B", "badge-C" };
     const auto& idy = colour::identity (identity);
     bool drawn = false;
