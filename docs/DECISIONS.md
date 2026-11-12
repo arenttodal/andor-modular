@@ -126,3 +126,49 @@ sources sit side by side; five or six go in two rows of three compact cards (Ana
 most three; Modular's budget is six). What is not a source is reached through the macros, or
 one key away in PATCH.
 
+## D-21 Held notes keep their pitch when a note module's settings move
+KEYBOARD's OCTAVE (and KEY SPLIT, SCALE / TRANSPOSE) used to rebuild the graph and transpose
+note-offs with the settings of their own moment: clicks, restarted notes, notes that never
+ended. **Decision:** note modules are read live, and each remembers what every note identity
+became (`NoteMemory`); a note-off ends exactly that. A held key keeps sounding where it is;
+the new setting is for the next notes. Retuning held notes would be a different behaviour
+(a pitch control, not a keyboard setting) and is not offered.
+
+## D-22 Mute and Solo are mix state, not bypass
+`muted` and `solo` on modules and groups, saved only when set (schema 1 files unchanged),
+applied at a source's own output as a 12 ms ramp in the running graph. Mute wins over solo.
+`enabled` stays what it was: the module's bypass. A soloed patch says so in the header.
+
+## D-23 One filter for several sources: per voice when they share notes, once when they do not
+A processor's audio input sums what is connected. Sources played by the same note stream share
+its voices (one filter per voice). Chains with their own note modules cannot (every note of
+either would play both), so the processor moves after the voice mix and runs once, each chain
+through its own VOICE MIX. The edit says which it did. A module that only exists per voice
+(MORPH) refuses instead of guessing.
+
+## D-24 Quick Add is a menu, not a catalogue
+53 modules in one scrolling list was a catalogue to read. **Decision:** a compact menu at the
+pointer: search, three recent, six categories with submenus. The registry stays the only
+catalogue (`NodeDesc::category`; effects, `fx.*`, listed together).
+
+## D-25 The rack replaces the detail column
+A permanent 332 px column took a quarter of the board from the patch to show one module.
+**Decision:** a module opens as a drawer across the board's foot, one at a time, on demand;
+the board keeps its width, its zoom and its place. A group's double-click still enters it.
+
+## D-26 Layout is a rule, applied everywhere, inside the edit
+`edit::resolveOverlaps` (pure, deterministic, idempotent): what an edit placed stays; others
+make room by the least movement. It runs inside every transaction (one undo) and once on load.
+The glide that shows it is the picture only.
+
+## D-27 Escape, scrolling and F
+One Escape closes one thing, decided in one place. Scrolling pans with the gesture as the
+system delivers it (the direction is the system's setting; a preference reverses it). F is a
+letter: a single key that silently refits the view was pressed by accident; FIT is a button.
+
+## D-28 Ebonized ash and black anodized aluminium
+Modular's own trim (docs/MATERIALS.md), generated procedurally over the family's housing
+render, in the family's skin-pack format. Only the housing piece changes: the ceramic, the
+board, the modules and the interaction colours do not. This is the one asset Modular owns
+(CLAUDE.md rule 9).
+

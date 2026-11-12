@@ -812,6 +812,40 @@ void Canvas::rebuild()
     }
     for (auto it = selected.begin(); it != selected.end();)
         it = viewFor (*it) == nullptr ? selected.erase (it) : std::next (it);
+    // What an edit moved glides to its place (see glideFrom); another patch just appears.
+    if (loadsSeen != model.loadCount())
+    {
+        loadsSeen = model.loadCount();
+        shownAt.clear();
+        glideFrom.clear();
+    }
+    else if (drag != Drag::move)
+    {
+        bool any = false;
+        for (auto& v : views)
+        {
+            const auto was = shownAt.find (v->id());
+            if (was == shownAt.end())
+                continue;
+            juce::Point<float> target;
+            if (const auto* n = doc.findNode (v->id()); n != nullptr && ! v->isGroup())
+                target = { n->x, n->y };
+            else if (const auto* g = doc.findGroup (v->id()))
+                target = { g->x, g->y };
+            if (was->second.getDistanceFrom (target) > 1.0f)
+            {
+                glideFrom[v->id()] = was->second;
+                any = true;
+            }
+        }
+        if (any)
+        {
+            glideStartMs = juce::Time::getMillisecondCounterHiRes();
+            startTimerHz (60);
+        }
+    }
+    for (auto it = shownAt.begin(); it != shownAt.end();)
+        it = viewFor (it->first) == nullptr ? shownAt.erase (it) : std::next (it);
     updateNodeTransforms();
     repaint();
 }
@@ -839,6 +873,18 @@ void Canvas::updateNodeTransforms()
         }
         else if (const auto* n = doc.findNode (v->id()))
             world = { n->x, n->y };
+        if (const auto from = glideFrom.find (v->id()); from != glideFrom.end())
+        {
+            const double t = (juce::Time::getMillisecondCounterHiRes() - glideStartMs) / glideMs;
+            if (t >= 1.0 || drag == Drag::move)
+                glideFrom.erase (from);
+            else
+            {
+                const float eased = 1.0f - static_cast<float> (std::pow (1.0 - t, 3.0));   // (ease out)
+                world = from->second + (world - from->second) * eased;
+            }
+        }
+        shownAt[v->id()] = world;
         // (a module's position is its face's corner: the room around it hangs outside)
         const auto topLeft = world - pan - juce::Point<float> (static_cast<float> (tile::pad), static_cast<float> (tile::pad));
         v->setBounds (juce::roundToInt (topLeft.x), juce::roundToInt (topLeft.y), v->getWidth(), v->getHeight());
@@ -1057,6 +1103,10 @@ void Canvas::timerCallback()
 {
     if (! isVisible())
         return;
+    if (! glideFrom.empty())
+        updateNodeTransforms();
+    else if (getTimerInterval() < 30)
+        startTimerHz (25);
     ++frame;
     if ((frame % 3) == 0)
         for (auto& v : views)

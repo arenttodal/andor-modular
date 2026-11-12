@@ -28,6 +28,12 @@ sorted; saved atomically (`file.tmp` then rename).
 ```
 
 Rules:
+- A node and a group may carry `"muted": true` and `"solo": true` (written only when set, so
+  files without them are unchanged and older versions read them as before). They are the
+  musician's mix state, separate from `enabled` (bypass): `audibleGain` (Document.h) fades a
+  source at its own output; mute wins over solo; a group's reach the sources inside it.
+- Loading runs the layout rule once (`edit::resolveOverlaps`): a patch saved with overlapping
+  tiles opens with them apart. Positions are the only thing it changes.
 - Ids are stable; a group control is addressed as `{ "node": <group id>, "param": "control.N" }`.
 - Unknown module types load as **missing modules**, kept with their parameters and cables,
   silent; unknown parameters of a known type are kept (a newer version's state survives).

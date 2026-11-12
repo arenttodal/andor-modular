@@ -81,6 +81,8 @@ public:
     // Patches.
     void newPatch();
     bool loadDocument (const Document& d, const juce::String& message = {});
+    /** Counts the patches loaded (another count: another patch, not an edit of this one). */
+    int loadCount() const noexcept { return loads; }
     bool loadFile (const juce::File& f);
     bool saveFile (const juce::File& f);
     juce::File currentFile() const { return file; }
@@ -137,6 +139,7 @@ private:
     ValidationReport lastReport;
     float lastScene = -1.0f;
     bool gestureOpen = false;
+    int loads = 0;
 };
 
 } // namespace andor::modular

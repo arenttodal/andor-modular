@@ -150,6 +150,7 @@ public:
     void enterGroup (const std::string& groupId);
     void moveViewBy (juce::Point<float> deltaWorld);
     void updateNodeTransforms();
+    bool isGliding() const noexcept { return ! glideFrom.empty(); }
 
     /** The module a chosen type should follow (for Quick Add with a selection). */
     std::string primarySelection() const;
@@ -189,6 +190,13 @@ private:
     juce::Rectangle<float> breadcrumbArea, boardArea;
     std::vector<juce::Point<float>> activity;   ///< the beads on the hot wires, this frame
     int frame = 0;
+    /** Making room is shown, not jumped: a tile an edit moved (the layout rule, undo) glides
+        from where it was drawn to its place. Only the picture: the patch holds the final
+        positions at once. Tiles of a newly loaded patch simply appear. */
+    std::map<std::string, juce::Point<float>> shownAt, glideFrom;
+    double glideStartMs = 0.0;
+    int loadsSeen = -1;
+    static constexpr double glideMs = 160.0;
 };
 
 } // namespace andor::modular::ui

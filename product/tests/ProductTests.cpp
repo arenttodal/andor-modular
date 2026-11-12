@@ -336,8 +336,13 @@ TEST_CASE ("Quick Add is a compact menu: categories, a submenu beside it, search
     auto& menu = in.editor->quickAddView();
     ui::QuickAddContext ctx;
     ctx.world = { 900.0f, 40.0f };
+    const auto opening = juce::Time::getMillisecondCounterHiRes();
     in.editor->openQuickAdd (ctx, in.editor->getScreenBounds().getCentre());
+    const double openMs = juce::Time::getMillisecondCounterHiRes() - opening;
     REQUIRE (menu.isOpen());
+    INFO ("Quick Add open (laid out, ready to paint): " << openMs << " ms");
+    CHECK (openMs < 50.0);
+    std::printf ("quick add: open in %.2f ms\n", openMs);
 
     // The root: narrow, short, the six categories in their order, at most three recent modules.
     const auto names = menu.categories();
@@ -543,10 +548,18 @@ TEST_CASE ("The rack: one module's controls across the board's foot; the board k
     const auto filter = in.firstOfType ("proc.filter"), osc = in.firstOfType ("osc.analog");
     REQUIRE_FALSE (filter.empty());
     REQUIRE_FALSE (osc.empty());
+    const int swapsBefore = in.processor.engine().swapsCompleted();
+    const auto opening = juce::Time::getMillisecondCounterHiRes();
     editor.openRack (filter);
+    const double openMs = juce::Time::getMillisecondCounterHiRes() - opening;
+    std::printf ("rack: open in %.2f ms\n", openMs);
+    CHECK (openMs < 50.0);
     REQUIRE (rack.isOpen());
     CHECK (rack.isVisible());
     CHECK (rack.shown() == filter);
+    // (opening, swapping and closing a rack never touch the running graph)
+    run (in.processor, 0.05);
+    CHECK (in.processor.engine().swapsCompleted() == swapsBefore);
     // full width, under the canvas, above the keyboard; the canvas only gave up height
     CHECK (rack.getWidth() == closedBounds.getWidth());
     CHECK (canvas.getWidth() == closedBounds.getWidth());
@@ -661,6 +674,43 @@ TEST_CASE ("Modules never land on each other: added, inserted, connected from a 
             s.redo();
             CHECK (saveToString (s.document()) == after);
         }
+    }
+    // Making room is shown as a short glide (the picture only: the patch is already final),
+    // and it ends.
+    {
+        auto& canvas = in.editor->canvasView();
+        const auto tileOf = [&] (const std::string& id) -> juce::Rectangle<int> {
+            for (int i = 0; i < canvas.getNumChildComponents(); ++i)
+                if (auto* tile = dynamic_cast<ui::NodeView*> (canvas.getChildComponent (i)); tile != nullptr && tile->id() == id)
+                    return tile->getBoundsInParent();
+            return {};
+        };
+        in.editor->showPlay (false);
+        settle (300);
+        CHECK_FALSE (canvas.isGliding());
+        const auto first = s.document().nodes[0].id, second = s.document().nodes[1].id;
+        const auto before = tileOf (second);
+        const float x = s.document().nodes[1].x, y = s.document().nodes[1].y;
+        s.perform ("move", [&] (Document& d) {
+            auto* n = d.findNode (first);
+            n->x = x;
+            n->y = y;
+            edit::Result r;
+            r.ok = true;
+            r.placed = { first };
+            return r;
+        });
+        CHECK (overlappingTiles (s.document(), s.registry()) == 0);
+        CHECK (canvas.isGliding());
+        const auto during = tileOf (second);
+        settle (320);
+        CHECK_FALSE (canvas.isGliding());
+        const auto after = tileOf (second);
+        CHECK (after != before);                                        // it made room
+        CHECK (during.getPosition().getDistanceFrom (before.getPosition()) <= after.getPosition().getDistanceFrom (before.getPosition()));
+        s.undo();
+        settle (320);
+        CHECK (tileOf (second) == before);
     }
     // A tile dragged onto another: where it was dropped stays, the other makes room.
     const auto& nodes = s.document().nodes;
@@ -925,7 +975,7 @@ TEST_CASE ("Screenshots of the reference states", "[product][ui][screens]")
         editor->canvasView().fitAll();
         editor->canvasView().select (made.focus, false);
         editor->openRack (made.focus);
-        settle();
+        settle (300);   // (the tiles that made room have arrived)
         snapshot (*editor, "patch-rack-steps-1448");
         CHECK (editor->rackView().controlsArea().getWidth() > 600);
         CHECK_FALSE (editor->rackView().scrolls());   // the step editor takes the room that is left

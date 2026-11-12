@@ -5,8 +5,9 @@ lets a musician **assemble an original instrument** from sound sources, transfor
 modulation, timing, space and performance controls — and then play it from a front panel
 without seeing a single cable.
 
-- **One family.** The interface is the ANDOR interface in Analog's walnut finish: the same
-  housing, ceramic keys, ivory knobs, keyboard and type, with Analog's routing board grown into
+- **One family.** The interface is the ANDOR interface in Modular's own trim (ebonized ash
+  cheeks, black anodized aluminium rails; docs/MATERIALS.md): the same ceramic body and keys,
+  ivory knobs, keyboard and type, with Analog's routing board grown into
   the patch board (docs/UI_COMPONENTS.md).
 
   ![PATCH](docs/screenshots/patch-morph-1448.png)
@@ -15,7 +16,7 @@ without seeing a single cable.
 - **Hear sound immediately.** Right-click the empty board, type "analog", press Return, play:
   KEYBOARD → ANALOG OSC → AMP ENVELOPE → VOICE MIX → OUTPUT is made for you.
 - **Complexity is optional.** Every module has a Quick face (2–4 controls, live telemetry) and
-  a detail panel with everything else, shown only when it applies.
+  a rack with everything else: double-click it and its controls open across the board's foot.
 - **Everything connects where meaningful.** Typed ports (notes, pitch, gate, trigger, control,
   mono/stereo audio, clock) in three domains (per voice, global, note events), with the reason
   and a converter when a cable is refused.
@@ -49,10 +50,10 @@ Tools: `build/tools/modular-render` (headless WAV renders, `--list`, `--validate
 | Path | What |
 |---|---|
 | `dsp/` | the kernel, pure C++20 (no JUCE): graph, compiler, engine, 53 module types, edits, EVOLVE, assets |
-| `product/` | the JUCE plugin: PATCH canvas, Quick Add, detail panel, PLAY, external host |
+| `product/` | the JUCE plugin: PATCH canvas, Quick Add, the rack, PLAY, external host, the housing pack |
 | `presets/` | 12 factory patches, 6 factory modules, 3 synthesised recordings |
 | `tests/` | kernel tests (Catch2); `product/tests` product tests |
-| `tools/` | renderer, benchmark, sample maker, demo script |
+| `tools/` | renderer, benchmark, sample maker, demo script, the housing pack's generator |
 | `docs/` | audit, architecture, contracts, status, budgets, user guide |
 | `external/` | pinned ANDOR OSP and ANDOR Analog (never modified here) |
 

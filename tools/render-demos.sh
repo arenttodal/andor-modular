@@ -24,3 +24,9 @@ cmp -s "$out/generative-sequence.wav" "$out/generative-again.wav" && echo "gener
 # Demo 1 / determinism across host block sizes.
 "$render" --patch "$here/presets/factory/basic-poly.andormodular" --out "$out/basic-poly-block37.wav" --seconds 8 --block 37 --notes "$phrase" >/dev/null 2>&1
 cmp -s "$out/basic-poly.wav" "$out/basic-poly-block37.wav" && echo "basic poly: identical at host block 37 and 256"
+
+# This pass's listening demos (shared filters, an unpitched recording, octave and mute / solo
+# under held notes): written by the kernel tests' hidden "[.demos]" case.
+mkdir -p "$out/patch-workflow"
+MODULAR_DEMO_DIR="$out/patch-workflow" "$build/tests/modular_tests" "[.demos]" >/dev/null && echo "patch-workflow demos: $out/patch-workflow"
+

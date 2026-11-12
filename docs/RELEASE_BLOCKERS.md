@@ -10,6 +10,7 @@ the plugin, except the items below which depend on things this environment does 
 | Item | Why open | Plan |
 |---|---|---|
 | Live Kontakt / VST3 instrument test (Gate 11 acceptance) | no licensed Kontakt (or any VST3 instrument) installed in this Linux container | `ExternalHost` loads a chosen VST3/AU; tests use a surrogate. Run Demo 10 on the owner's Mac: EXTERNAL INSTRUMENT → CHOOSE PLUGIN → Kontakt; play a legato phrase; save; reopen |
+| Hands-on validation of the 2026-11-12 pass (audio fixes, M / S, shared filters, menu, Escape, rack, layout, scrolling, finish) | no person, Mac, DAW, trackpad or reference image in the build session | the twelve checks in PATCH_WORKFLOW_REPORT.md |
 | Host validation | no DAW here | pluginval + auval on macOS CI (auval step present), Logic / Live / Reaper sessions on the owner's machine |
 | Reference-machine performance (Apple Silicon) | measured on a shared Linux VM only | CI runs `modular-bench --quick` on macOS-14; full matrix on the owner's Mac |
 | Per-voice MORPH at ≤ 64-sample blocks with ≥ 8 voices overruns | LiveMorph analyses a chord's voices in the same block | Analog PR: stagger first analysis by voice index (no behaviour change at the ends) |
@@ -19,6 +20,12 @@ the plugin, except the items below which depend on things this environment does 
 ## P2
 | Item | State |
 |---|---|
+| Undo / redo of mute, solo and bypass | rebuilds the graph (the action itself is a 12 ms ramp); bypassing a note module rebuilds too |
+| A filter's response curve in the rack | the rack shows its output level; no drawn response |
+| Rack state in the patch | not saved (closed when a patch opens) |
+| Quick Add click-through | a click outside the menu closes it and is not passed on |
+| The live accent under the new trim | still the copper from Analog's finish; owner decision |
+| A 4× housing level | the pack has the shared 2× level only |
 | REIMAGINED | listed as unavailable with its reason (needs OSP's per-recording analysis inside a module) |
 | Key DNA multi-zone | not wired (single-recording GRANULAR / ORGANIC are) |
 | Granular processor of a live stream | Analog's LiveGranulator compiled, no module yet |

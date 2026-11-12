@@ -326,6 +326,7 @@ void Session::newPatch()
 bool Session::loadDocument (const Document& d, const juce::String& text)
 {
     doc = d;
+    ++loads;
     edit::resolveOverlaps (doc, registry());   // (a patch from before the rule: tidied once, on load)
     hist.clear();
     gestureOpen = false;

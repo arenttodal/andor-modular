@@ -37,9 +37,12 @@ Keep both green on every commit.
    wraps, it does not fork.
 9. **The interface is the ANDOR interface** (`external/osp/andor-design-system/guide`), composed
    from the family's code and rendered assets in the submodules (docs/UI_COMPONENTS.md). No new
-   colour, font, knob, key, texture or radius is defined here: `product/Source/Theme.h` names
-   and maps what exists. Lay out in reference pixels (1448 x 1086, scaled as one piece). After a
-   visual change, regenerate `docs/screenshots` and look at 869 / 1448 / 1810.
+   colour, font, knob, key or radius is defined here: `product/Source/Theme.h` names and maps
+   what exists. The one asset Modular owns is its housing pack (ebonized ash, black anodized
+   aluminium: `product/Resources/ebonized-ash-skin.zip`, regenerated only with
+   `tools/make_ebonized_ash_skin.py`; docs/MATERIALS.md). Lay out in reference pixels
+   (1448 x 1086, scaled as one piece). After a visual change, regenerate `docs/screenshots`
+   and look at 869 / 1448 / 1810.
 
 ## Conventions
 

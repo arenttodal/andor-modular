@@ -1,15 +1,15 @@
 # Test matrix
 
-Kernel: `build/tests/modular_tests` — **43 test cases, 1,685,948 assertions, all passing**
-(2026-11-11, Linux, GCC 13.3). Product: `modular_product_tests` — **5 cases, all passing**
-(headless under Xvfb).
+Kernel: `build/tests/modular_tests` — **59 test cases, 1,689,055 assertions, all passing**
+(2026-11-12, Linux, GCC 13.3; CI also macOS 15, Apple clang). Product: `modular_product_tests`
+— **13 cases, all passing** (headless under Xvfb).
 
 | Area | Test (file: case) | What it proves |
 |---|---|---|
 | JSON | JsonTests: round trip; hostile input + 3000 random mutations of a patch | deterministic writer; parser never crashes, depth/size limits |
 | Registry | GraphTests: every module registered completely | names, ranges, defaults round-trip, structural ⇒ not modulatable, unavailable ⇒ reason |
 | Quick Add search | GraphTests: search | "analog", "filter", "reverb", "arp", fuzzy "anlg osc" |
-| Validation | GraphTests: types, domains, fan-in, cycles, budgets | refusals with converter suggestions; FEEDBACK DELAY allowed; broadcast marked |
+| Validation | GraphTests: types, domains, fan-in, cycles, budgets | refusals with converter suggestions; fan-in into audio inputs accepted, a second cable into MORPH's A refused; FEEDBACK DELAY allowed; broadcast marked |
 | Budgets | GraphTests: seventh source refused | reason names the count |
 | State | GraphTests: save/load lossless; missing module kept; atomic save; schema 0 migration; newer schema refused | |
 | Compiler | GraphTests: lanes | two chains = two lanes; MORPH joins them |
@@ -33,9 +33,21 @@ Kernel: `build/tests/modular_tests` — **43 test cases, 1,685,948 assertions, a
 | EVOLVE | EditTests | deterministic per seed, different per seed, valid, levels kept, protected modules untouched, one undo |
 | Scenes / arrange | EditTests | interpolate, recall, choices switch at the middle; left-to-right arrange |
 | Factory | FactoryTests: files = builder; all 12 play with recordings; 6 modules import; scene sweep keeps the chord | |
+| Silent recordings | ReliabilityTests `[organic][live]` | a recording arriving under a held key; one voice / mono / legato / an ended one-shot; START and REVERSE on the first note; **no clear pitch → C4 plays it as recorded** |
+| Note lifecycle | ReliabilityTests `[event][transpose][lifecycle]` | OCTAVE under held keys (no move, no hang, no rebuild, no click); out-of-range and split keys released; through an ARPEGGIATOR nothing is left running; KEY SPLIT and SCALE / TRANSPOSE |
+| Mute, solo, bypass | ReliabilityTests `[source][mute][solo]` | ramps at 44.1 / 48 / 96 kHz × blocks 16 / 64 / 512: no rebuild, no click, no restarted note; solo isolates at the source's output; mute wins; groups; save / load |
+| Shared routing | ReliabilityTests `[routing][fanin]` | two and three sources through one per-voice filter (one instance per voice, both darkened); two arpeggiated chains through one global filter (two voice pools, one instance, nothing hangs); voice audio into a global SPACE; refusals leave the patch untouched |
+| Layout | ReliabilityTests `[ui][layout]` | every factory patch tidy; drop / insert / six sources; 40-seed property test (no overlap, deterministic, idempotent, anchors stay); 32 stacked modules in 0.6 ms |
 | Real time | RealtimeTests: every factory patch × blocks 32/333/512 with notes, stealing, bend, macro and scene moves and three graph swaps | **zero** heap calls in `process()` |
 | External | ExternalTests (surrogate instrument) | one instance for all notes (not × polyphony), legato overlaps in order, GLOBAL MORPH hears it, absent plugin silent and kept, survives edits |
 | Product | ProductTests: every factory patch plays in the processor; fixed parameter ids; state recall (host values win); 0-to-sound through Quick Add < 100 ms + insert FILTER + one undo; screenshots 869/1448/1810 | |
+| Product: recordings, M / S | `[organic][live]`, `[source][mute][solo]` | a non-ASCII path and name recall; a Quick-added sample source sounds at once; M / S / the light never swap the graph; one undo each |
+| Product: Quick Add | `[ui][quickadd]` | opens in < 50 ms; six categories in order; root 246–292 px wide and short; submenu beside it, inside the instrument; every module in exactly one category; search ≤ 8; the keyboard path; one Return = one module; recent; port filtering |
+| Product: Escape | `[ui][escape]` | the whole stack built, then closed one level per press in order, by method and through the keys; no history entry; leaving a group |
+| Product: rack | `[ui][rack]` | full width under the canvas, 210–290 px; the canvas keeps x, y, width and zoom; identity / controls / display in order; every control of the mode; swap; close; deleted module closes it; PLAY hides it; no graph swap |
+| Product: layout | `[ui][layout]` | twelve modules through the menu onto one spot: no overlap, undo and redo exact; the make-room glide starts and ends; a dropped tile stays |
+| Product: gesture | `[ui][gesture]` | pan follows the deltas whatever `isReversed` says; Traditional reverses; scrolling never zooms, Cmd + scroll does; F changes nothing; FIT fits |
+| Product: finish | `[ui][materials]` | the pack is Modular's; cheeks, rails and ceramic sampled at three sizes |
 
 ## Not covered yet (see RELEASE_BLOCKERS.md)
 

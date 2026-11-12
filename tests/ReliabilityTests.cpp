@@ -731,3 +731,156 @@ TEST_CASE ("Layout: any pile of modules settles, deterministically, in one pass 
         }
     }
 }
+
+TEST_CASE ("Layout: the worst pile (32 modules on one spot) settles well inside one interface frame", "[ui][layout][perf]")
+{
+    const char* const types[] = { "osc.analog", "proc.filter", "proc.vca", "fx.echo", "fx.space", "ctl.lfo", "event.arp", "util.mixer" };
+    double worstMs = 0.0;
+    for (int run = 0; run < 5; ++run)
+    {
+        Document d;
+        for (int i = 0; i < 32; ++i)
+            REQUIRE (d.addNode (reg(), types[i % 8], 0.0f, 0.0f) != nullptr);
+        const auto started = std::chrono::steady_clock::now();
+        edit::resolveOverlaps (d, reg());
+        worstMs = std::max (worstMs, std::chrono::duration<double, std::milli> (std::chrono::steady_clock::now() - started).count());
+        CHECK (tidy (d));
+    }
+    INFO ("32 modules stacked on one spot, laid out in " << worstMs << " ms (worst of 5)");
+    CHECK (worstMs < 8.0);   // (a 60 Hz frame is 16.7 ms; this runs on the message thread only)
+    std::printf ("layout: 32 stacked modules settle in %.3f ms (worst of 5)\n", worstMs);
+}
+
+//==============================================================================
+// Listening demos of this pass (hidden: run with "[.demos]" and MODULAR_DEMO_DIR set; see
+// tools/render-demos.sh). Deterministic: the same build writes the same files.
+TEST_CASE ("Listening demos: shared filters, an unpitched recording, octave and mute / solo under held notes", "[.demos]")
+{
+    const char* dir = std::getenv ("MODULAR_DEMO_DIR");
+    if (dir == nullptr || *dir == 0)
+    {
+        WARN ("set MODULAR_DEMO_DIR to a folder to write the demos");
+        return;
+    }
+    const std::string out = dir;
+    auto save = [&] (const std::string& name, const std::vector<float>& left, const std::vector<float>& right, double rate = 48000.0) {
+        std::string error;
+        REQUIRE (wav::write (out + "/" + name + ".wav", left.data(), right.data(), static_cast<long long> (left.size()), rate, error));
+        CHECK (test::rms (left, 0, left.size()) > 0.001);
+    };
+    auto secondOsc = [] (Document& d, int octave, float y) {
+        auto* n = d.addNode (reg(), "osc.analog", 0, y);
+        n->domain = Domain::voice;
+        edit::setParam (d, reg(), n->id, "octave", static_cast<double> (octave));
+        return n->id;
+    };
+
+    // 1. Two oscillators of the same notes into ONE per-voice filter (summed per voice), the
+    //    filter closing over the phrase: both are darkened together.
+    {
+        std::string a;
+        Document d = basicPatch (&a);
+        const auto filter = edit::addModule (d, reg(), "proc.filter", 200, 0, a).focus;
+        const auto b = secondOsc (d, 1, 240);
+        REQUIRE (edit::connect (d, reg(), nodeOfType (d, "event.keyboard"), "notes", b, "notes").ok);
+        REQUIRE (edit::connectSmart (d, reg(), b, "out", filter, "in").ok);
+        edit::setParam (d, reg(), filter, "cutoff", 900.0);
+        edit::setParam (d, reg(), filter, "resonance", 0.45);
+        OfflineRenderer r;
+        const auto audio = test::render (r, d, { { 45, 0.0, 1.4 }, { 52, 0.5, 1.4 }, { 57, 1.0, 1.4 }, { 60, 1.5, 2.0 } }, 4.5);
+        save ("1-two-sources-one-voice-filter", audio.left, audio.right);
+    }
+    // 2. Two chains, each with its own ARP, into one filter: it runs once, globally (each
+    //    chain through its own VOICE MIX), and each arpeggio keeps its own notes.
+    {
+        std::string a;
+        Document d = basicPatch (&a);
+        const auto filter = edit::addModule (d, reg(), "proc.filter", 200, 0, a).focus;
+        REQUIRE_FALSE (edit::addModule (d, reg(), "event.arp", -100, 0, a).focus.empty());
+        const auto b = secondOsc (d, 2, 300);
+        auto* arp = d.addNode (reg(), "event.arp", -200, 300);
+        const auto arpB = arp->id;
+        edit::setParam (d, reg(), arpB, "rate", 2.0);
+        REQUIRE (edit::connect (d, reg(), nodeOfType (d, "event.keyboard"), "notes", arpB, "notes").ok);
+        REQUIRE (edit::connect (d, reg(), arpB, "notes", b, "notes").ok);
+        REQUIRE (edit::connectSmart (d, reg(), b, "out", filter, "in").ok);
+        edit::setParam (d, reg(), filter, "cutoff", 1400.0);
+        edit::setParam (d, reg(), filter, "resonance", 0.5);
+        OfflineRenderer r;
+        RenderSettings s;
+        s.seconds = 6.0;
+        s.notes = { { 45, 0.0, 5.0 }, { 52, 0.0, 5.0 }, { 57, 0.0, 5.0 } };
+        const auto audio = r.render (d, s);
+        save ("2-two-arps-one-global-filter", audio.left, audio.right);
+    }
+    // 3. A recording with no clear pitch on ORGANIC SAMPLE: C4 plays it as recorded, C5 an
+    //    octave up (before: three to four octaves down, below hearing).
+    {
+        const double rate = 48000.0;
+        const int frames = 48000 * 6;
+        std::vector<float> speech (static_cast<std::size_t> (frames));
+        for (int i = 0; i < frames; ++i)
+            speech[static_cast<std::size_t> (i)] = static_cast<float> (0.3 * std::sin (i * 0.01 * (1.0 + 0.5 * std::sin (i * 0.0003))) * (0.5 + 0.5 * std::sin (i * 0.0007)));
+        const std::string path = out + "/3-unpitched-recording-source.wav";
+        std::string error;
+        REQUIRE (wav::write (path, speech.data(), speech.data(), frames, rate, error));
+        const auto asset = library().loadNow (path);
+        REQUIRE (asset != nullptr);
+        Document d;
+        const auto org = edit::addModule (d, reg(), "src.organic", 0, 0).focus;
+        d.findNode (org)->strings["sample"] = "x";
+        OfflineRenderer r;
+        const auto audio = test::render (r, d, { { 60, 0.0, 2.0 }, { 72, 2.2, 1.8 } }, 4.5, 256, rate, [asset] (const std::string&) { return asset; });
+        save ("3-unpitched-recording-played-c4-then-c5", audio.left, audio.right);
+    }
+    // 4. KEYBOARD OCTAVE moved twice under a held chord: the chord stays where it is and ends
+    //    when released; the next chords are an octave up, then two.
+    {
+        std::string osc;
+        Document d = basicPatch (&osc);
+        const auto keys = nodeOfType (d, "event.keyboard");
+        Player p;
+        p.publish (d);
+        const int second = 48000 / p.block;
+        p.run (second, { Player::on (45), Player::on (52), Player::on (57) });
+        REQUIRE (p.engine.latest()->setParam (keys, "octave", 1.0));
+        p.run (second / 2);
+        p.run (second / 2, { Player::off (45), Player::off (52), Player::off (57) });
+        p.run (second, { Player::on (45), Player::on (52), Player::on (57) });
+        REQUIRE (p.engine.latest()->setParam (keys, "octave", 2.0));
+        p.run (second / 2, { Player::off (45), Player::off (52), Player::off (57) });
+        p.run (second, { Player::on (45), Player::on (52), Player::on (57) });
+        p.run (second, { Player::off (45), Player::off (52), Player::off (57) });
+        CHECK (p.engine.activeVoices() == 0);
+        save ("4-octave-moved-under-a-held-chord", p.left, p.right);
+    }
+    // 5. Two sources under one held note: A muted and back, B soloed and back, live (ramps in
+    //    the running graph: no rebuild, no click, the note never restarts).
+    {
+        std::string a;
+        Document d = basicPatch (&a);
+        const auto b = edit::addModule (d, reg(), "osc.analog", 0, 240, a).focus;
+        edit::setParam (d, reg(), b, "octave", 1.0);
+        Player p;
+        p.publish (d);
+        const int half = 24000 / p.block;
+        p.run (2 * half, { Player::on (45) });
+        const int swaps = p.engine.swapsCompleted();
+        auto* g = p.engine.latest();
+        REQUIRE (g->setGain (a, 0.0f));   // M on A
+        p.run (half);
+        REQUIRE (g->setGain (a, 1.0f));
+        p.run (half);
+        REQUIRE (g->setGain (a, 0.0f));   // S on B (A is silenced at its own output)
+        p.run (half);
+        REQUIRE (g->setGain (a, 1.0f));
+        REQUIRE (g->setGain (b, 0.0f));   // S on A
+        p.run (half);
+        REQUIRE (g->setGain (b, 1.0f));
+        p.run (half);
+        p.run (2 * half, { Player::off (45) });
+        CHECK (p.engine.swapsCompleted() == swaps);
+        save ("5-mute-and-solo-under-a-held-note", p.left, p.right);
+    }
+}
+
