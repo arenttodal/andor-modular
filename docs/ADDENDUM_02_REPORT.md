@@ -3,7 +3,7 @@
 _2026-11-12. Branch `claude/epic-feynman-fsf8ij`, on top of `5c4ee89` (the patch-workflow
 pass, not redone). First pass: pins unchanged (OSP `e7a3834`, Analog `1c0cb6d`). **Second
 pass** (your four answers): changes made upstream on each repository's
-`claude/epic-feynman-fsf8ij`, then the pins moved to OSP `c21fe80` and Analog `40bf866`.
+`claude/epic-feynman-fsf8ij`, then the pins moved to OSP `c21fe80` and Analog `0f5e01b`.
 Nothing in a submodule was edited from here._
 
 Built and tested in a Linux container (GCC 13 and clang 18 / libc++, headless under Xvfb)
@@ -25,7 +25,7 @@ graphs metering the processor that runs in that one module (gain reduction, notc
 comb, correlation, the impulse). Paired pictures: `docs/screenshots/parity/` (compressor,
 phaser, flanger, shifter, spread, retro, convolution, fxfilter).
 
-- *What changed in Analog* (`40bf866`, branch `claude/epic-feynman-fsf8ij`, no pull request
+- *What changed in Analog* (`0f5e01b`, branch `claude/epic-feynman-fsf8ij`, no pull request
   opened): the rack reads its instrument through a small interface (`FxRackSource`) instead
   of casting to Analog's shell and engine; the part that needs the shell moved to its own
   file; the table of every effect's settings moved into the engine library, free of JUCE,
@@ -81,7 +81,7 @@ is on that line; the seam has the same shape so the binding carries over when th
 | `d63b386` | D, E | One SOURCE; its type changes in place |
 | `7fbe25d`, `3e5ce88` | F | Warnings, gain reduction on COMPRESSOR, paired pictures, documents; a test's timing |
 | OSP `c21fe80` | second pass | Opt-in MIX knob in the ECHO and SPACE racks; preset folder setter |
-| Analog `40bf866` | second pass | The FX rack's seam; the parameter table in the engine library; preset root |
+| Analog `0f5e01b` | second pass | The FX rack's seam; the parameter table in the engine library; preset root |
 | this one | second pass | Pins moved; effect modules on the table (schema 2); Analog's racks bound; MIX; live traces; own presets |
 
 ## Part A: what opens when a module is double-clicked

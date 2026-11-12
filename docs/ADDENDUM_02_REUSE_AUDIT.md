@@ -1,6 +1,6 @@
 # Addendum 02 — reuse audit: the family's racks and source cards
 
-_2026-11-12. Modular `5c4ee89` + this work. Pins read: OSP `e7a3834`, Analog `1c0cb6d`. Sections 1 to 3 describe those commits; **section 4 is as built after the second pass** (the seam of section 4 exists now: Analog `40bf866`, OSP `c21fe80`)._
+_2026-11-12. Modular `5c4ee89` + this work. Pins read: OSP `e7a3834`, Analog `1c0cb6d`. Sections 1 to 3 describe those commits; **section 4 is as built after the second pass** (the seam of section 4 exists now: Analog `0f5e01b`, OSP `c21fe80`)._
 
 What Modular can show of ANDOR OSP's and ANDOR Analog's racks **as the very same code**, what
 is tied to their instruments, and what the bridge provides. Read from the source; file and line

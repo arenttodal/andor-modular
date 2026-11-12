@@ -1,6 +1,6 @@
 # Status — ANDOR Modular prototype
 
-_Last updated 2026-11-12. Branch `claude/epic-feynman-fsf8ij`. Pins: OSP `c21fe80`, Analog `40bf866` (both on their repository's `claude/epic-feynman-fsf8ij`: `e7a3834` and `1c0cb6d` plus the changes below)._
+_Last updated 2026-11-12. Branch `claude/epic-feynman-fsf8ij`. Pins: OSP `c21fe80`, Analog `0f5e01b` (both on their repository's `claude/epic-feynman-fsf8ij`: `e7a3834` and `1c0cb6d` plus the changes below)._
 
 ## Scoreboard
 
@@ -61,7 +61,7 @@ The owner's four choices from the first report, built. Details and limits:
 
 | What | State | Where | Evidence |
 |---|---|---|---|
-| Upstream seam: Analog's FX rack reads its instrument through `FxRackSource` only; the FX parameter table in the JUCE-free engine library; settable preset root | done | Analog `40bf866` | Analog `[fx][parameters]`, `[analog][fx][rack][seam]`; Analog's and OSP's complete suites (ctest) |
+| Upstream seam: Analog's FX rack reads its instrument through `FxRackSource` only; the FX parameter table in the JUCE-free engine library; settable preset root | done | Analog `0f5e01b` | Analog `[fx][parameters]`, `[analog][fx][rack][seam]`; Analog's and OSP's complete suites (ctest) |
 | Shared racks: opt-in MIX knob (ECHO, SPACE), preset folder setter | done | OSP `c21fe80` | default unchanged (OSP's suites and visual regressions); exercised in Modular `[rack][native][live]` |
 | Effect modules carry the whole library table (schema 2, migration) | done | this commit | kernel `[fx][table]`, `[state][fx]`; old vs new renders bit-identical (STATE_SCHEMA.md) |
 | PHASER, FLANGER, FREQUENCY SHIFTER, COMPRESSOR, FX FILTER, STEREO SPREAD, RETRO, CONVOLUTION open Analog's rack class: pages, modes, presets, meters | done | this commit | product `[rack][native][fx]`; `docs/screenshots/parity/` |

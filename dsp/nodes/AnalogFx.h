@@ -9,7 +9,7 @@
 namespace andor::analog::fx
 {
 class Processor;
-class Impulse;
+struct Impulse;   // (declared as it is defined: MSVC's names tell class and struct apart)
 }
 
 namespace andor::modular
