@@ -74,7 +74,7 @@ jobs:
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMODULAR_BUILD_PLUGIN=ON "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
       - name: Build
         id: build
-        run: cmake --build build --parallel
+        run: cmake --build build --parallel -- -k 0   # (every error in one run, not the first)
       # The downloads follow every successful build, also when a test below fails (the job
       # stays red then): a failing check must be seen, but it must not withhold the build.
       - name: Package the macOS test build

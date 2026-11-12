@@ -1,12 +1,36 @@
 #include "core/Json.h"
 
-#include <charconv>
+#include <locale>
+#include <sstream>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 
 namespace andor::modular::json
 {
+
+namespace
+{
+    // Numbers are read and written in the classic "C" locale whatever the host set (a DAW may
+    // run with a decimal comma), through the streams: <charconv>'s floating-point from_chars /
+    // to_chars are missing from Apple's libc++ at this deployment target. Message thread only.
+    bool parseDouble (const char* text, std::size_t length, double& out)
+    {
+        std::istringstream in (std::string (text, length));
+        in.imbue (std::locale::classic());
+        in >> out;
+        return ! in.fail() && (in.eof() || in.peek() == std::char_traits<char>::eof());
+    }
+
+    std::string formatDouble (double value, int significantDigits)
+    {
+        std::ostringstream o;
+        o.imbue (std::locale::classic());
+        o.precision (significantDigits);
+        o << value;
+        return o.str();
+    }
+}
 
 namespace
 {
@@ -219,8 +243,7 @@ namespace
                 ++pos;
             if (pos == start || pos - start > 64)
                 return fail ("bad number");
-            const auto r = std::from_chars (s.data() + start, s.data() + pos, out);
-            if (r.ec != std::errc() || r.ptr != s.data() + pos || ! std::isfinite (out))
+            if (! parseDouble (s.data() + start, pos - start, out) || ! std::isfinite (out))
                 return fail ("bad number");
             return true;
         }
@@ -383,9 +406,17 @@ namespace
             out += buf;
             return;
         }
-        char buf[64];
-        const auto r = std::to_chars (buf, buf + sizeof buf, d);
-        out.append (buf, r.ptr);
+        // The shortest text that reads back as exactly this value (15, 16 or 17 digits).
+        for (const int digits : { 15, 16, 17 })
+        {
+            const auto text = formatDouble (d, digits);
+            double back = 0.0;
+            if (digits == 17 || (parseDouble (text.data(), text.size(), back) && back == d))
+            {
+                out += text;
+                return;
+            }
+        }
     }
 
     void writeValue (std::string& out, const Value& v, int indent, int level)
