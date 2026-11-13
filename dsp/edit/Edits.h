@@ -105,6 +105,12 @@ std::vector<std::string> resolveOverlaps (Document& doc, const Registry& reg, co
         the processor is moved after the voice mixes and runs ONCE, globally, on the combined
         audio; each chain keeps its own notes ("shared effect runs once").
       - Voice audio into a module that already runs globally: through a VOICE MIX of its own.
+      - Audio that is already one sound for all notes (after a VOICE MIX, or a source that plays
+        once) into a per-voice module. A module that shapes each voice (an AMP ENVELOPE, one
+        with per-voice modulation, or one that only runs per voice) is placed in the voices
+        behind that sound, just before their VOICE MIX, and the sound goes on to where the
+        module led; any other (a FILTER, a DRIVE with nothing per voice attached) is moved to
+        run once, on that sound. A VOICE MIX left with nothing to mix is removed.
 
     Everything else is `connect`, with its reasons when it refuses. One transaction. */
 Result connectSmart (Document& doc, const Registry& reg, const std::string& from, const std::string& fromPort, const std::string& to,

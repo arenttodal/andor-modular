@@ -351,9 +351,297 @@ namespace
         r.message = name + " now runs once, after the voice mixes, on the combined audio: each chain keeps its own notes";
         return r;
     }
+    /** The voice mixes whose sum `node` carries: upstream of it along audio cables, through
+        modules that run once. */
+    std::set<std::string> mixesBehind (const Document& doc, const Registry& reg, const std::string& node)
+    {
+        std::set<std::string> mixes, seen;
+        std::vector<std::string> todo { node };
+        while (! todo.empty())
+        {
+            const auto id = todo.back();
+            todo.pop_back();
+            if (! seen.insert (id).second)
+                continue;
+            const auto* d = descOf (doc, reg, id);
+            if (d != nullptr && d->role == NodeRole::boundary && d->type == "util.voicemix")
+            {
+                mixes.insert (id);
+                continue;
+            }
+            for (const auto& c : doc.connections)
+                if (c.to == id && ! c.toParam)
+                    if (const auto* fd = descOf (doc, reg, c.from); fd != nullptr && fd->role != NodeRole::event)
+                        todo.push_back (c.from);
+        }
+        return mixes;
+    }
+
+    /** Audio that is already one sound for all notes (after a VOICE MIX, or a source that plays
+        once) dragged into a module that runs per voice. Each voice has its own sound, so the
+        cable cannot exist as drawn; what the musician means can:
+
+          - The module shapes each voice (an AMP ENVELOPE, anything with per-voice modulation,
+            or one that only runs per voice): it belongs in the voices, so it is placed at the
+            end of the voice chain behind that sound, just before its VOICE MIX, and the dragged
+            sound goes on to where the module led.
+          - Otherwise (a FILTER, a DRIVE... with nothing per voice attached) it is moved to run
+            once, on that sound, where the cable says.
+
+        A VOICE MIX left with nothing to mix is removed. One transaction; refused with the
+        reason when neither is possible. */
+    Result globalIntoVoice (Document& doc, const Registry& reg, const std::string& from, const std::string& fromPort, const std::string& to, const std::string& toPort)
+    {
+        const Document before = doc;
+        const auto* pd = descOf (doc, reg, to);
+        const auto* fromNode = doc.findNode (from);
+        const std::string name = pd != nullptr ? doc.displayName (reg, *doc.findNode (to)) : to;
+        const std::string source = fromNode != nullptr ? doc.displayName (reg, *fromNode) : from;
+        auto refuse = [&] (const std::string& why) {
+            doc = before;
+            return fail (why);
+        };
+        if (pd == nullptr)
+            return refuse ("a missing module cannot be connected");
+        auto perVoice = [&] (const std::string& id) {
+            const auto* n = doc.findNode (id);
+            const auto* d = n != nullptr ? reg.find (n->type) : nullptr;
+            return d != nullptr && n->domain == Domain::voice && d->role != NodeRole::event && d->role != NodeRole::boundary;
+        };
+        auto isMix = [&] (const std::string& id) {
+            const auto* d = descOf (doc, reg, id);
+            return d != nullptr && d->role == NodeRole::boundary;
+        };
+
+        // The per-voice run the module starts: itself and what it feeds per voice, and the
+        // cables from it into voice mixes.
+        std::set<std::string> run;
+        {
+            std::vector<std::string> todo { to };
+            while (! todo.empty())
+            {
+                const auto id = todo.back();
+                todo.pop_back();
+                if (! perVoice (id) || ! run.insert (id).second)
+                    continue;
+                for (const auto& c : doc.connections)
+                    if (c.from == id && ! c.toParam)
+                        todo.push_back (c.to);
+            }
+        }
+        std::vector<Connection> intoMix, voiceFeeds;
+        bool portTaken = false, articulates = false, allGlobal = true;
+        for (const auto& c : doc.connections)
+        {
+            if (run.count (c.from) > 0 && ! c.toParam && isMix (c.to))
+                intoMix.push_back (c);
+            if (run.count (c.to) > 0 && run.count (c.from) == 0 && perVoice (c.from))
+            {
+                voiceFeeds.push_back (c);
+                portTaken = portTaken || (c.to == to && ! c.toParam && c.toPort == toPort);
+            }
+        }
+        for (const auto& id : run)
+        {
+            const auto* d = descOf (doc, reg, id);
+            articulates = articulates || d->endsVoice;
+            allGlobal = allGlobal && d->supports (Domain::global);
+        }
+        if (portTaken)
+            return refuse (name + " already plays a voice's own sound: " + source + " is one sound for all notes and cannot join it there (mix them after VOICE MIX)");
+
+        // What a tail of the run feeds once its voice mix is out of the way: `sender` goes on to
+        // where each such mix led; a mix left without inputs is removed.
+        std::string onwardName;
+        auto leadOn = [&] (const std::string& sender, const std::string& senderPort, std::vector<std::string>& removed) {
+            std::set<std::string> mixes;
+            for (const auto& c : intoMix)
+            {
+                doc.disconnect (c.id);
+                mixes.insert (c.to);
+            }
+            for (const auto& mix : mixes)
+            {
+                bool stillFed = false;
+                std::vector<Connection> onward;
+                for (const auto& c : doc.connections)
+                {
+                    stillFed = stillFed || (c.to == mix && ! c.toParam);
+                    if (c.from == mix && ! c.toParam)
+                        onward.push_back (c);
+                }
+                for (const auto& c : onward)
+                {
+                    if (! stillFed)
+                        doc.disconnect (c.id);
+                    if (! connect (doc, reg, sender, senderPort, c.to, c.toPort).ok)
+                        return false;
+                    if (const auto* dest = doc.findNode (c.to))
+                        onwardName = doc.displayName (reg, *dest);
+                }
+                if (! stillFed)
+                {
+                    removed.push_back (nameOf (reg, "util.voicemix"));
+                    doc.removeNode (mix);
+                }
+            }
+            return true;
+        };
+        // The run's audio outputs that end it (into a voice mix, or free).
+        auto tails = [&] {
+            std::vector<std::pair<std::string, std::string>> ends;
+            for (const auto& c : intoMix)
+                if (std::find (ends.begin(), ends.end(), std::make_pair (c.from, c.fromPort)) == ends.end())
+                    ends.emplace_back (c.from, c.fromPort);
+            if (ends.empty())
+                for (const auto& id : run)
+                {
+                    const auto* d = descOf (doc, reg, id);
+                    const auto port = firstAudioOut (*d);
+                    bool feedsOn = false;
+                    for (const auto& c : doc.connections)
+                        feedsOn = feedsOn || (c.from == id && ! c.toParam && c.fromPort == port);
+                    if (! port.empty() && ! feedsOn)
+                        ends.emplace_back (id, port);
+                }
+            return ends;
+        };
+
+        const auto mixes = mixesBehind (doc, reg, from);
+        const bool perVoiceWork = articulates || ! allGlobal || ! voiceFeeds.empty();
+        Result r;
+        r.focus = to;
+
+        if (perVoiceWork && mixes.size() == 1)
+        {
+            // Into the voices: at the end of the chain behind `from`, before its VOICE MIX.
+            const std::string mix = *mixes.begin();
+            std::vector<Connection> feeders;
+            for (const auto& c : doc.connections)
+                if (c.to == mix && ! c.toParam && perVoice (c.from))
+                    feeders.push_back (c);
+            if (feeders.empty())
+                return refuse ("nothing plays into " + source + "'s VOICE MIX yet: connect a source to it first");
+            std::set<std::string> chain;
+            for (const auto& f : feeders)
+            {
+                const auto part = voiceChain (doc, reg, f.from);
+                chain.insert (part.begin(), part.end());
+            }
+            if (chain.count (to) > 0)
+                return refuse (name + " is already in the voices that " + source + " carries: this would make a loop");
+            const auto playersA = notePlayers (doc, reg, chain), playersB = notePlayers (doc, reg, voiceChain (doc, reg, to));
+            if (! playersA.empty() && ! playersB.empty() && playersA != playersB)
+                return refuse (name + " is played by another note module than the voices behind " + source + ": it cannot shape them per voice");
+            const auto ends = tails();
+            if (ends.empty())
+                return refuse (name + " has no audio output to carry the voices on");
+            std::vector<std::string> removed;
+            if (! leadOn (from, fromPort, removed))
+                return refuse ("could not route " + source + " on to where " + name + " led");
+            std::string before1;
+            for (const auto& f : feeders)
+            {
+                doc.disconnect (f.id);
+                if (! connect (doc, reg, f.from, f.fromPort, to, toPort).ok)
+                    return refuse (name + " cannot take that voice's sound");
+                before1 = doc.displayName (reg, *doc.findNode (f.from));
+            }
+            for (const auto& [node, port] : ends)
+                if (! connect (doc, reg, node, port, mix, "in").ok)
+                    return refuse (name + " cannot feed the VOICE MIX");
+            if (Validator (reg).validate (doc).hasErrors())
+                return refuse ("that would not make a playable patch");
+            r.ok = true;
+            // (Said so that it reads before the drop, at the pointer, and after it, in the status line.)
+            r.message = name + " shapes each voice, so it goes into the voices: " + before1 + " > " + name + " > VOICE MIX > " + source
+                        + (onwardName.empty() ? std::string() : " > " + onwardName)
+                        + (removed.empty() ? std::string() : ". The other VOICE MIX has nothing left to mix and goes");
+            return r;
+        }
+
+        if (allGlobal && voiceFeeds.empty())
+        {
+            // Out of the voices: once, on the sound `from` carries.
+            for (const auto& id : run)
+                doc.findNode (id)->domain = Domain::global;
+            const auto ends = tails();
+            std::vector<std::string> removed;
+            if (! ends.empty() && ! leadOn (ends.front().first, ends.front().second, removed))
+                return refuse ("could not route " + name + " on to where its VOICE MIX led");
+            // One that follows the keys (an envelope) needs the notes: those of the voices behind
+            // the sound, else the patch's keyboard.
+            for (const auto& id : run)
+            {
+                const auto* d = descOf (doc, reg, id);
+                if (! d->endsVoice || d->inputIndex ("notes") < 0)
+                    continue;
+                bool hasNotes = false;
+                for (const auto& c : doc.connections)
+                    hasNotes = hasNotes || (c.to == id && ! c.toParam && (c.toPort == "notes" || c.toPort == "gate"));
+                if (hasNotes)
+                    continue;
+                std::vector<Connection> players;
+                for (const auto& mix : mixes)
+                    for (const auto& f : doc.connections)
+                        if (f.to == mix && ! f.toParam && perVoice (f.from))
+                        {
+                            const auto chain = voiceChain (doc, reg, f.from);
+                            for (const auto& c : doc.connections)
+                                if (! c.toParam && chain.count (c.to) > 0)
+                                    if (const auto* fd = descOf (doc, reg, c.from); fd != nullptr && fd->role == NodeRole::event)
+                                        players.push_back (c);
+                        }
+                if (players.empty())
+                    for (const auto& n : doc.nodes)
+                        if (n.type == "event.keyboard" && n.group == doc.findNode (id)->group)
+                        {
+                            Connection c;
+                            c.from = n.id;
+                            c.fromPort = "notes";
+                            players.push_back (c);
+                            break;
+                        }
+                if (players.empty())
+                    return refuse (name + " would follow the keys, and the patch has no note module to follow");
+                const auto& player = players.front();
+                if (! connect (doc, reg, player.from, player.fromPort, id, "notes").ok)
+                    return refuse (name + " could not be given the notes it follows");
+            }
+            if (! connect (doc, reg, from, fromPort, to, toPort).ok)
+                return refuse (name + " cannot take " + source + "'s sound");
+            if (Validator (reg).validate (doc).hasErrors())
+                return refuse ("that would not make a playable patch");
+            r.ok = true;
+            r.message = name + " runs once, on " + source + "'s sound, instead of once per voice"
+                        + (removed.empty() ? std::string() : ". Its VOICE MIX has nothing left to mix and goes");
+            return r;
+        }
+
+        if (mixes.size() > 1)
+            return refuse (source + " carries several voice mixes, and " + name + " works per voice: put " + name + " before the VOICE MIX of the voices it should shape");
+        return refuse (source + " is one sound for all notes, and " + name + " works on each voice's own sound"
+                       + (voiceFeeds.empty() ? std::string() : " (a per-voice module moves it)") + ": connect " + name + " before VOICE MIX instead");
+    }
+}
+
+namespace
+{
+    Result connectRouted (Document& doc, const Registry& reg, const std::string& from, const std::string& fromPort, const std::string& to, const std::string& toPort,
+                          bool placePerVoiceModules);
 }
 
 Result connectSmart (Document& doc, const Registry& reg, const std::string& from, const std::string& fromPort, const std::string& to, const std::string& toPort)
+{
+    return connectRouted (doc, reg, from, fromPort, to, toPort, true);
+}
+
+namespace
+{
+/** connectSmart. `placePerVoiceModules` false: a mixed sound into a per-voice module is refused
+    as a plain cable is (a source changing its type decides for itself where it joins). */
+Result connectRouted (Document& doc, const Registry& reg, const std::string& from, const std::string& fromPort, const std::string& to, const std::string& toPort,
+                      bool placePerVoiceModules)
 {
     const auto* a = doc.findNode (from);
     const auto* b = doc.findNode (to);
@@ -377,6 +665,13 @@ Result connectSmart (Document& doc, const Registry& reg, const std::string& from
     }
     if (! check.ok && audio && check.suggestion == "util.voicemix" && a->domain == Domain::voice)
         return throughVoiceMix (doc, reg, from, fromPort, to, toPort);
+    if (placePerVoiceModules && ! check.ok && audio && b->domain == Domain::voice && db->role != NodeRole::boundary && db->role != NodeRole::event
+        && a->domain != Domain::voice)
+    {
+        const int ii = db->inputIndex (toPort);
+        if (ii >= 0 && isAudio (db->inputs[static_cast<std::size_t> (ii)].kind))
+            return globalIntoVoice (doc, reg, from, fromPort, to, toPort);
+    }
     auto r = connect (doc, reg, from, fromPort, to, toPort);
     if (r.ok && audio)
     {
@@ -388,6 +683,7 @@ Result connectSmart (Document& doc, const Registry& reg, const std::string& from
     }
     return r;
 }
+} // namespace
 
 Result modulate (Document& doc, const Registry& reg, const std::string& from, const std::string& fromPort, const std::string& to, const std::string& param, double depth)
 {
@@ -858,7 +1154,7 @@ Result changeSourceType (Document& doc, const Registry& reg, const std::string& 
         for (const auto& lost : lostOutputs)
         {
             // as a dragged cable would be (voice audio into a global module: its own VOICE MIX)
-            const auto smart = connectSmart (doc, reg, node, newOut, lost.to, lost.toPort);
+            const auto smart = connectRouted (doc, reg, node, newOut, lost.to, lost.toPort, false);
             if (smart.ok)
             {
                 routed = smart.message;

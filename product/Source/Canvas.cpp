@@ -1107,6 +1107,11 @@ void Canvas::timerCallback()
         updateNodeTransforms();
     else if (getTimerInterval() < 30)
         startTimerHz (25);
+    if (notice.untilMs > 0.0 && juce::Time::getMillisecondCounterHiRes() >= notice.untilMs)
+    {
+        notice = {};   // (a refused drop's reason has been read)
+        repaint();
+    }
     ++frame;
     if ((frame % 3) == 0)
         for (auto& v : views)
@@ -1215,7 +1220,12 @@ void Canvas::mouseDrag (const juce::MouseEvent& e)
         pan = panAtStart - (e.position - dragStart) / zoom;
         updateNodeTransforms();
     }
-    else if (drag == Drag::rubber || drag == Drag::cable)
+    else if (drag == Drag::cable)
+    {
+        updateCableHint();
+        repaint();
+    }
+    else if (drag == Drag::rubber)
         repaint();
 }
 
@@ -1448,6 +1458,7 @@ void Canvas::nodeDragged (NodeView& v, const juce::MouseEvent& e)
     if (drag == Drag::cable)
     {
         dragNow = getLocalPoint (&v, e.position);
+        updateCableHint();
         repaint();
         return;
     }
@@ -1568,29 +1579,247 @@ void Canvas::portPressed (NodeView& v, int port, const juce::MouseEvent& e)
     cable.kind = p.kind;
     drag = Drag::cable;
     dragNow = getLocalPoint (&v, e.position);
+    hint = {};
+    notice = {};
     repaint();
+}
+
+std::string Canvas::CableTarget::key() const { return view != nullptr ? view->id() + "#" + std::to_string (port) : std::string(); }
+
+bool Canvas::couldTake (const NodeView::Port& p) const
+{
+    if (p.input != cable.fromOutput)
+        return false;
+    const auto a = cable.kind, b = p.kind;
+    return (isAudio (a) && isAudio (b)) || (a == PortKind::notes && b == PortKind::notes)
+           || (a != PortKind::notes && b != PortKind::notes && ! isAudio (cable.fromOutput ? b : a) && ! isAudio (cable.fromOutput ? a : b))
+           || (cable.fromOutput && ! isAudio (a) && a != PortKind::notes && isAudio (b));
+}
+
+Canvas::CableTarget Canvas::cableTargetAt (juce::Point<float> at) const
+{
+    // The nearest socket of the other direction within reach: twice the socket's own size, so
+    // a cable need not be dropped on the dot exactly.
+    CableTarget best;
+    float nearest = 20.0f;
+    for (const auto& v : views)
+    {
+        const auto local = v->getLocalPoint (this, at);
+        for (std::size_t i = 0; i < v->ports().size(); ++i)
+        {
+            const auto& p = v->ports()[i];
+            if (p.input != cable.fromOutput || (! v->isGroup() && v->id() == cable.node))
+                continue;
+            const float d = p.at.getDistanceFrom (local);
+            if (d < nearest)
+            {
+                nearest = d;
+                best = { v.get(), static_cast<int> (i) };
+            }
+        }
+    }
+    // A control cable held over a knob means that knob (its modulation), unless the pointer is
+    // on a socket itself.
+    if (cable.fromOutput && ! isAudio (cable.kind) && cable.kind != PortKind::notes && nearest >= 9.0f)
+        if (auto* c = const_cast<Canvas*> (this)->getComponentAt (at.toInt()))
+            for (auto* comp = c; comp != nullptr && comp != this; comp = comp->getParentComponent())
+                if (dynamic_cast<ParamKnob*> (comp) != nullptr)
+                    return {};
+    if (best.view != nullptr)
+        return best;
+    for (const auto& v : views)
+        if (v->getBoundsInParent().toFloat().contains (at) && ! v->isGroup() && v->id() != cable.node)
+            return { v.get(), -1 };
+    return {};
+}
+
+edit::Result Canvas::applyCable (Document& doc, const CableTarget& target) const
+{
+    edit::Result none;
+    if (target.view == nullptr)
+        return none;
+    auto& v = *target.view;
+    if (target.port >= 0)
+    {
+        const auto& p = v.ports()[static_cast<std::size_t> (target.port)];
+        const auto other = v.isGroup() ? p.innerNode : v.id();
+        const auto from = cable.fromOutput ? cable.node : other, fromPort = cable.fromOutput ? cable.port : p.id;
+        const auto to = cable.fromOutput ? other : cable.node, toPort = cable.fromOutput ? p.id : cable.port;
+        const auto* toNode = doc.findNode (to);
+        const auto* toDesc = toNode != nullptr ? model.registry().find (toNode->type) : nullptr;
+        const bool isParam = v.isGroup() && toDesc != nullptr && toDesc->inputIndex (toPort) < 0;
+        return isParam ? edit::modulate (doc, model.registry(), from, fromPort, to, toPort, 0.5) : edit::connectSmart (doc, model.registry(), from, fromPort, to, toPort);
+    }
+    // A module's body: its first port that works.
+    const auto* n = doc.findNode (v.id());
+    const auto* d = n != nullptr ? model.registry().find (n->type) : nullptr;
+    if (d == nullptr)
+        return none;
+    edit::Result last;
+    last.message = "no compatible port on " + d->name;
+    for (const auto& p : cable.fromOutput ? d->inputs : d->outputs)
+    {
+        auto r = cable.fromOutput ? edit::connectSmart (doc, model.registry(), cable.node, cable.port, v.id(), p.id)
+                                  : edit::connectSmart (doc, model.registry(), v.id(), p.id, cable.node, cable.port);
+        if (r.ok)
+            return r;
+        last = r;
+    }
+    return last;
+}
+
+void Canvas::updateCableHint()
+{
+    const auto target = cableTargetAt (dragNow);
+    const auto key = target.key();
+    if (key == hint.key)
+        return;
+    hint = {};
+    hint.key = key;
+    if (target.view == nullptr)
+        return;
+    // What the drop would do, tried on a copy of the patch (the same edit the drop performs).
+    Document trial = model.document();
+    const auto r = applyCable (trial, target);
+    hint.ok = r.ok;
+    juce::String text (r.message);
+    if (r.ok && (text == "connected" || text.startsWith ("modulating")))
+    {
+        const auto* n = model.document().findNode (target.view->id());
+        const auto name = target.view->isGroup() ? target.view->getTitle() : juce::String (n != nullptr ? model.document().displayName (model.registry(), *n) : std::string());
+        text = (cable.fromOutput ? "Into " : "From ") + name;
+        if (target.port >= 0)
+            text << " " << juce::String (target.view->ports()[static_cast<std::size_t> (target.port)].name);
+    }
+    hint.text = text.substring (0, 1).toUpperCase() + text.substring (1);
+    if (target.port >= 0)
+    {
+        hint.onPort = true;
+        hint.socket = getLocalPoint (target.view, target.view->ports()[static_cast<std::size_t> (target.port)].at);
+    }
+}
+
+Canvas::CableNote Canvas::cableNote() const
+{
+    if (drag == Drag::cable && ! hint.key.empty())
+        return { hint.text, hint.ok };
+    if (juce::Time::getMillisecondCounterHiRes() < notice.untilMs)
+        return { notice.text, false };
+    return {};
+}
+
+bool Canvas::beginCable (const std::string& node, const std::string& port, bool fromOutput)
+{
+    auto* v = viewFor (node);
+    if (v == nullptr)
+        return false;
+    for (std::size_t i = 0; i < v->ports().size(); ++i)
+    {
+        const auto& p = v->ports()[i];
+        if (p.id == port && p.input == ! fromOutput && (! v->isGroup() || p.innerNode == node))
+        {
+            cable.node = node;
+            cable.port = port;
+            cable.fromOutput = fromOutput;
+            cable.kind = p.kind;
+            drag = Drag::cable;
+            dragStart = dragNow = getLocalPoint (v, p.at);
+            hint = {};
+            notice = {};
+            repaint();
+            return true;
+        }
+    }
+    return false;
+}
+
+void Canvas::moveCable (juce::Point<float> at)
+{
+    if (drag != Drag::cable)
+        return;
+    dragNow = at;
+    updateCableHint();
+    repaint();
+}
+
+void Canvas::dropCable (juce::Point<float> at)
+{
+    if (drag != Drag::cable)
+        return;
+    finishCable (at);
+    drag = Drag::none;
+    hint = {};
+    repaint();
+}
+
+void Canvas::paintOverChildren (juce::Graphics& g)
+{
+    const bool refused = juce::Time::getMillisecondCounterHiRes() < notice.untilMs;
+    if (drag != Drag::cable && ! refused)
+        return;
+    auto bubble = [&] (const juce::String& text, juce::Point<float> at, juce::Colour ink) {
+        if (text.isEmpty())
+            return;
+        const auto font = fonts::make (11.5f, Weight::medium, 0.01f);
+        juce::AttributedString words;
+        words.append (text, font, ink);
+        words.setWordWrap (juce::AttributedString::byWord);
+        juce::TextLayout layout;
+        layout.createLayout (words, 330.0f);
+        const float w = layout.getWidth() + 20.0f, h = layout.getHeight() + 12.0f;
+        auto box = juce::Rectangle<float> (at.x + 16.0f, at.y + 18.0f, w, h);
+        const auto room = getLocalBounds().toFloat().reduced (6.0f);
+        if (box.getRight() > room.getRight())
+            box.setX (at.x - 16.0f - w);
+        if (box.getBottom() > room.getBottom())
+            box.setY (at.y - 14.0f - h);
+        box = box.constrainedWithin (room);
+        g.setColour (juce::Colours::black.withAlpha (0.16f));
+        g.fillRoundedRectangle (box.translated (0.0f, 2.0f), 6.0f);
+        g.setColour (board::terminalFace);
+        g.fillRoundedRectangle (box, 6.0f);
+        g.setColour (ink.withAlpha (0.55f));
+        g.drawRoundedRectangle (box.reduced (0.5f), 6.0f, 1.0f);
+        layout.draw (g, box.reduced (10.0f, 6.0f));
+    };
+    if (drag == Drag::cable)
+    {
+        // Every socket the cable could go to wears a ring; the one it would land on, a full one.
+        for (const auto& v : views)
+            for (const auto& p : v->ports())
+            {
+                if (! couldTake (p) || (! v->isGroup() && v->id() == cable.node))
+                    continue;
+                const auto c = getLocalPoint (v.get(), p.at);
+                const float r = getLocalPoint (v.get(), p.at.translated (9.5f, 0.0f)).x - c.x;
+                g.setColour (colour::accent.withAlpha (0.5f));
+                g.drawEllipse (juce::Rectangle<float> (2.0f * r, 2.0f * r).withCentre (c), 1.3f);
+            }
+        if (! hint.key.empty())
+        {
+            const auto ink = hint.ok ? colour::accent : board::refusal;
+            if (hint.onPort)
+            {
+                g.setColour (ink.withAlpha (0.28f));
+                g.fillEllipse (juce::Rectangle<float> (26.0f * zoom, 26.0f * zoom).withCentre (hint.socket));
+                g.setColour (ink);
+                g.drawEllipse (juce::Rectangle<float> (26.0f * zoom, 26.0f * zoom).withCentre (hint.socket), 1.6f);
+            }
+            bubble (hint.text, dragNow, hint.ok ? board::ink : board::refusal);
+        }
+    }
+    else if (refused)
+        bubble (notice.text, notice.at, board::refusal);
 }
 
 void Canvas::finishCable (juce::Point<float> at)
 {
-    // A port under the release point?
-    for (auto& v : views)
+    // A port within reach of the release point (not the knob or the body under it)?
+    if (const auto target = cableTargetAt (at); target.view != nullptr && target.port >= 0)
     {
-        const auto local = v->getLocalPoint (this, at);
-        const int pi = v->portAt (local);
-        if (pi < 0)
-            continue;
-        const auto& p = v->ports()[static_cast<std::size_t> (pi)];
-        const auto other = v->isGroup() ? p.innerNode : v->id();
-        if (p.input == ! cable.fromOutput)
-        {
-            const auto from = cable.fromOutput ? cable.node : other, fromPort = cable.fromOutput ? cable.port : p.id;
-            const auto to = cable.fromOutput ? other : cable.node, toPort = cable.fromOutput ? p.id : cable.port;
-            const bool isParam = v->isGroup() && model.registry().find (model.document().findNode (to)->type)->inputIndex (toPort) < 0;
-            model.perform ("connect", [&] (Document& d) {
-                return isParam ? edit::modulate (d, model.registry(), from, fromPort, to, toPort, 0.5) : edit::connectSmart (d, model.registry(), from, fromPort, to, toPort);
-            });
-        }
+        const auto r = model.perform ("connect", [&] (Document& d) { return applyCable (d, target); });
+        if (! r.ok)
+            notice = { juce::String (r.message).substring (0, 1).toUpperCase() + juce::String (r.message).substring (1), at, juce::Time::getMillisecondCounterHiRes() + 4500.0 };
         return;
     }
     // A knob under it: modulation (from a control output).
@@ -1604,29 +1833,14 @@ void Canvas::finishCable (juce::Point<float> at)
                     model.message ("only a control signal can modulate a knob", false, true);
                 return;
             }
-    // A module's body: its first compatible port.
-    for (auto& v : views)
-        if (v->getBoundsInParent().toFloat().contains (at) && ! v->isGroup() && v->id() != cable.node)
-        {
-            const auto* n = model.document().findNode (v->id());
-            const auto* d = model.registry().find (n->type);
-            if (d == nullptr)
-                return;
-            model.perform ("connect", [&] (Document& doc) {
-                edit::Result last;
-                last.message = "no compatible port on " + d->name;
-                for (const auto& p : cable.fromOutput ? d->inputs : d->outputs)
-                {
-                    auto r = cable.fromOutput ? edit::connectSmart (doc, model.registry(), cable.node, cable.port, v->id(), p.id)
-                                              : edit::connectSmart (doc, model.registry(), v->id(), p.id, cable.node, cable.port);
-                    if (r.ok)
-                        return r;
-                    last = r;
-                }
-                return last;
-            });
-            return;
-        }
+    // A module's body: its first port that works.
+    if (const auto target = cableTargetAt (at); target.view != nullptr)
+    {
+        const auto r = model.perform ("connect", [&] (Document& d) { return applyCable (d, target); });
+        if (! r.ok)
+            notice = { juce::String (r.message).substring (0, 1).toUpperCase() + juce::String (r.message).substring (1), at, juce::Time::getMillisecondCounterHiRes() + 4500.0 };
+        return;
+    }
     // Empty canvas: Quick Add, compatible modules only.
     if (onQuickAdd && at.getDistanceFrom (dragStart) > 20.0f)
     {

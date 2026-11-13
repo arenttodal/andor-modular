@@ -18,7 +18,7 @@ _Last updated 2026-11-12. Branch `claude/epic-feynman-fsf8ij`. Pins: OSP `c21fe8
 | 9 Instrument builder & presets | done | 282038e, c110afa | groups → .andormodule → import, group controls ← macros, PLAY panel, 12 patches + 6 modules | owner listening review |
 | 10 Scenes & EVOLVE | done | 282038e, c110afa | 4 scenes + fader (host parameter), deterministic EVOLVE with locks, A/B, one undo | EVOLVE taste curve (owner) |
 | 11 External instrument | partly: host built, surrogate-tested | c110afa | ExternalHost (VST3/AU from file, state in patch, window, missing fallback); ExternalTests: one instance, overlaps in order, GLOBAL MORPH, absence, edits | **live Kontakt not available here** (P1) |
-| 12 QA, performance, docs | done for this environment | this commit | 68 kernel + 20 product test cases green; 240-configuration benchmark, 0 allocations; docs set; demo renders script | reference Mac numbers, DAW validation (P1) |
+| 12 QA, performance, docs | done for this environment | this commit | 70 kernel + 21 product test cases green; 240-configuration benchmark, 0 allocations; docs set; demo renders script | reference Mac numbers, DAW validation (P1) |
 
 ## Patch workflow, audio reliability, shared routing and material pass (2026-11-12)
 
@@ -71,6 +71,18 @@ The owner's four choices from the first report, built. Details and limits:
 | EQUALIZER and UTILITY of Analog's library as modules (`fx.eq`, `fx.utility`), every parameter the table's, Analog's racks | done | this commit | kernel `[fx][table]`, `[realtime][fx]`; product `[rack][native][fx]`; `parity/eq.png`, `parity/utility.png` |
 | Pull requests for the upstream branches | open | arenttodal/OSP#15, arenttodal/analog#10 | their CI green (Analog: engine, macOS, Windows) |
 | Hands-on (Mac, DAW, listening) | **open** | — | the report's checks |
+
+## Connecting modules (2026-11-13, from the owner's report)
+
+"Still struggling to connect the nodes, such as the SATELLITE to AMP ENVELOPE." Cause: a mixed
+sound (after VOICE MIX) cannot enter a per-voice module, and the refusal said "stereo into a
+mono input". Now (D-41, D-42): that drop is routed (the envelope goes into the voices before
+their VOICE MIX; the sound goes on to where the envelope led), the reason given when a cable
+cannot be is the real one, and while a cable is dragged the board shows which sockets can
+take it and says at the pointer what the drop will do. Kernel
+`[routing-domains][global-into-voice]`, product `[ui][cable]`;
+`docs/screenshots/patch-cable-drag-1448.png`, `patch-cable-refused-1448.png`. Kernel 70,
+product 21 cases. Not tried by hand.
 
 ## What works (demonstrable now)
 - Double-click any module: its ANDOR device opens along the board's foot (ECHO, SPACE and

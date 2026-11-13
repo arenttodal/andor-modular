@@ -754,6 +754,220 @@ TEST_CASE ("Layout: the worst pile (32 modules on one spot) settles well inside 
 //==============================================================================
 // Listening demos of this pass (hidden: run with "[.demos]" and MODULAR_DEMO_DIR set; see
 // tools/render-demos.sh). Deterministic: the same build writes the same files.
+TEST_CASE ("A mixed sound dragged into AMP ENVELOPE: the envelope is placed in the voices, and the sound goes on", "[routing][routing-domains][global-into-voice]")
+{
+    // The patch from the owner's screen: KEYBOARD -> OSC -> FILTER (an ENVELOPE on its cutoff)
+    // -> VOICE MIX -> SATELLITE, and apart from it AMP ENVELOPE -> VOICE MIX -> SPACE -> OUTPUT.
+    // They drag SATELLITE's OUT onto AMP ENVELOPE's IN.
+    Document d;
+    auto add = [&] (const char* type, float x, float y, Domain domain) {
+        auto* n = d.addNode (reg(), type, x, y);
+        REQUIRE (n != nullptr);
+        n->domain = domain;
+        return n->id;
+    };
+    const auto keys = add ("event.keyboard", 0, 0, Domain::event);
+    const auto osc = add ("osc.analog", 240, 0, Domain::voice);
+    const auto env = add ("ctl.env", 240, 280, Domain::voice);
+    const auto filter = add ("proc.filter", 500, 560, Domain::voice);
+    const auto mixA = add ("util.voicemix", 600, 320, Domain::global);
+    const auto satellite = add ("spatial.satellite", 700, 0, Domain::global);
+    const auto amp = add ("proc.vca", 980, -40, Domain::voice);
+    const auto mixB = add ("util.voicemix", 1250, 140, Domain::global);
+    const auto space = add ("fx.space", 1530, 150, Domain::global);
+    const auto output = add ("util.output", 1800, 150, Domain::global);
+    REQUIRE (edit::connect (d, reg(), keys, "notes", osc, "notes").ok);
+    REQUIRE (edit::connect (d, reg(), osc, "out", filter, "in").ok);
+    REQUIRE (edit::connect (d, reg(), env, "out", filter, "env").ok);
+    REQUIRE (edit::connect (d, reg(), filter, "out", mixA, "in").ok);
+    REQUIRE (edit::connect (d, reg(), mixA, "out", satellite, "in").ok);
+    REQUIRE (edit::connect (d, reg(), amp, "out", mixB, "in").ok);
+    REQUIRE (edit::connect (d, reg(), mixB, "out", space, "in").ok);
+    REQUIRE (edit::connect (d, reg(), space, "out", output, "in").ok);
+    edit::setParam (d, reg(), amp, "release", 0.6);
+    edit::setParam (d, reg(), space, "mix", 0.0);
+    edit::setParam (d, reg(), satellite, "depth", 0.0);
+
+    // The plain cable is impossible, and says why.
+    const auto plain = edit::connect (d, reg(), satellite, "out", amp, "in");
+    CHECK_FALSE (plain.ok);
+    INFO (plain.message);
+    CHECK (plain.message.find ("one sound for all notes") != std::string::npos);   // (not "stereo into a mono input")
+
+    const Document before = d;
+    const auto r = edit::connectSmart (d, reg(), satellite, "out", amp, "in");
+    INFO (r.message);
+    REQUIRE (r.ok);
+    CHECK (r.focus == amp);
+    CHECK (r.message.find ("AMP ENVELOPE") != std::string::npos);
+    CHECK (r.message.find ("VOICE MIX") != std::string::npos);
+    CHECK_FALSE (Validator (reg()).validate (d).hasErrors());
+    auto cabled = [&] (const std::string& from, const std::string& to, const char* port = "in") {
+        for (const auto& c : d.connections)
+            if (c.from == from && c.to == to && c.toPort == port && ! c.toParam)
+                return true;
+        return false;
+    };
+    // FILTER > AMP ENVELOPE > VOICE MIX > SATELLITE > SPACE > OUTPUT; the envelope still per voice
+    CHECK (cabled (filter, amp));
+    CHECK (cabled (amp, mixA));
+    CHECK (cabled (mixA, satellite));
+    CHECK (cabled (satellite, space));
+    CHECK (cabled (space, output));
+    CHECK_FALSE (cabled (filter, mixA));
+    CHECK (d.findNode (amp)->domain == Domain::voice);
+    CHECK (d.findNode (filter)->domain == Domain::voice);
+    CHECK (cabled (env, filter, "env"));                  // (what moved the filter still does)
+    CHECK (d.findNode (mixB) == nullptr);                 // (nothing left for it to mix)
+    CHECK (d.nodes.size() == before.nodes.size() - 1);
+
+    // It plays: a note sounds, rings through the envelope's release after the key, then ends.
+    OfflineRenderer renderer;
+    const auto out = test::render (renderer, d, { { 57, 0.0, 0.5 } }, 2.5);
+    CHECK (test::rms (out.left, 4800, 24000) > 0.01);
+    const double ringing = test::rms (out.left, 26400, 33600), ended = test::rms (out.left, 100000, 120000);
+    INFO ("0.05 to 0.2 s after the key: " << ringing << "; long after: " << ended);
+    CHECK (ringing > 0.002);                              // (the release is heard: the envelope holds the voice)
+    CHECK (ended < 1.0e-4);
+    REQUIRE (out.graph != nullptr);
+    CHECK (out.graph->lanes.size() == 1);
+    // Before the edit the same keys gave no sound at OUTPUT at all (SATELLITE led nowhere).
+    OfflineRenderer was;
+    CHECK (test::rms (test::render (was, before, { { 57, 0.0, 0.5 } }, 1.0).left) < 1.0e-6);
+
+    // One step back is the patch as it was (the caller's transaction: the document is restored whole).
+    Document again = before;
+    REQUIRE (edit::connectSmart (again, reg(), satellite, "out", amp, "in").ok);
+    CHECK (saveToString (again) == saveToString (d));
+
+    // The second VOICE MIX stays when something else still plays into it.
+    {
+        Document two = before;
+        auto* other = two.addNode (reg(), "osc.analog", 240, 700);
+        other->domain = Domain::voice;
+        const auto otherId = other->id;
+        REQUIRE (edit::connect (two, reg(), keys, "notes", otherId, "notes").ok);
+        REQUIRE (edit::connect (two, reg(), otherId, "out", mixB, "in").ok);
+        const auto kept = edit::connectSmart (two, reg(), satellite, "out", amp, "in");
+        INFO (kept.message);
+        REQUIRE (kept.ok);
+        CHECK (two.findNode (mixB) != nullptr);
+        CHECK_FALSE (Validator (reg()).validate (two).hasErrors());
+        bool onward = false, stillMixed = false;
+        for (const auto& c : two.connections)
+        {
+            onward = onward || (c.from == satellite && c.to == space);
+            stillMixed = stillMixed || (c.from == mixB && c.to == space);
+        }
+        CHECK (onward);
+        CHECK (stillMixed);
+    }
+    // An envelope whose own input is already a voice's sound is not rewired: refused, with the reason.
+    {
+        Document taken = before;
+        auto* other = taken.addNode (reg(), "osc.analog", 240, 700);
+        other->domain = Domain::voice;
+        const auto otherId = other->id;
+        REQUIRE (edit::connect (taken, reg(), otherId, "out", amp, "in").ok);
+        const auto text = saveToString (taken);
+        const auto refused = edit::connectSmart (taken, reg(), satellite, "out", amp, "in");
+        CHECK_FALSE (refused.ok);
+        CHECK (refused.message.find ("one sound for all notes") != std::string::npos);
+        CHECK (saveToString (taken) == text);
+    }
+}
+
+TEST_CASE ("A mixed sound dragged into a per-voice FILTER or DRIVE: it runs once, on that sound", "[routing][routing-domains][global-into-voice]")
+{
+    // KEYBOARD -> OSC -> AMP ENV -> VOICE MIX -> OUTPUT, and a FILTER standing apart (per
+    // voice, as a new one is). VOICE MIX's OUT is dragged onto the FILTER's IN.
+    std::string osc;
+    Document d = steadyPatch (&osc);
+    const auto mix = nodeOfType (d, "util.voicemix");
+    auto* f = d.addNode (reg(), "proc.filter", 700, 300);
+    f->domain = Domain::voice;
+    const auto filter = f->id;
+    edit::setParam (d, reg(), filter, "cutoff", 300.0);
+    edit::setParam (d, reg(), filter, "envAmount", 0.0);
+    OfflineRenderer open;
+    const double bright = test::toneLevel (test::render (open, d, { { 81, 0.0, 0.8 } }, 0.8).left, 48000.0, 880.0, 12000, 9600);
+
+    const auto r = edit::connectSmart (d, reg(), mix, "out", filter, "in");
+    INFO (r.message);
+    REQUIRE (r.ok);
+    CHECK (r.message.find ("runs once") != std::string::npos);
+    CHECK (d.findNode (filter)->domain == Domain::global);
+    CHECK_FALSE (Validator (reg()).validate (d).hasErrors());
+    // the filter has no output cable yet: routed on by hand, it is heard
+    REQUIRE (edit::connectSmart (d, reg(), filter, "out", nodeOfType (d, "util.output"), "in").ok);
+    for (const auto& c : std::vector<Connection> (d.connections))
+        if (c.from == mix && c.to == nodeOfType (d, "util.output"))
+            d.disconnect (c.id);
+    OfflineRenderer closed;
+    const double dark = test::toneLevel (test::render (closed, d, { { 81, 0.0, 0.8 } }, 0.8).left, 48000.0, 880.0, 12000, 9600);
+    INFO ("880 Hz before " << bright << ", through the filter at 300 Hz " << dark);
+    CHECK (dark < 0.5 * bright);
+
+    // A FILTER that a per-voice ENVELOPE moves cannot leave the voices: it is placed in them instead.
+    {
+        std::string o;
+        Document v = steadyPatch (&o);
+        const auto m = nodeOfType (v, "util.voicemix");
+        const auto vca = nodeOfType (v, "proc.vca");
+        auto* nf = v.addNode (reg(), "proc.filter", 700, 300);
+        nf->domain = Domain::voice;
+        const auto fid = nf->id;
+        auto* ne = v.addNode (reg(), "ctl.env", 500, 500);
+        ne->domain = Domain::voice;
+        const auto eid = ne->id;
+        REQUIRE (edit::connect (v, reg(), eid, "out", fid, "env").ok);
+        const auto placed = edit::connectSmart (v, reg(), m, "out", fid, "in");
+        INFO (placed.message);
+        REQUIRE (placed.ok);
+        CHECK (v.findNode (fid)->domain == Domain::voice);
+        bool in = false, out = false;
+        for (const auto& c : v.connections)
+        {
+            in = in || (c.from == vca && c.to == fid);
+            out = out || (c.from == fid && c.to == m);
+        }
+        CHECK (in);
+        CHECK (out);
+        CHECK_FALSE (Validator (reg()).validate (v).hasErrors());
+    }
+    // An AMP ENVELOPE after a source that plays once for all notes (no voices behind it):
+    // one envelope on that sound, following the keys.
+    {
+        Document g;
+        // (ids taken at once: adding a module may move the others in memory)
+        const auto kid = g.addNode (reg(), "event.keyboard", 0, 0)->id;
+        auto* noise = g.addNode (reg(), "src.noise", 200, 0);
+        noise->domain = Domain::global;
+        const auto nid = noise->id;
+        auto* a = g.addNode (reg(), "proc.vca", 500, 0);
+        a->domain = Domain::voice;
+        const auto aid = a->id;
+        const auto oid = g.addNode (reg(), "util.output", 800, 0)->id;
+        if (reg().find ("src.noise")->supports (Domain::global))
+        {
+            const auto once = edit::connectSmart (g, reg(), nid, "out", aid, "in");
+            INFO (once.message);
+            REQUIRE (once.ok);
+            CHECK (g.findNode (aid)->domain == Domain::global);
+            bool follows = false;
+            for (const auto& c : g.connections)
+                follows = follows || (c.from == kid && c.to == aid && c.toPort == "notes");
+            CHECK (follows);
+            REQUIRE (edit::connectSmart (g, reg(), aid, "out", oid, "in").ok);
+            CHECK_FALSE (Validator (reg()).validate (g).hasErrors());
+            OfflineRenderer rr;
+            const auto played = test::render (rr, g, { { 60, 0.2, 0.3 } }, 1.5);
+            CHECK (test::rms (played.left, 0, 7200) < 1.0e-4);          // (silent until a key)
+            CHECK (test::rms (played.left, 12000, 20000) > 0.005);
+        }
+    }
+}
+
 TEST_CASE ("Listening demos: shared filters, an unpitched recording, octave and mute / solo under held notes", "[.demos]")
 {
     const char* dir = std::getenv ("MODULAR_DEMO_DIR");

@@ -51,6 +51,7 @@ namespace board
     const juce::Colour wire { 0xffa3978a }, wireControl { 0xff9fb3a8 }, arrow { 0xffa59a8e }, sage { 0xff8caaa0 }, green { 0xff658276 };
     const juce::Colour terminalFace { 0xfffaf6ee }, terminalEdge { 0xffbfb4a6 }, terminalInk { 0xff5d5750 };
     const juce::Colour bone { 0xfff5eddf }, carbon { 0xff241d17 };   ///< the enamels' two inks
+    const juce::Colour refusal { 0xffb5482f };   ///< "that cannot be done" (the status line's own red)
 }
 
 /** Reference pixels: ANDOR's 1448 x 1086 canvas (design::layout), scaled as one piece. */

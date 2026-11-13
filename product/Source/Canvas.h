@@ -155,6 +155,22 @@ public:
     /** The module a chosen type should follow (for Quick Add with a selection). */
     std::string primarySelection() const;
 
+    /** A cable being dragged, for tests and for anything that drives the board without a mouse:
+        from a port (false: no such port), over a point of the canvas, dropped there. */
+    bool beginCable (const std::string& node, const std::string& port, bool fromOutput);
+    void moveCable (juce::Point<float> at);
+    void dropCable (juce::Point<float> at);
+    /** Where a port is drawn, in the canvas (false: not on the board). */
+    bool portCentre (const std::string& node, const std::string& port, bool input, juce::Point<float>& at) const { return endPoint (node, port, input, at); }
+    /** The note at the pointer while a cable is dragged over something that could take it, or
+        after a drop that was refused: what the drop does, or why it cannot. */
+    struct CableNote
+    {
+        juce::String text;
+        bool ok = false;
+    };
+    CableNote cableNote() const;
+
 private:
     void timerCallback() override;
     void paintCables (juce::Graphics&);
@@ -167,6 +183,22 @@ private:
     bool endPoint (const std::string& node, const std::string& port, bool input, juce::Point<float>& out) const;
     std::string visibleOwner (const std::string& node) const;
     void finishCable (juce::Point<float> at);
+    void paintOverChildren (juce::Graphics&) override;
+    /** Where a dragged cable would land at `at`: the nearest port of the other direction
+        within reach (a little generous: the sockets are small), else the module under the
+        pointer (its first port that works). */
+    struct CableTarget
+    {
+        NodeView* view = nullptr;
+        int port = -1;          ///< -1: the module's body
+        std::string key() const;
+    };
+    CableTarget cableTargetAt (juce::Point<float> at) const;
+    /** The edit a drop on `target` is (on `doc`: the patch, or a copy of it to see what would
+        happen). */
+    edit::Result applyCable (Document& doc, const CableTarget& target) const;
+    void updateCableHint();
+    bool couldTake (const NodeView::Port& port) const;
     void breadcrumbClick (juce::Point<float> p);
 
     Session& model;
@@ -187,6 +219,20 @@ private:
         PortKind kind = PortKind::audioMono;
     } cable;
     std::string hoverCable;
+    struct CableHint
+    {
+        std::string key;        ///< the target it describes ("": none under the pointer)
+        juce::String text;
+        bool ok = false;
+        juce::Point<float> socket;   ///< where the target's port is (a port target)
+        bool onPort = false;
+    } hint;
+    struct Notice               ///< a refused drop's reason, where it was dropped, for a moment
+    {
+        juce::String text;
+        juce::Point<float> at;
+        double untilMs = 0.0;
+    } notice;
     juce::Rectangle<float> breadcrumbArea, boardArea;
     std::vector<juce::Point<float>> activity;   ///< the beads on the hot wires, this frame
     int frame = 0;

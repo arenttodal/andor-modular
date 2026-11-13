@@ -59,7 +59,8 @@ TEST_CASE ("Effect modules: every setting of the library's table is a parameter;
             CHECK_FALSE (d->params[i].detail);
         }
         // Every setting but ON has one parameter; no parameter carries two.
-        const auto& links = analogFxLinks (type);
+        const std::string typeName (type);
+        const auto& links = analogFxLinks (typeName);
         std::set<std::string> settings, params;
         for (const auto& l : links)
         {
@@ -114,7 +115,8 @@ TEST_CASE ("Effect modules: the new settings at their defaults leave the sound a
         afx::Type fx {};
         REQUIRE (analogFxType (type, fx));
         afx::Settings plain, written;
-        for (const auto& l : analogFxLinks (type))
+        const std::string typeName (type);
+        for (const auto& l : analogFxLinks (typeName))
         {
             const auto* p = paramOf (*d, l.param);
             const auto& specs = afx::parameterSpecs (fx);

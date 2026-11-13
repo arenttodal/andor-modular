@@ -190,6 +190,13 @@ ConnectionCheck Validator::checkConnection (const Document& doc, const std::stri
         r.suggestion = "ctl.follower";
         return r;
     }
+    // (Said before "stereo into mono": a mixed sound is stereo and a voice's input mono, but the
+    // reason the cable cannot exist is where the two run, and SPLIT would not help.)
+    if (isAudio (out.kind) && isAudio (in.kind) && fromDomain == Domain::global && toDomain == Domain::voice)
+    {
+        r.reason = da->name + " is one sound for all notes; " + db->name + " works on each voice's own sound, before VOICE MIX";
+        return r;
+    }
     if (out.kind == PortKind::audioStereo && in.kind == PortKind::audioMono)
     {
         r.reason = "stereo into a mono input: split or sum it first";
@@ -210,7 +217,7 @@ ConnectionCheck Validator::checkConnection (const Document& doc, const std::stri
         {
             if (isAudio (out.kind))
             {
-                r.reason = "global audio cannot enter a voice (each voice has its own sound)";
+                r.reason = da->name + " is one sound for all notes; " + db->name + " works on each voice's own sound, before VOICE MIX";
                 return r;
             }
             r.implicitBroadcast = true;

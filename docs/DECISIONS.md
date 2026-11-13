@@ -256,3 +256,21 @@ tile (LOW / LOW MID / HIGH MID / HIGH; GAIN / BALANCE / WIDTH). Their racks are 
 TONE EQ (`proc.tone`, per voice or global, three knobs and a tilt) stays: it is a different,
 smaller thing and old patches use it.
 
+## D-41 A mixed sound dropped on a per-voice module is routed, not refused
+The owner could not connect SATELLITE to AMP ENVELOPE: the first runs once on the mixed
+sound, the second per voice, and the cable was refused (with the wrong reason: "stereo into
+a mono input"). The distinction is the engine's, not the musician's, so the drop now does
+what it means. A module that shapes each voice (AMP ENVELOPE, anything with per-voice
+modulation, per-voice-only modules) is placed in the voices behind that sound, before their
+VOICE MIX, and the sound goes on to where the module led; a plain FILTER or DRIVE is moved to
+run once. AMP ENVELOPE is not made global behind a VOICE MIX: without it in the voices they
+end at key-up and its release would shape silence. Refusals that remain say why in terms of
+"each voice's own sound" and "one sound for all notes". SOURCE's type change keeps its own
+routing (it does not use this path).
+
+## D-42 The board answers while the cable is in the hand
+Sockets that could take the dragged cable wear a ring; the target is found within 20 px (the
+sockets are 9 px); a note at the pointer is the result of the very edit the drop performs,
+tried on a copy of the patch, so what it says is what happens. A refused drop keeps its
+reason at the drop point for 4.5 s. No new colours: the accent, and the status line's red.
+

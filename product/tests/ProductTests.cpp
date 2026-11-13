@@ -1524,6 +1524,134 @@ TEST_CASE ("Factory and older patches: every source shows as the SOURCE type it 
     }
 }
 
+TEST_CASE ("Dragging a cable: sockets that can take it are in reach, the pointer says what a drop does, and a mixed sound into AMP ENVELOPE works", "[product][ui][cable]")
+{
+    // The owner's patch: KEYBOARD > OSC > FILTER > VOICE MIX > SATELLITE, and apart from it
+    // AMP ENVELOPE > VOICE MIX > SPACE > OUTPUT. SATELLITE's OUT is dragged to AMP ENVELOPE.
+    Instrument in;
+    REQUIRE (in.editor != nullptr);
+    in.editor->setSize (1448, 1086);
+    auto& s = in.session();
+    s.newPatch();
+    std::map<std::string, std::string> id;
+    REQUIRE (s.perform ("build", [&] (Document& d) {
+                  auto add = [&] (const char* name, const char* type, float x, float y, Domain domain) {
+                      auto* n = d.addNode (s.registry(), type, x, y);
+                      n->domain = domain;
+                      id[name] = n->id;
+                  };
+                  add ("keys", "event.keyboard", 0, 60, Domain::event);
+                  add ("osc", "osc.analog", 230, 0, Domain::voice);
+                  add ("filter", "proc.filter", 480, 300, Domain::voice);
+                  add ("mixA", "util.voicemix", 480, 0, Domain::global);
+                  add ("satellite", "spatial.satellite", 730, 0, Domain::global);
+                  add ("amp", "proc.vca", 730, 300, Domain::voice);
+                  add ("mixB", "util.voicemix", 980, 300, Domain::global);
+                  add ("space", "fx.space", 1230, 300, Domain::global);
+                  add ("output", "util.output", 1480, 300, Domain::global);
+                  edit::Result r;
+                  const std::pair<std::pair<const char*, const char*>, std::pair<const char*, const char*>> cables[] {
+                      { { "keys", "notes" }, { "osc", "notes" } }, { { "osc", "out" }, { "filter", "in" } }, { { "filter", "out" }, { "mixA", "in" } },
+                      { { "mixA", "out" }, { "satellite", "in" } }, { { "amp", "out" }, { "mixB", "in" } }, { { "mixB", "out" }, { "space", "in" } },
+                      { { "space", "out" }, { "output", "in" } } };
+                  for (const auto& [from, to] : cables)
+                      if (! edit::connect (d, s.registry(), id[from.first], from.second, id[to.first], to.second).ok)
+                          return r;
+                  r.ok = true;
+                  return r;
+              }).ok);
+    s.beginGesture ("dry");
+    s.setParam (id["space"], "mix", 0.0);
+    s.setParam (id["amp"], "release", 0.5);
+    settle (200);
+    auto& canvas = in.editor->canvasView();
+    canvas.fitAll();
+    settle (250);
+    const auto cabled = [&] (const char* from, const char* to) {
+        for (const auto& c : s.document().connections)
+            if (c.from == id[from] && c.to == id[to] && ! c.toParam)
+                return true;
+        return false;
+    };
+    juce::Point<float> ampIn, ampOut, spaceIn, satOut, keysNotes;
+    REQUIRE (canvas.portCentre (id["amp"], "in", true, ampIn));
+    REQUIRE (canvas.portCentre (id["satellite"], "out", false, satOut));
+    REQUIRE (canvas.portCentre (id["space"], "in", true, spaceIn));
+
+    // While the cable is over the envelope's input the pointer says what the drop will do:
+    // not a refusal, and in the musician's words.
+    REQUIRE (canvas.beginCable (id["satellite"], "out", true));
+    canvas.moveCable (satOut.translated (60.0f, 40.0f));
+    CHECK (canvas.cableNote().text.isEmpty());   // (over the bare board: nothing to say)
+    canvas.moveCable (ampIn);
+    auto note = canvas.cableNote();
+    INFO (note.text);
+    CHECK (note.ok);
+    CHECK (note.text.contains ("AMP ENVELOPE"));
+    CHECK (note.text.contains ("VOICE MIX"));
+    CHECK_FALSE (cabled ("filter", "amp"));       // (looking is not doing: the patch is untouched)
+    CHECK (in.editor->createComponentSnapshot (in.editor->getLocalBounds(), true, 1.0f).isValid());
+    snapshot (*in.editor, "patch-cable-drag-1448");
+    // Dropped a little off the socket (the sockets are small): it still lands on it.
+    const auto before = patchOnly (s.document());
+    canvas.dropCable (ampIn.translated (9.0f, -7.0f));
+    CHECK (cabled ("filter", "amp"));
+    CHECK (cabled ("amp", "mixA"));
+    CHECK (cabled ("mixA", "satellite"));
+    CHECK (cabled ("satellite", "space"));
+    CHECK (s.document().findNode (id["mixB"]) == nullptr);
+    CHECK (s.document().findNode (id["amp"])->domain == Domain::voice);
+    CHECK (canvas.cableNote().text.isEmpty());
+    // ... and it sounds: a note, its release ringing after the key, then silence.
+    run (in.processor, 0.2);
+    const auto held = run (in.processor, 0.3, { juce::MidiMessage::noteOn (1, 57, 0.9f) });
+    run (in.processor, 0.05, { juce::MidiMessage::noteOff (1, 57) });
+    const auto ringing = run (in.processor, 0.1);
+    run (in.processor, 3.0);
+    const auto after = run (in.processor, 0.2);
+    CHECK (rms (held) > 0.005);
+    CHECK (rms (ringing) > 0.0005);
+    CHECK (rms (after) < 1.0e-4);
+    // One undo is the patch as it was.
+    s.undo();
+    CHECK (patchOnly (s.document()) == before);
+    CHECK (s.document().findNode (id["mixB"]) != nullptr);
+
+    // A drop on the module's face (no socket near) finds the port that works.
+    settle (250);
+    REQUIRE (canvas.portCentre (id["satellite"], "out", false, satOut));
+    REQUIRE (canvas.portCentre (id["amp"], "in", true, ampIn));
+    REQUIRE (canvas.portCentre (id["amp"], "out", false, ampOut));
+    const auto face = juce::Point<float> (0.5f * (ampIn.x + ampOut.x), ampIn.y + 0.5f * (ampIn.y - satOut.y) * 0.0f + 46.0f * canvas.zoomLevel());
+    REQUIRE (canvas.beginCable (id["satellite"], "out", true));
+    canvas.moveCable (face);
+    CHECK (canvas.cableNote().ok);
+    canvas.dropCable (face);
+    CHECK (cabled ("filter", "amp"));
+    s.undo();
+
+    // What cannot be done says why, at the pointer, while dragging and after the drop: notes
+    // into an audio input.
+    settle (250);
+    REQUIRE (canvas.portCentre (id["amp"], "in", true, ampIn));
+    REQUIRE (canvas.beginCable (id["keys"], "notes", true));
+    canvas.moveCable (ampIn);
+    note = canvas.cableNote();
+    INFO (note.text);
+    CHECK_FALSE (note.ok);
+    CHECK (note.text.containsIgnoreCase ("notes"));
+    const auto untouched = patchOnly (s.document());
+    canvas.dropCable (ampIn);
+    CHECK (patchOnly (s.document()) == untouched);
+    CHECK (canvas.cableNote().text.containsIgnoreCase ("notes"));   // (the reason stays where it was dropped, for a moment)
+    CHECK_FALSE (canvas.cableNote().ok);
+    snapshot (*in.editor, "patch-cable-refused-1448");
+    // the next gesture clears it
+    REQUIRE (canvas.beginCable (id["keys"], "notes", true));
+    CHECK (canvas.cableNote().text.isEmpty());
+    CHECK (canvas.cancelGesture());
+}
+
 TEST_CASE ("Modules never land on each other: added, inserted, connected from a port, loaded", "[product][ui][layout]")
 {
     Instrument in;

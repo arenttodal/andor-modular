@@ -70,7 +70,17 @@ It never changes the patch.
   **cable**, *Insert a module here*. A module added while another is selected goes after it
   (or asks where, when there are several places).
 - **Connect**: drag from a port to a port, onto a module (its first fitting port), or onto a
-  knob (a control signal then modulates it). Refused cables say why and what would fit.
+  knob (a control signal then modulates it). While you drag, every socket the cable could go
+  to wears a ring, and a note at the pointer says what dropping there will do, or why it
+  cannot be done; the drop need not be exactly on the dot. A refused drop leaves its reason
+  where you dropped it for a few seconds (and in the status line).
+- **Per voice and once for all notes.** A source, FILTER and AMP ENVELOPE work on each note's
+  own sound; after **VOICE MIX** the notes are one sound, and SATELLITE, SPACE, ECHO work on
+  that. You can still drag the mixed sound onto a per-voice module: an AMP ENVELOPE (or a
+  module something moves per voice) is placed in the voices, just before their VOICE MIX, and
+  the sound goes on to where the envelope led; a plain FILTER or DRIVE is moved to run once,
+  on the mixed sound. A VOICE MIX left with nothing to mix is removed. It is one undo step,
+  and the note tells you before you drop.
 - **Several sources, one filter**: drag a second source's OUT onto a filter's or an effect's
   IN. Sources played by the same notes are summed into it, one filter per voice. Sources with
   their own arpeggiators cannot share voices, so the filter is moved after the voice mix and
