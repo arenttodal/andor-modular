@@ -203,6 +203,7 @@ Second pass, by test:
 4. **A deep modulation on one of ten widened parameters** (schema 1 patches): where it used
    to stop at the old range's end it now carries on to the new end (STATE_SCHEMA.md).
 5. **COMPRESSOR's THRESHOLD knob is strongly skewed**, as in Analog (second pass, above).
+   *Since fixed in Analog (pin `9685c81`; STATUS.md, 2026-11-13).*
 5a. **A rack's page and shown preset name are remembered for the session**, per module, not
    saved in the patch. SHAPER's drawn patterns stay in the family's shared pattern folder.
 6. **Scene values captured for a source follow its parameter names across types** (a scene's
@@ -221,6 +222,7 @@ The four from the first pass, the pull requests and the two modules are done (ab
 
 1. Analog's skewed THRESHOLD (and the milder cases): fix it in Analog? It changes how recorded
    automation of those parameters plays back there. (A task card was left for it.)
+   *Answered 2026-11-13: fixed, arenttodal/analog#11; the pin follows (STATUS.md).*
 2. Merging the two pull requests is yours.
 
 ## Hands-on checks (not verifiable here)

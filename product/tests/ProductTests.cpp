@@ -1037,7 +1037,7 @@ TEST_CASE ("An effect module opens ANDOR Analog's own effect rack: every setting
     juce::ignoreUnused (swaps);
 
     // The module moved from elsewhere (its tile, a macro, a scene): the rack follows, every
-    // setting (THRESHOLD's range in ANDOR Analog is strongly skewed: compared in dB, not 0..1).
+    // setting (compared in the setting's own unit, not 0..1: a skewed range squeezes values).
     s.beginGesture ("tile");
     for (const auto& link : analogFxLinks ("fx.compressor"))
     {

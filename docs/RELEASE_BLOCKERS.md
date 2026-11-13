@@ -26,7 +26,7 @@ the plugin, except the items below which depend on things this environment does 
 | Pictures for CHORUS and TONE EQ | an output meter (Analog has no rack for either) |
 | Analog's FX CHAIN presets | not offered: a chain is Analog's route, not a module |
 | A modulation deep enough to hit the old end of one of ten widened ranges (schema 1 patches) | now carries on to the new end (STATE_SCHEMA.md) |
-| COMPRESSOR THRESHOLD's knob travel | strongly skewed, as in Analog (its parameter range; reported upstream, not changed here) |
+| COMPRESSOR THRESHOLD's knob travel | fixed in Analog (pin `9685c81`, arenttodal/analog#11): a plain dB scale. Open only until that pull request is merged upstream |
 | A group's rack | the plain rack |
 | Scenes per source type | a scene's values follow parameter names across types |
 | Undo / redo of mute, solo and bypass | rebuilds the graph (the action itself is a 12 ms ramp); bypassing a note module rebuilds too |

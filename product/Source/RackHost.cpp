@@ -81,8 +81,8 @@ void RackHost::pull()
     {
         const auto& b = bound[index];
         auto* p = state->getParameter (id);
-        // Compared in the control's own units, never normalised: a strongly skewed range (ANDOR
-        // Analog's COMPRESSOR THRESHOLD) squeezes most of its values into a sliver near 0.
+        // Compared in the control's own units, never normalised: a skewed range (a frequency,
+        // a time) squeezes much of its values into a sliver of 0..1.
         const auto& range = p->getNormalisableRange();
         const float wanted = juce::jlimit (range.start, range.end, static_cast<float> (b.read ? b.read() : toRack (b, doc.paramValue (session.registry(), node, b.param))));
         const float shown = p->convertFrom0to1 (p->getValue());

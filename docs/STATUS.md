@@ -1,6 +1,6 @@
 # Status — ANDOR Modular prototype
 
-_Last updated 2026-11-12. Branch `claude/epic-feynman-fsf8ij`. Pins: OSP `c21fe80`, Analog `0f5e01b` (both on their repository's `claude/epic-feynman-fsf8ij`: `e7a3834` and `1c0cb6d` plus the changes below)._
+_Last updated 2026-11-13. Branch `claude/epic-feynman-fsf8ij`. Pins: OSP `c21fe80` (its `claude/epic-feynman-fsf8ij`: `e7a3834` plus the changes below), Analog `9685c81` (its `claude/wizardly-cray-mcmqmg`: `1c0cb6d`, the seam `0f5e01b` and the FX parameter fix, arenttodal/analog#11)._
 
 ## Scoreboard
 
@@ -72,6 +72,20 @@ The owner's four choices from the first report, built. Details and limits:
 | Pull requests for the upstream branches | open | arenttodal/OSP#15, arenttodal/analog#10 | their CI green (Analog: engine, macOS, Windows) |
 | Hands-on (Mac, DAW, listening) | **open** | — | the report's checks |
 
+## Analog's FX parameters: linear where they were meant to be (2026-11-13)
+
+The item "found, not changed" of addendum 02 is fixed in Analog (arenttodal/analog#11; the
+decision on hosts' automation is written in Analog's `docs/STATUS.md`, 12 Nov 2026) and the
+pin moved to it: `0f5e01b` to `9685c81`. A setting of Analog's table without a centre is
+linear now (34 settings: COMPRESSOR THRESHOLD most of all, every effect's OUTPUT, MAKEUP, the
+gains, PAN, FEEDBACK).
+
+| What | State | Evidence |
+|---|---|---|
+| The racks' knobs (Analog's own classes, their travel from Analog's parameter) | follow: THRESHOLD at -18 dB points at 70 % of its travel (it pointed at the minimum) | 12 pictures regenerated: `patch-rack-compressor-{869,1810}`, `rack-fx-{compressor,compressor-detail,compressor-fet,convolution,filter,flanger,phaser,retro,shifter,utility}-1448`. Each matched its committed file pixel for pixel before the pin moved; only the knobs differ now |
+| The kernel (`dsp/nodes/FxNodes.cpp`) | unchanged, no code touched: it reads the table's `centre` only to choose a logarithmic curve for a positive range, and an absent centre compares as -1 did | kernel 1/1 suite, product 21 cases, both green on the new pin; no patch, preset, factory file or schema changes (a module's values are in its own units) |
+| `docs/screenshots/parity/*.png` (addendum 02's paired pictures) | left as that report's record: assembled by hand, no test generates them; the COMPRESSOR pair shows the old knob in both halves | — |
+
 ## Connecting modules (2026-11-13, from the owner's report)
 
 "Still struggling to connect the nodes, such as the SATELLITE to AMP ENVELOPE." Cause: a mixed
@@ -118,10 +132,10 @@ mini-map, free macro range sliders.
 
 ## NEXT
 0a. Owner: the hands-on checks in ADDENDUM_02_REPORT.md (both passes).
-0b. Analog (its own decision): the FX parameters meant to be linear are skewed whenever
-   their range contains -1, the table's "no centre" marker (COMPRESSOR THRESHOLD most of all:
-   nearly all of its knob travel is the top 6 dB). Found while binding the rack; not changed
-   here because it changes how hosts' automation maps. See the report.
+0b. Owner: merge the upstream pull requests in this order: arenttodal/OSP#15,
+   arenttodal/analog#10, arenttodal/analog#11 (the FX parameter fix this pin points at). If
+   Analog's `claude/epic-feynman-fsf8ij` gets further commits before #11 is merged, the next
+   pin must still contain #11 (otherwise THRESHOLD's knob goes back to the old skew).
 0c. When Analog moves to OSP's shared FX line (OSP default branch: `shared/andor-ui/FxRack`),
    move both pins and switch `RackHost` from `FxRackSource` to the host's own `fxProcessor`.
 0. Owner: the twelve hands-on checks in PATCH_WORKFLOW_REPORT.md (Mac, DAW, trackpad,

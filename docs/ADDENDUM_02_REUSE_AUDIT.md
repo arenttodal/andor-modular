@@ -126,7 +126,7 @@ voice, MORPH's speaks of oscillators 1 / 2 and card C: findings 3 and 4), and it
 | ECHO and SPACE carry a MIX knob the family's racks do not show | In Analog the amount is the macro knob above the rack; here the rack is the whole device (opt-in of the shared rack, D-37) | `UnifiedRack` |
 | Rack presets live in `<user data>/ANDOR/Modular/Rack Presets/` | ANDOR Modular's own (the owner's choice); factory presets are the family's, in code | `RackPresetModel`, `fxpresets` |
 | An effect's heading is the module's name, not "COMPRESSOR 1" | A patch has any number of each | `FxRackSource::fxRackTitle` |
-| THRESHOLD's knob travel in the COMPRESSOR rack is strongly skewed | It is Analog's own parameter range (its "no centre" marker, -1, lies inside -60..0 dB); the same in Analog. Reported, not changed here | — |
+| THRESHOLD's knob travel in the COMPRESSOR rack is strongly skewed | It is Analog's own parameter range (its "no centre" marker, -1, lies inside -60..0 dB); the same in Analog. Reported, not changed here. *Since fixed in Analog (pin `9685c81`; STATUS.md, 2026-11-13)* | — |
 | MOVEMENT's DRIFT / TAPE / CHORUS / PULSE controls share three values (A, B, C) | The module has one set that the chosen mode reads; the rack names them per mode | — |
 | FILTER's response formula is ported (40 lines), not linked | `filtergraph::responseDb` is defined in `AnalogRacks.cpp`, which is Analog's voice rack | Analog `AnalogRacks.cpp:29-68`, cited in `ModuleRack.cpp` |
 | FILTER has no VOICE / PAIR pages, MORPH no CARRIER / card C root | They are Analog's synth, not this module (findings 3, 4) | identity, cells |
